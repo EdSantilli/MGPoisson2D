@@ -1,0 +1,2 @@
+# MGPoisson2D
+A Fortran 90, 2D Poisson solver that uses semicoarsening.
