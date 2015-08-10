@@ -240,11 +240,99 @@ contains
     end function inner_prod_box_data
 
 
-    ! ! --------------------------------------------------------------------------
-    ! ! --------------------------------------------------------------------------
-    ! subroutine fillGhosts (bd)
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    subroutine fill_ghosts (phi, do_neum)
+        implicit none
+        type(box_data), intent(inout)    :: phi
+        logical, intent(inout), optional :: do_neum
 
-    ! end subroutine fillGhosts
+        integer :: xlo, xhi, ylo, yhi
+        integer :: ilo, ihi, jlo, jhi
+
+        xlo = phi%bc%type_xlo
+        xhi = phi%bc%type_xhi
+        ylo = phi%bc%type_ylo
+        yhi = phi%bc%type_yhi
+
+        ilo = phi%bx%ilo
+        ihi = phi%bx%ihi
+        jlo = phi%bx%jlo
+        jhi = phi%bx%jhi
+
+        ! By default, we apply all BCs.
+        if (.not.present(do_neum)) do_neum = .true.
+
+        ! Right now, we can only handle 1 ghost layer.
+        if ((phi%ngx .gt. 1) .or. (phi%ngy .gt. 1)) then
+            print*, 'fill_ghosts: Can only handle 1 ghost layer max.'
+            stop
+        endif
+
+        if (phi%ngx .gt. 0) then
+            ! Lower x ghosts
+            if (xlo .eq. BC_NEUM) then
+                if (do_neum) then
+                    phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi)
+                endif
+            else if (xlo .eq. BC_DIRI) then
+                phi%data(ilo-1, jlo:jhi) = -phi%data(ilo, jlo:jhi)
+            else if (xlo .eq. BC_PERIODIC) then
+                phi%data(ilo-1, jlo:jhi) = phi%data(ihi, jlo:jhi)
+            else if (xlo .eq. BC_CF) then
+                ! TODO
+                print*, 'fill_ghosts: cannot handle BC_CF yet.'
+                stop
+            endif
+
+            ! Upper x ghosts
+            if (xhi .eq. BC_NEUM) then
+                if (do_neum) then
+                    phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi)
+                endif
+            else if (xhi .eq. BC_DIRI) then
+                phi%data(ihi+1, jlo:jhi) = -phi%data(ihi, jlo:jhi)
+            else if (xhi .eq. BC_PERIODIC) then
+                phi%data(ihi+1, jlo:jhi) = phi%data(ilo, jlo:jhi)
+            else if (xhi .eq. BC_CF) then
+                ! TODO
+                print*, 'fill_ghosts: cannot handle BC_CF yet.'
+                stop
+            endif
+        endif
+
+        if (phi%ngy .gt. 0) then
+            ! Lower y ghosts
+            if (ylo .eq. BC_NEUM) then
+                if (do_neum) then
+                    phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo)
+                endif
+            else if (ylo .eq. BC_DIRI) then
+                phi%data(ilo:ihi, jlo-1) = -phi%data(ilo:ihi, jlo)
+            else if (ylo .eq. BC_PERIODIC) then
+                phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jhi)
+            else if (ylo .eq. BC_CF) then
+                ! TODO
+                print*, 'fill_ghosts: cannot handle BC_CF yet.'
+                stop
+            endif
+
+            ! Upper y ghosts
+            if (yhi .eq. BC_NEUM) then
+                if (do_neum) then
+                    phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi)
+                endif
+            else if (yhi .eq. BC_DIRI) then
+                phi%data(ilo:ihi, jhi+1) = -phi%data(ilo:ihi, jhi)
+            else if (yhi .eq. BC_PERIODIC) then
+                phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jlo)
+            else if (yhi .eq. BC_CF) then
+                ! TODO
+                print*, 'fill_ghosts: cannot handle BC_CF yet.'
+                stop
+            endif
+        endif
+    end subroutine fill_ghosts
 
 end module ArrayUtils
 
