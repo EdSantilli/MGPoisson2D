@@ -23,7 +23,7 @@
 !*******************************************************************************
 
 program test
-use MGPoisson2D
+! use MGPoisson2D
 implicit none
 
 
