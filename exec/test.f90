@@ -26,15 +26,24 @@ program test
     use ArrayUtils
     implicit none
 
+    integer         :: ilo, ihi, jlo, jhi
+    real(dp)        :: dx, dy
     type(box)       :: valid
     type(box_data)  :: state
     type(bdry_data) :: bc
 
+    integer :: i, j
 
     print*, 'Testing ArrayUtils::fill_ghosts in Cartesian...'
 
     ! Set up domain
-    call define_box (valid, 1, 32, 1, 32, one, one)
+    ilo = 1
+    ihi = 32
+    jlo = 1
+    jhi = 32
+    dx = one
+    dy = one
+    call define_box (valid, ilo, ihi, jlo, jhi, dx, dy)
 
     ! Set up field
     call define_box_data (state, valid, 1, 1)
@@ -59,7 +68,56 @@ program test
     call fill_ghosts (state, bc, .true.)
 
     ! Check field
-    ! TODO
+    do j = jlo, jhi
+        do i = ilo, ihi
+            if (state%data(i,j) .ne. -three) then
+                print*, 'i = ', i
+                print*, 'j = ', j
+                print*, 'state%data(i,j) = ', state%data(i,j)
+                stop
+            endif
+        enddo
+    enddo
+
+    i = ilo-1
+    do j = jlo, jhi
+        if (state%data(i,j) .ne. three) then
+            print*, 'i = ', i
+            print*, 'j = ', j
+            print*, 'state%data(i,j) = ', state%data(i,j)
+            stop
+        endif
+    enddo
+
+    i = ihi+1
+    do j = jlo, jhi
+        if (state%data(i,j) .ne. three) then
+            print*, 'i = ', i
+            print*, 'j = ', j
+            print*, 'state%data(i,j) = ', state%data(i,j)
+            stop
+        endif
+    enddo
+
+    j = jlo-1
+    do i = ilo, ihi
+        if (state%data(i,j) .ne. three) then
+            print*, 'i = ', i
+            print*, 'j = ', j
+            print*, 'state%data(i,j) = ', state%data(i,j)
+            stop
+        endif
+    enddo
+
+    j = jhi+1
+    do i = ilo, ihi
+        if (state%data(i,j) .ne. three) then
+            print*, 'i = ', i
+            print*, 'j = ', j
+            print*, 'state%data(i,j) = ', state%data(i,j)
+            stop
+        endif
+    enddo
 
     ! Free memory
     call undefine_bdry_data (bc)
