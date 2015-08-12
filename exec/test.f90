@@ -30,11 +30,9 @@ program test
     real(dp)        :: dx, dy
     type(box)       :: valid
     type(box_data)  :: state
-    type(bdry_data) :: bc
+    type(bdry_data) :: diri_bc, neum_bc
 
     integer :: i, j
-
-    print*, 'Testing ArrayUtils::fill_ghosts in Cartesian...'
 
     ! Set up domain
     ilo = 1
@@ -47,10 +45,14 @@ program test
 
     ! Set up field
     call define_box_data (state, valid, 1, 1)
-    state%data = -three
+    state%data = three
+
+
+    ! TEST 1: Dirichlet BCs ----------------------------------------------------
+    print*, 'Testing ArrayUtils::fill_ghosts with Dirichlet BCs...'
 
     ! Set up BCs
-    call define_bdry_data (bc, valid, &
+    call define_bdry_data (diri_bc, valid, &
                            BCTYPE_DIRI, &   ! xlo
                            BCTYPE_DIRI, &   ! xhi
                            BCTYPE_DIRI, &   ! ylo
@@ -59,18 +61,92 @@ program test
                            BCMODE_UNIFORM, &    ! xhi
                            BCMODE_UNIFORM, &    ! ylo
                            BCMODE_UNIFORM)      ! yhi
-    bc%data_xlo(1) = five
-    bc%data_ylo(1) = six
-    bc%data_xlo(1) = seven
-    bc%data_ylo(1) = eight
+    diri_bc%data_xlo(1) = five
+    diri_bc%data_xhi(1) = six
+    diri_bc%data_ylo(1) = seven
+    diri_bc%data_yhi(1) = eight
 
-    ! Fill ghosts
-    call fill_ghosts (state, bc, .true.)
+    ! Test BCs
+    call fill_ghosts (state, diri_bc, .false.)
 
-    ! Check field
     do j = jlo, jhi
         do i = ilo, ihi
-            if (state%data(i,j) .ne. -three) then
+            if (state%data(i,j) .ne. three) then
+                print*, 'i = ', i
+                print*, 'j = ', j
+                print*, 'state%data(i,j) = ', state%data(i,j)
+                stop
+            endif
+        enddo
+    enddo
+
+    i = ilo-1
+    do j = jlo, jhi
+        if (state%data(i,j) .ne. seven) then
+            print*, 'i = ', i
+            print*, 'j = ', j
+            print*, 'state%data(i,j) = ', state%data(i,j)
+            stop
+        endif
+    enddo
+
+    i = ihi+1
+    do j = jlo, jhi
+        if (state%data(i,j) .ne. nine) then
+            print*, 'i = ', i
+            print*, 'j = ', j
+            print*, 'state%data(i,j) = ', state%data(i,j)
+            stop
+        endif
+    enddo
+
+    j = jlo-1
+    do i = ilo, ihi
+        if (state%data(i,j) .ne. eleven) then
+            print*, 'i = ', i
+            print*, 'j = ', j
+            print*, 'state%data(i,j) = ', state%data(i,j)
+            stop
+        endif
+    enddo
+
+    j = jhi+1
+    do i = ilo, ihi
+        if (state%data(i,j) .ne. thirteen) then
+            print*, 'i = ', i
+            print*, 'j = ', j
+            print*, 'state%data(i,j) = ', state%data(i,j)
+            stop
+        endif
+    enddo
+
+    print*, '...passed.'
+
+
+    ! TEST 2: Neumann BCs ----------------------------------------------------
+    print*, 'Testing ArrayUtils::fill_ghosts with Neumann BCs...'
+
+    ! Set up BCs
+    call define_bdry_data (neum_bc, valid, &
+                           BCTYPE_NEUM, &   ! xlo
+                           BCTYPE_NEUM, &   ! xhi
+                           BCTYPE_NEUM, &   ! ylo
+                           BCTYPE_NEUM, &   ! yhi
+                           BCMODE_UNIFORM, &    ! xlo
+                           BCMODE_UNIFORM, &    ! xhi
+                           BCMODE_UNIFORM, &    ! ylo
+                           BCMODE_UNIFORM)      ! yhi
+    neum_bc%data_xlo(1) = five
+    neum_bc%data_xhi(1) = six
+    neum_bc%data_ylo(1) = seven
+    neum_bc%data_yhi(1) = eight
+
+    ! Test BCs
+    call fill_ghosts (state, neum_bc, .true.)
+
+    do j = jlo, jhi
+        do i = ilo, ihi
+            if (state%data(i,j) .ne. three) then
                 print*, 'i = ', i
                 print*, 'j = ', j
                 print*, 'state%data(i,j) = ', state%data(i,j)
@@ -119,8 +195,11 @@ program test
         endif
     enddo
 
+    print*, '...passed.'
+
+
     ! Free memory
-    call undefine_bdry_data (bc)
+    call undefine_bdry_data (diri_bc)
     call undefine_box_data (state)
 
 end program test

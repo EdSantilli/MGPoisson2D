@@ -50,6 +50,9 @@ module precision
     real(dp), parameter :: eighteen  = 18.0_dp
     real(dp), parameter :: nineteen  = 19.0_dp
     real(dp), parameter :: twenty    = 20.0_dp
+
+    real(dp), parameter :: bogus_val = 1.2345E300_dp
+
 end module precision
 
 
@@ -188,76 +191,80 @@ contains
         bcd%mode_yhi = mode_yhi
 
         ! xlo
-        if (mode_xlo .eq. BCMODE_UNIFORM) then
-            allocate (bcd%data_xlo (1:1), stat=ierr)
-            if (ierr .ne. 0) then
-                print*, 'define_bdry_data: Out of memory'
+        select case (mode_xlo)
+            case (BCMODE_UNIFORM)
+                allocate (bcd%data_xlo (1:1), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
+            case (BCMODE_NONUNIFORM)
+                allocate (bcd%data_xlo (bcd%valid%jlo : bcd%valid%jhi), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
+            case default
+                print*, 'define_bdry_data: Bad BCMODE'
                 stop
-            endif
-        else if (mode_xlo .eq. BCMODE_UNIFORM) then
-            allocate (bcd%data_xlo (bcd%valid%jlo : bcd%valid%jhi), stat=ierr)
-            if (ierr .ne. 0) then
-                print*, 'define_bdry_data: Out of memory'
-                stop
-            endif
-        else
-            print*, 'define_bdry_data: Bad BCMODE'
-            stop
-        endif
+        end select
 
         ! xhi
-        if (mode_xhi .eq. BCMODE_UNIFORM) then
-            allocate (bcd%data_xhi (1:1), stat=ierr)
-            if (ierr .ne. 0) then
-                print*, 'define_bdry_data: Out of memory'
+        select case (mode_xhi)
+            case (BCMODE_UNIFORM)
+                allocate (bcd%data_xhi (1:1), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
+            case (BCMODE_NONUNIFORM)
+                allocate (bcd%data_xhi (bcd%valid%jlo : bcd%valid%jhi), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
+            case default
+                print*, 'define_bdry_data: Bad BCMODE'
                 stop
-            endif
-        else if (mode_xhi .eq. BCMODE_UNIFORM) then
-            allocate (bcd%data_xhi (bcd%valid%jlo : bcd%valid%jhi), stat=ierr)
-            if (ierr .ne. 0) then
-                print*, 'define_bdry_data: Out of memory'
-                stop
-            endif
-        else
-            print*, 'define_bdry_data: Bad BCMODE'
-            stop
-        endif
+        end select
 
         ! ylo
-        if (mode_ylo .eq. BCMODE_UNIFORM) then
-            allocate (bcd%data_ylo (1:1), stat=ierr)
-            if (ierr .ne. 0) then
-                print*, 'define_bdry_data: Out of memory'
+        select case (mode_ylo)
+            case (BCMODE_UNIFORM)
+                allocate (bcd%data_ylo (1:1), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
+            case (BCMODE_NONUNIFORM)
+                allocate (bcd%data_ylo (bcd%valid%ilo : bcd%valid%ihi), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
+            case default
+                print*, 'define_bdry_data: Bad BCMODE'
                 stop
-            endif
-        else if (mode_ylo .eq. BCMODE_UNIFORM) then
-            allocate (bcd%data_ylo (bcd%valid%ilo : bcd%valid%ihi), stat=ierr)
-            if (ierr .ne. 0) then
-                print*, 'define_bdry_data: Out of memory'
-                stop
-            endif
-        else
-            print*, 'define_bdry_data: Bad BCMODE'
-            stop
-        endif
+        end select
 
         ! xhi
-        if (mode_yhi .eq. BCMODE_UNIFORM) then
-            allocate (bcd%data_yhi (1:1), stat=ierr)
-            if (ierr .ne. 0) then
-                print*, 'define_bdry_data: Out of memory'
+        select case (mode_yhi)
+            case (BCMODE_UNIFORM)
+                allocate (bcd%data_yhi (1:1), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
+            case (BCMODE_NONUNIFORM)
+                allocate (bcd%data_yhi (bcd%valid%ilo : bcd%valid%ihi), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
+            case default
+                print*, 'define_bdry_data: Bad BCMODE'
                 stop
-            endif
-        else if (mode_yhi .eq. BCMODE_UNIFORM) then
-            allocate (bcd%data_yhi (bcd%valid%ilo : bcd%valid%ihi), stat=ierr)
-            if (ierr .ne. 0) then
-                print*, 'define_bdry_data: Out of memory'
-                stop
-            endif
-        else
-            print*, 'define_bdry_data: Bad BCMODE'
-            stop
-        endif
+        end select
     end subroutine define_bdry_data
 
 
@@ -329,7 +336,6 @@ contains
     ! Returns true if all members of box1 and box2 are equal.
     ! --------------------------------------------------------------------------
     pure function compatible_boxes (bx1, bx2) result (is_same)
-        implicit none
         type(box), intent(in) :: bx1, bx2
         logical :: is_same
 
@@ -349,7 +355,6 @@ contains
     ! Sets all valid data to val.
     ! --------------------------------------------------------------------------
     pure subroutine setval_valid (bd, val)
-        implicit none
         type(box_data), intent(inout) :: bd
         real(dp), intent(in)          :: val
 
@@ -361,7 +366,6 @@ contains
     ! Sets all ghosts to val.
     ! --------------------------------------------------------------------------
     pure subroutine setval_ghosts (bd, val)
-        implicit none
         type(box_data), intent(inout) :: bd
         real(dp), intent(in)          :: val
 
@@ -384,7 +388,6 @@ contains
     ! arr1 and arr2 must be exactly the same size and rank.
     ! --------------------------------------------------------------------------
     pure function inner_prod_array (arr1, arr2, nx, ny) result (ip)
-        implicit none
         integer, intent(in)                      :: nx, ny
         real(dp), intent(in), dimension(1:nx*ny) :: arr1, arr2
         real(dp)                                 :: ip
@@ -398,7 +401,6 @@ contains
     ! bd1 and bd2 are box_data objects that must be exactly the same size.
     ! --------------------------------------------------------------------------
     function inner_prod_box_data (bd1, bd2) result (ip)
-        implicit none
         type(box_data), intent(in) :: bd1, bd2
         real(dp)                   :: ip
 
@@ -417,15 +419,15 @@ contains
     ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
     subroutine fill_ghosts (phi, bcd, homog, do_neum_opt)
-        implicit none
         type(box_data), intent(inout) :: phi
         type(bdry_data), intent(in)   :: bcd
         logical, intent(in)           :: homog
         logical, intent(in), optional :: do_neum_opt
 
-        integer :: xlo, xhi, ylo, yhi
-        integer :: ilo, ihi, jlo, jhi
-        logical :: do_neum
+        integer  :: xlo, xhi, ylo, yhi
+        integer  :: ilo, ihi, jlo, jhi
+        real(dp) :: dx, dy, bcval
+        logical  :: do_neum
 
         xlo = bcd%type_xlo
         xhi = bcd%type_xhi
@@ -436,6 +438,9 @@ contains
         ihi = phi%valid%ihi
         jlo = phi%valid%jlo
         jhi = phi%valid%jhi
+
+        dx = phi%valid%dx
+        dy = phi%valid%dy
 
         ! By default, we apply all BCs.
         if (.not. present(do_neum_opt)) then
@@ -452,67 +457,162 @@ contains
 
         if (phi%ngx .gt. 0) then
             ! Lower x ghosts
-            if (xlo .eq. BCTYPE_NEUM) then
-                if (do_neum) then
-                    phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi)
-                endif
-            else if (xlo .eq. BCTYPE_DIRI) then
-                phi%data(ilo-1, jlo:jhi) = -phi%data(ilo, jlo:jhi)
-            else if (xlo .eq. BCTYPE_PERIODIC) then
-                phi%data(ilo-1, jlo:jhi) = phi%data(ihi, jlo:jhi)
-            else if (xlo .eq. BCTYPE_CF) then
-                ! TODO
-                print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
-                stop
-            endif
+            select case (xlo)
+                case (BCTYPE_NEUM)
+                    if (do_neum) then
+                        if (homog) then
+                            phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi)
+                        else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                            bcval = dx * bcd%data_xlo(1)
+                            phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi) - bcval
+                        else
+                            phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi) - dx * bcd%data_xlo(jlo:jhi)
+                        endif
+                    endif
+
+                case (BCTYPE_DIRI)
+                    if (homog) then
+                        phi%data(ilo-1, jlo:jhi) = -phi%data(ilo, jlo:jhi)
+                    else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                        bcval = two * bcd%data_xlo(1)
+                        phi%data(ilo-1, jlo:jhi) = bcval - phi%data(ilo, jlo:jhi)
+                    else
+                        phi%data(ilo-1, jlo:jhi) = two * bcd%data_xlo(jlo:jhi) - phi%data(ilo, jlo:jhi)
+                    endif
+
+                case (BCTYPE_PERIODIC)
+                    phi%data(ilo-1, jlo:jhi) = phi%data(ihi, jlo:jhi)
+
+                case (BCTYPE_CF)
+                    ! TODO
+                    print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
+                    stop
+
+                case default
+                    print*, 'fill_ghosts: invalid BCTYPE_'
+                    stop
+            end select
 
             ! Upper x ghosts
-            if (xhi .eq. BCTYPE_NEUM) then
-                if (do_neum) then
-                    phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi)
-                endif
-            else if (xhi .eq. BCTYPE_DIRI) then
-                phi%data(ihi+1, jlo:jhi) = -phi%data(ihi, jlo:jhi)
-            else if (xhi .eq. BCTYPE_PERIODIC) then
-                phi%data(ihi+1, jlo:jhi) = phi%data(ilo, jlo:jhi)
-            else if (xhi .eq. BCTYPE_CF) then
-                ! TODO
-                print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
-                stop
-            endif
+            select case (xhi)
+                case (BCTYPE_NEUM)
+                    if (do_neum) then
+                        if (homog) then
+                            phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi)
+                        else if (bcd%mode_xhi .eq. BCMODE_UNIFORM) then
+                            bcval = dx * bcd%data_xhi(1)
+                            phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi) + bcval
+                        else
+                            phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi) + dx * bcd%data_xhi(jlo:jhi)
+                        endif
+                    endif
+
+                case (BCTYPE_DIRI)
+                    if (homog) then
+                        phi%data(ihi+1, jlo:jhi) = -phi%data(ihi, jlo:jhi)
+                    else if (bcd%mode_xhi .eq. BCMODE_UNIFORM) then
+                        bcval = two * bcd%data_xhi(1)
+                        phi%data(ihi+1, jlo:jhi) = bcval - phi%data(ihi, jlo:jhi)
+                    else
+                        phi%data(ihi+1, jlo:jhi) = two * bcd%data_xhi(jlo:jhi) - phi%data(ihi, jlo:jhi)
+                    endif
+
+                case (BCTYPE_PERIODIC)
+                    phi%data(ihi+1, jlo:jhi) = phi%data(ilo, jlo:jhi)
+
+                case (BCTYPE_CF)
+                    ! TODO
+                    print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
+                    stop
+
+                case default
+                    print*, 'fill_ghosts: invalid BCTYPE_'
+                    stop
+            end select
         endif
 
         if (phi%ngy .gt. 0) then
             ! Lower y ghosts
-            if (ylo .eq. BCTYPE_NEUM) then
-                if (do_neum) then
-                    phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo)
-                endif
-            else if (ylo .eq. BCTYPE_DIRI) then
-                phi%data(ilo:ihi, jlo-1) = -phi%data(ilo:ihi, jlo)
-            else if (ylo .eq. BCTYPE_PERIODIC) then
-                phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jhi)
-            else if (ylo .eq. BCTYPE_CF) then
-                ! TODO
-                print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
-                stop
-            endif
+            select case (ylo)
+                case (BCTYPE_NEUM)
+                    if (do_neum) then
+                        if (homog) then
+                            phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo)
+                        else if (bcd%mode_ylo .eq. BCMODE_UNIFORM) then
+                            bcval = dx * bcd%data_ylo(1)
+                            phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - bcval
+                        else
+                            phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - dx * bcd%data_xhi(ilo:ihi)
+                        endif
+                    endif
+
+                case (BCTYPE_DIRI)
+                    if (homog) then
+                        phi%data(ilo:ihi, jlo-1) = -phi%data(ilo:ihi, jlo)
+                    else if (bcd%mode_ylo .eq. BCMODE_UNIFORM) then
+                        bcval = two * bcd%data_ylo(1)
+                        phi%data(ilo:ihi, jlo-1) = bcval - phi%data(ilo:ihi, jlo)
+                    else
+                        phi%data(ilo:ihi, jlo-1) = two * bcd%data_ylo(ilo:ihi) - phi%data(ilo:ihi, jlo)
+                    endif
+
+                case (BCTYPE_PERIODIC)
+                    phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jhi)
+
+                case (BCTYPE_CF)
+                    ! TODO
+                    print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
+                    stop
+
+                case default
+                    print*, 'fill_ghosts: invalid BCTYPE_'
+                    stop
+            end select
 
             ! Upper y ghosts
-            if (yhi .eq. BCTYPE_NEUM) then
-                if (do_neum) then
-                    phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi)
-                endif
-            else if (yhi .eq. BCTYPE_DIRI) then
-                phi%data(ilo:ihi, jhi+1) = -phi%data(ilo:ihi, jhi)
-            else if (yhi .eq. BCTYPE_PERIODIC) then
-                phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jlo)
-            else if (yhi .eq. BCTYPE_CF) then
-                ! TODO
-                print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
-                stop
-            endif
+            select case (yhi)
+                case (BCTYPE_NEUM)
+                    if (do_neum) then
+                        if (homog) then
+                            phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi)
+                        else if (bcd%mode_yhi .eq. BCMODE_UNIFORM) then
+                            bcval = dx * bcd%data_yhi(1)
+                            phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + bcval
+                        else
+                            phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + dx * bcd%data_yhi(ilo:ihi)
+                        endif
+                    endif
+
+                case (BCTYPE_DIRI)
+                    if (homog) then
+                        phi%data(ilo:ihi, jhi+1) = -phi%data(ilo:ihi, jhi)
+                    else if (bcd%mode_yhi .eq. BCMODE_UNIFORM) then
+                        bcval = two * bcd%data_yhi(1)
+                        phi%data(ilo:ihi, jhi+1) = bcval - phi%data(ilo:ihi, jhi)
+                    else
+                        phi%data(ilo:ihi, jhi+1) = two * bcd%data_yhi(ilo:ihi) - phi%data(ilo:ihi, jhi)
+                    endif
+
+                case (BCTYPE_PERIODIC)
+                    phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jlo)
+
+                case (BCTYPE_CF)
+                    ! TODO
+                    print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
+                    stop
+
+                case default
+                    print*, 'fill_ghosts: invalid BCTYPE_'
+                    stop
+            end select
         endif
+
+        ! Put nans in the corner ghosts
+        phi%data(ilo-1,jlo-1) = bogus_val
+        phi%data(ilo-1,jhi+1) = bogus_val
+        phi%data(ihi+1,jlo-1) = bogus_val
+        phi%data(ihi+1,jhi+1) = bogus_val
+
     end subroutine fill_ghosts
 
 end module ArrayUtils
