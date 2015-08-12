@@ -27,7 +27,29 @@
 ! Defines the precision of all numbers that we will use.
 ! ------------------------------------------------------------------------------
 module precision
-    integer, parameter:: dp = kind(0.d0)
+    integer, parameter  :: dp = kind(0.d0)
+
+    real(dp), parameter :: zero      =  0.0_dp
+    real(dp), parameter :: one       =  1.0_dp
+    real(dp), parameter :: two       =  2.0_dp
+    real(dp), parameter :: three     =  3.0_dp
+    real(dp), parameter :: four      =  4.0_dp
+    real(dp), parameter :: five      =  5.0_dp
+    real(dp), parameter :: six       =  6.0_dp
+    real(dp), parameter :: seven     =  7.0_dp
+    real(dp), parameter :: eight     =  8.0_dp
+    real(dp), parameter :: nine      =  9.0_dp
+    real(dp), parameter :: ten       = 10.0_dp
+    real(dp), parameter :: eleven    = 11.0_dp
+    real(dp), parameter :: twelve    = 12.0_dp
+    real(dp), parameter :: thirteen  = 13.0_dp
+    real(dp), parameter :: fourteen  = 14.0_dp
+    real(dp), parameter :: fifteen   = 15.0_dp
+    real(dp), parameter :: sixteen   = 16.0_dp
+    real(dp), parameter :: seventeen = 17.0_dp
+    real(dp), parameter :: eighteen  = 18.0_dp
+    real(dp), parameter :: nineteen  = 19.0_dp
+    real(dp), parameter :: twenty    = 20.0_dp
 end module precision
 
 
@@ -49,14 +71,31 @@ module arrayutils
 
 
     ! --------------------------------------------------------------------------
-    ! These are the valid types of BCs.
+    ! The empty box definition.
     ! --------------------------------------------------------------------------
-    integer, parameter :: BC_UNDEFINED = -2
-    integer, parameter :: BC_NONE = -1
-    integer, parameter :: BC_NEUM = 0
-    integer, parameter :: BC_DIRI = 1
-    integer, parameter :: BC_PERIODIC = 2
-    integer, parameter :: BC_CF = 3
+    type(box), parameter :: empty_box = box(0, -1, 0, -1, 0, 0, zero, zero)
+
+
+    ! --------------------------------------------------------------------------
+    ! These are the BC types.
+    ! --------------------------------------------------------------------------
+    integer, parameter :: BCTYPE_UNDEFINED = -2
+    integer, parameter :: BCTYPE_NONE = -1
+    integer, parameter :: BCTYPE_NEUM = 0
+    integer, parameter :: BCTYPE_DIRI = 1
+    integer, parameter :: BCTYPE_PERIODIC = 2
+    integer, parameter :: BCTYPE_CF = 3
+
+
+    ! --------------------------------------------------------------------------
+    ! These are the BC modes.
+    ! BCMODE_UNIFORM = the entire boundary uses the same BC value. For example,
+    ! a homogeneous BC would use a uniform value of 0.
+    ! BCMODE_NONUNIFORM = the BC values vary over the bounding face. For
+    ! example, a value of sin(k*y) along an x boundary face is nonuniform.
+    ! --------------------------------------------------------------------------
+    integer, parameter :: BCMODE_UNIFORM = 0
+    integer, parameter :: BCMODE_NONUNIFORM = 1
 
 
     ! --------------------------------------------------------------------------
@@ -69,6 +108,10 @@ module arrayutils
         ! The types of BCs that the data represent.
         integer :: type_xlo, type_xhi
         integer :: type_ylo, type_yhi
+
+        ! The BC modes. See the BCMODE_ comments for details.
+        integer :: mode_xlo, mode_xhi
+        integer :: mode_ylo, mode_yhi
 
         ! The boundary data that surrounds the domain.
         real(dp), dimension(:), allocatable :: data_xlo, data_xhi
@@ -86,9 +129,6 @@ module arrayutils
 
         ! The ghost and valid data array.
         real(dp), dimension(:,:), allocatable :: data
-
-        ! BC info
-        type(bdry_data) :: bc
     end type box_data
 
 
@@ -109,7 +149,7 @@ contains
         type(box), intent(out) :: bx
         integer, intent(in)    :: ilo, ihi
         integer, intent(in)    :: jlo, jhi
-        real(8), intent(in)    :: dx, dy
+        real(dp), intent(in)   :: dx, dy
 
         bx%ilo = ilo
         bx%ihi = ihi
@@ -120,6 +160,125 @@ contains
         bx%dx = dx
         bx%dy = dy
     end subroutine define_box
+
+
+    ! --------------------------------------------------------------------------
+    ! This makes setting up a bdry_data object a one line operation.
+    ! --------------------------------------------------------------------------
+    subroutine define_bdry_data (bcd, valid, &
+                                 type_xlo, type_xhi, type_ylo, type_yhi, &
+                                 mode_xlo, mode_xhi, mode_ylo, mode_yhi)
+        type(bdry_data), intent(out) :: bcd
+        type(box), intent(in)        :: valid
+        integer, intent(in)          :: type_xlo, type_xhi, type_ylo, type_yhi
+        integer, intent(in)          :: mode_xlo, mode_xhi, mode_ylo, mode_yhi
+
+        integer                      :: ierr
+
+        bcd%valid = valid
+
+        bcd%type_xlo = type_xlo
+        bcd%type_xhi = type_xhi
+        bcd%type_ylo = type_ylo
+        bcd%type_yhi = type_yhi
+
+        bcd%mode_xlo = mode_xlo
+        bcd%mode_xhi = mode_xhi
+        bcd%mode_ylo = mode_ylo
+        bcd%mode_yhi = mode_yhi
+
+        ! xlo
+        if (mode_xlo .eq. BCMODE_UNIFORM) then
+            allocate (bcd%data_xlo (1:1), stat=ierr)
+            if (ierr .ne. 0) then
+                print*, 'define_bdry_data: Out of memory'
+                stop
+            endif
+        else if (mode_xlo .eq. BCMODE_UNIFORM) then
+            allocate (bcd%data_xlo (bcd%valid%jlo : bcd%valid%jhi), stat=ierr)
+            if (ierr .ne. 0) then
+                print*, 'define_bdry_data: Out of memory'
+                stop
+            endif
+        else
+            print*, 'define_bdry_data: Bad BCMODE'
+            stop
+        endif
+
+        ! xhi
+        if (mode_xhi .eq. BCMODE_UNIFORM) then
+            allocate (bcd%data_xhi (1:1), stat=ierr)
+            if (ierr .ne. 0) then
+                print*, 'define_bdry_data: Out of memory'
+                stop
+            endif
+        else if (mode_xhi .eq. BCMODE_UNIFORM) then
+            allocate (bcd%data_xhi (bcd%valid%jlo : bcd%valid%jhi), stat=ierr)
+            if (ierr .ne. 0) then
+                print*, 'define_bdry_data: Out of memory'
+                stop
+            endif
+        else
+            print*, 'define_bdry_data: Bad BCMODE'
+            stop
+        endif
+
+        ! ylo
+        if (mode_ylo .eq. BCMODE_UNIFORM) then
+            allocate (bcd%data_ylo (1:1), stat=ierr)
+            if (ierr .ne. 0) then
+                print*, 'define_bdry_data: Out of memory'
+                stop
+            endif
+        else if (mode_ylo .eq. BCMODE_UNIFORM) then
+            allocate (bcd%data_ylo (bcd%valid%ilo : bcd%valid%ihi), stat=ierr)
+            if (ierr .ne. 0) then
+                print*, 'define_bdry_data: Out of memory'
+                stop
+            endif
+        else
+            print*, 'define_bdry_data: Bad BCMODE'
+            stop
+        endif
+
+        ! xhi
+        if (mode_yhi .eq. BCMODE_UNIFORM) then
+            allocate (bcd%data_yhi (1:1), stat=ierr)
+            if (ierr .ne. 0) then
+                print*, 'define_bdry_data: Out of memory'
+                stop
+            endif
+        else if (mode_yhi .eq. BCMODE_UNIFORM) then
+            allocate (bcd%data_yhi (bcd%valid%ilo : bcd%valid%ihi), stat=ierr)
+            if (ierr .ne. 0) then
+                print*, 'define_bdry_data: Out of memory'
+                stop
+            endif
+        else
+            print*, 'define_bdry_data: Bad BCMODE'
+            stop
+        endif
+    end subroutine define_bdry_data
+
+
+    ! --------------------------------------------------------------------------
+    ! Frees memory used by a bdry_data object.
+    ! --------------------------------------------------------------------------
+    subroutine undefine_bdry_data (bcd)
+        type(bdry_data), intent(inout) :: bcd
+
+        bcd%valid = empty_box
+
+        bcd%type_xlo = BCTYPE_UNDEFINED
+        bcd%type_xhi = BCTYPE_UNDEFINED
+        bcd%type_ylo = BCTYPE_UNDEFINED
+        bcd%type_yhi = BCTYPE_UNDEFINED
+
+        if (allocated(bcd%data_xlo)) deallocate(bcd%data_xlo)
+        if (allocated(bcd%data_xhi)) deallocate(bcd%data_xhi)
+        if (allocated(bcd%data_ylo)) deallocate(bcd%data_ylo)
+        if (allocated(bcd%data_yhi)) deallocate(bcd%data_yhi)
+    end subroutine undefine_bdry_data
 
 
     ! --------------------------------------------------------------------------
@@ -149,6 +308,21 @@ contains
             stop
         endif
     end subroutine define_box_data
+
+
+    ! --------------------------------------------------------------------------
+    ! Frees memory used by a box_data object.
+    ! --------------------------------------------------------------------------
+    subroutine undefine_box_data (bd)
+        type(box_data), intent(inout) :: bd
+
+        bd%valid = empty_box
+        bd%bx = empty_box
+        bd%ngx = 0
+        bd%ngy = 0
+
+        if (allocated(bd%data)) deallocate(bd%data)
+    end subroutine undefine_box_data
 
 
     ! --------------------------------------------------------------------------
@@ -242,26 +416,33 @@ contains
 
     ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
-    subroutine fill_ghosts (phi, do_neum)
+    subroutine fill_ghosts (phi, bcd, homog, do_neum_opt)
         implicit none
-        type(box_data), intent(inout)    :: phi
-        logical, intent(inout), optional :: do_neum
+        type(box_data), intent(inout) :: phi
+        type(bdry_data), intent(in)   :: bcd
+        logical, intent(in)           :: homog
+        logical, intent(in), optional :: do_neum_opt
 
         integer :: xlo, xhi, ylo, yhi
         integer :: ilo, ihi, jlo, jhi
+        logical :: do_neum
 
-        xlo = phi%bc%type_xlo
-        xhi = phi%bc%type_xhi
-        ylo = phi%bc%type_ylo
-        yhi = phi%bc%type_yhi
+        xlo = bcd%type_xlo
+        xhi = bcd%type_xhi
+        ylo = bcd%type_ylo
+        yhi = bcd%type_yhi
 
-        ilo = phi%bx%ilo
-        ihi = phi%bx%ihi
-        jlo = phi%bx%jlo
-        jhi = phi%bx%jhi
+        ilo = phi%valid%ilo
+        ihi = phi%valid%ihi
+        jlo = phi%valid%jlo
+        jhi = phi%valid%jhi
 
         ! By default, we apply all BCs.
-        if (.not.present(do_neum)) do_neum = .true.
+        if (.not. present(do_neum_opt)) then
+            do_neum = .true.
+        else
+            do_neum = do_neum_opt
+        endif
 
         ! Right now, we can only handle 1 ghost layer.
         if ((phi%ngx .gt. 1) .or. (phi%ngy .gt. 1)) then
@@ -271,64 +452,64 @@ contains
 
         if (phi%ngx .gt. 0) then
             ! Lower x ghosts
-            if (xlo .eq. BC_NEUM) then
+            if (xlo .eq. BCTYPE_NEUM) then
                 if (do_neum) then
                     phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi)
                 endif
-            else if (xlo .eq. BC_DIRI) then
+            else if (xlo .eq. BCTYPE_DIRI) then
                 phi%data(ilo-1, jlo:jhi) = -phi%data(ilo, jlo:jhi)
-            else if (xlo .eq. BC_PERIODIC) then
+            else if (xlo .eq. BCTYPE_PERIODIC) then
                 phi%data(ilo-1, jlo:jhi) = phi%data(ihi, jlo:jhi)
-            else if (xlo .eq. BC_CF) then
+            else if (xlo .eq. BCTYPE_CF) then
                 ! TODO
-                print*, 'fill_ghosts: cannot handle BC_CF yet.'
+                print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
                 stop
             endif
 
             ! Upper x ghosts
-            if (xhi .eq. BC_NEUM) then
+            if (xhi .eq. BCTYPE_NEUM) then
                 if (do_neum) then
                     phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi)
                 endif
-            else if (xhi .eq. BC_DIRI) then
+            else if (xhi .eq. BCTYPE_DIRI) then
                 phi%data(ihi+1, jlo:jhi) = -phi%data(ihi, jlo:jhi)
-            else if (xhi .eq. BC_PERIODIC) then
+            else if (xhi .eq. BCTYPE_PERIODIC) then
                 phi%data(ihi+1, jlo:jhi) = phi%data(ilo, jlo:jhi)
-            else if (xhi .eq. BC_CF) then
+            else if (xhi .eq. BCTYPE_CF) then
                 ! TODO
-                print*, 'fill_ghosts: cannot handle BC_CF yet.'
+                print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
                 stop
             endif
         endif
 
         if (phi%ngy .gt. 0) then
             ! Lower y ghosts
-            if (ylo .eq. BC_NEUM) then
+            if (ylo .eq. BCTYPE_NEUM) then
                 if (do_neum) then
                     phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo)
                 endif
-            else if (ylo .eq. BC_DIRI) then
+            else if (ylo .eq. BCTYPE_DIRI) then
                 phi%data(ilo:ihi, jlo-1) = -phi%data(ilo:ihi, jlo)
-            else if (ylo .eq. BC_PERIODIC) then
+            else if (ylo .eq. BCTYPE_PERIODIC) then
                 phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jhi)
-            else if (ylo .eq. BC_CF) then
+            else if (ylo .eq. BCTYPE_CF) then
                 ! TODO
-                print*, 'fill_ghosts: cannot handle BC_CF yet.'
+                print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
                 stop
             endif
 
             ! Upper y ghosts
-            if (yhi .eq. BC_NEUM) then
+            if (yhi .eq. BCTYPE_NEUM) then
                 if (do_neum) then
                     phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi)
                 endif
-            else if (yhi .eq. BC_DIRI) then
+            else if (yhi .eq. BCTYPE_DIRI) then
                 phi%data(ilo:ihi, jhi+1) = -phi%data(ilo:ihi, jhi)
-            else if (yhi .eq. BC_PERIODIC) then
+            else if (yhi .eq. BCTYPE_PERIODIC) then
                 phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jlo)
-            else if (yhi .eq. BC_CF) then
+            else if (yhi .eq. BCTYPE_CF) then
                 ! TODO
-                print*, 'fill_ghosts: cannot handle BC_CF yet.'
+                print*, 'fill_ghosts: cannot handle BCTYPE_CF yet.'
                 stop
             endif
         endif
