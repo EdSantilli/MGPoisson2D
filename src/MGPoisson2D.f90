@@ -51,6 +51,9 @@ module precision
     real(dp), parameter :: nineteen  = 19.0_dp
     real(dp), parameter :: twenty    = 20.0_dp
 
+    real(dp), parameter :: half      = 0.5_dp
+
+    real(dp), parameter :: pi        = 4*atan(one)
     real(dp), parameter :: bogus_val = 1.2345E300_dp
 
 end module precision
