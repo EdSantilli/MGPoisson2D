@@ -35,309 +35,44 @@ program test
     real(8), parameter          :: H = one
 
     type(box)                   :: valid
-    type(box_data)              :: soln
 
     integer                     :: r             ! Current refinement level
-    integer, parameter          :: maxr = 3      ! Max refinement level
+    integer, parameter          :: maxr = 7      ! Max refinement level
     real(dp), dimension(maxr)   :: errnorm       ! Error norm at each level
     real(dp), dimension(maxr-1) :: rate          ! Convergence rates
 
+    integer, parameter          :: norm_type = 2
 
-    ! Test 1: Uniform Dirichlet BCs
+
+    ! Test 1: Non-uniform Dirichlet BCs
     errnorm = bogus_val
     do r = 1, maxr
         call define_domain (valid, r)
-        call define_box_data (soln, valid, 1, 1)
-        call fill_soln (soln)
-        errnorm(r) = test_uniform_diri_bcs (soln)
-        call undefine_box_data (soln)
+        errnorm(r) = test_nonuniform_diri_bcs (valid)
     enddo
     call compute_conv_rate (rate, errnorm)
-    print*, 'Test 1: Uniform Dirichlet BCs Convergence rates = '
-    print*, rate
-
-    ! integer         :: ilo, ihi, jlo, jhi
-    ! real(dp)        :: dx, dy
-    ! type(box)       :: valid
-    ! type(box_data)  :: state
-    ! type(bdry_data) :: diri_bc, neum_bc
-
-    ! integer :: nx, ny, i, j
-    ! real(dp) :: L, H, val
-    ! real(dp), dimension(:), allocatable :: x, y
-
-    ! ! Set up domain
-    ! ilo = 1
-    ! ihi = 32
-    ! jlo = 1
-    ! jhi = 32
-    ! dx = one
-    ! dy = one
-    ! call define_box (valid, ilo, ihi, jlo, jhi, dx, dy)
-
-    ! nx = ihi-ilo+1
-    ! ny = jhi-jlo+1
-    ! L = nx*dx
-    ! H = ny*dy
-
-    ! ! Define coordinates
-    ! allocate(x(ilo-1:ihi+1))
-    ! x(ilo-1:ihi+1) = (/ ((i + half) * dx, i = ilo-1, ihi+1) /)
-
-    ! allocate(y(jlo-1:jhi+1))
-    ! y(jlo-1:jhi+1) = (/ ((j + half) * dy, j = jlo-1, jhi+1) /)
-
-    ! ! Set up field
-    ! call define_box_data (state, valid, 1, 1)
-    ! state%data = three
+    print*, 'Test 1: Non-uniform Dirichlet BCs'
+    print*, 'Error norm                rate'
+    print*, errnorm(1)
+    do r = 2, maxr
+        print*, errnorm(r), rate(r-1)
+    enddo
+    print*, ''
 
 
-    ! ! TEST 1: Dirichlet BCs ----------------------------------------------------
-    ! print*, 'Testing ArrayUtils::fill_ghosts with Dirichlet BCs...'
-
-    ! ! Define BCs
-    ! call define_bdry_data (diri_bc, valid, &
-    !                        BCTYPE_DIRI, &   ! xlo
-    !                        BCTYPE_DIRI, &   ! xhi
-    !                        BCTYPE_DIRI, &   ! ylo
-    !                        BCTYPE_DIRI, &   ! yhi
-    !                        BCMODE_UNIFORM, &    ! xlo
-    !                        BCMODE_UNIFORM, &    ! xhi
-    !                        BCMODE_UNIFORM, &    ! ylo
-    !                        BCMODE_UNIFORM)      ! yhi
-    ! diri_bc%data_xlo(1) = five
-    ! diri_bc%data_xhi(1) = six
-    ! diri_bc%data_ylo(1) = seven
-    ! diri_bc%data_yhi(1) = eight
-
-    ! ! Set BCs
-    ! call fill_ghosts (state, diri_bc, .false.)
-
-    ! ! Test valid cells
-    ! do j = jlo, jhi
-    !     do i = ilo, ihi
-    !         if (state%data(i,j) .ne. three) then
-    !             print*, 'i = ', i
-    !             print*, 'j = ', j
-    !             print*, 'state%data(i,j) = ', state%data(i,j)
-    !             stop
-    !         endif
-    !     enddo
-    ! enddo
-
-    ! ! Test ghost cells
-    ! i = ilo-1
-    ! do j = jlo, jhi
-    !     if (state%data(i,j) .ne. seven) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! i = ihi+1
-    ! do j = jlo, jhi
-    !     if (state%data(i,j) .ne. nine) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! j = jlo-1
-    ! do i = ilo, ihi
-    !     if (state%data(i,j) .ne. eleven) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! j = jhi+1
-    ! do i = ilo, ihi
-    !     if (state%data(i,j) .ne. thirteen) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! print*, '...passed.'
-
-
-    ! ! TEST 2: Neumann BCs ----------------------------------------------------
-    ! print*, 'Testing ArrayUtils::fill_ghosts with Neumann BCs...'
-
-    ! ! Define BCs
-    ! call define_bdry_data (neum_bc, valid, &
-    !                        BCTYPE_NEUM, &   ! xlo
-    !                        BCTYPE_NEUM, &   ! xhi
-    !                        BCTYPE_NEUM, &   ! ylo
-    !                        BCTYPE_NEUM, &   ! yhi
-    !                        BCMODE_UNIFORM, &    ! xlo
-    !                        BCMODE_UNIFORM, &    ! xhi
-    !                        BCMODE_UNIFORM, &    ! ylo
-    !                        BCMODE_UNIFORM)      ! yhi
-    ! neum_bc%data_xlo(1) = five
-    ! neum_bc%data_xhi(1) = six
-    ! neum_bc%data_ylo(1) = seven
-    ! neum_bc%data_yhi(1) = eight
-
-    ! ! Set BCs
-    ! call fill_ghosts (state, neum_bc, .true.)
-
-    ! ! Test valid cells
-    ! do j = jlo, jhi
-    !     do i = ilo, ihi
-    !         if (state%data(i,j) .ne. three) then
-    !             print*, 'i = ', i
-    !             print*, 'j = ', j
-    !             print*, 'state%data(i,j) = ', state%data(i,j)
-    !             stop
-    !         endif
-    !     enddo
-    ! enddo
-
-    ! ! Test ghost cells
-    ! i = ilo-1
-    ! do j = jlo, jhi
-    !     if (state%data(i,j) .ne. three) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! i = ihi+1
-    ! do j = jlo, jhi
-    !     if (state%data(i,j) .ne. three) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! j = jlo-1
-    ! do i = ilo, ihi
-    !     if (state%data(i,j) .ne. three) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! j = jhi+1
-    ! do i = ilo, ihi
-    !     if (state%data(i,j) .ne. three) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! print*, '...passed.'
-
-
-    ! ! TEST 3: Non-uniform Dirichlet BCs ----------------------------------------
-    ! print*, 'Testing ArrayUtils::fill_ghosts with non-uniform Dirichlet BCs...'
-
-    ! ! Set valid region
-    ! do j = jlo, jhi
-    !     do i = ilo, ihi
-    !         state%data(i,j) = sin((half + four*y(j)/H)*pi*x(i)/L)
-    !     enddo
-    ! enddo
-
-    ! ! Define BCs
-    ! call define_bdry_data (diri_bc, valid, &
-    !                        BCTYPE_DIRI, &   ! xlo
-    !                        BCTYPE_DIRI, &   ! xhi
-    !                        BCTYPE_DIRI, &   ! ylo
-    !                        BCTYPE_DIRI, &   ! yhi
-    !                        BCMODE_NONUNIFORM, &    ! xlo
-    !                        BCMODE_NONUNIFORM, &    ! xhi
-    !                        BCMODE_NONUNIFORM, &    ! ylo
-    !                        BCMODE_NONUNIFORM)      ! yhi
-    ! diri_bc%data_xlo(jlo:jhi) = (/ (sin((half + four*y(j)/H)*pi*x(ilo-1)/L), j = jlo, jhi) /)
-    ! diri_bc%data_xhi(jlo:jhi) = (/ (sin((half + four*y(j)/H)*pi*x(ihi+1)/L), j = jlo, jhi) /)
-    ! diri_bc%data_ylo(ilo:ihi) = (/ (sin((half + four*y(jlo-1)/H)*pi*x(i)/L), i = ilo, ihi) /)
-    ! diri_bc%data_yhi(ilo:ihi) = (/ (sin((half + four*y(jhi+1)/H)*pi*x(i)/L), i = ilo, ihi) /)
-
-    ! ! Set BCs
-    ! call fill_ghosts (state, diri_bc, .false.)
-
-    ! ! Test valid cells
-    ! do j = jlo, jhi
-    !     do i = ilo, ihi
-    !         val = sin((half + four*y(j)/H)*pi*x(i)/L)
-    !         if (state%data(i,j) .ne. val) then
-    !             print*, 'i = ', i
-    !             print*, 'j = ', j
-    !             print*, 'state%data(i,j) = ', state%data(i,j)
-    !             stop
-    !         endif
-    !     enddo
-    ! enddo
-
-    ! ! Test ghost cells
-    ! i = ilo-1
-    ! do j = jlo, jhi
-    !     val = sin((half + four*y(j)/H)*pi*x(i)/L)
-    !     if (state%data(i,j) .ne. val) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         print*, 'expected ', val
-    !         stop
-    !     endif
-    ! enddo
-
-    ! i = ihi+1
-    ! do j = jlo, jhi
-    !     if (state%data(i,j) .ne. sin((half + four*y(j)/H)*pi*x(i)/L)) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! j = jlo-1
-    ! do i = ilo, ihi
-    !     if (state%data(i,j) .ne. sin((half + four*y(j)/H)*pi*x(i)/L)) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! j = jhi+1
-    ! do i = ilo, ihi
-    !     if (state%data(i,j) .ne. sin((half + four*y(j)/H)*pi*x(i)/L)) then
-    !         print*, 'i = ', i
-    !         print*, 'j = ', j
-    !         print*, 'state%data(i,j) = ', state%data(i,j)
-    !         stop
-    !     endif
-    ! enddo
-
-    ! print*, '...passed.'
-
-
-    ! ! Free memory
-    ! call undefine_bdry_data (diri_bc)
-    ! call undefine_box_data (state)
-    ! if (allocated(y)) deallocate(y)
-    ! if (allocated(x)) deallocate(x)
+    ! Test 2: Non-uniform Neumann BCs
+    errnorm = bogus_val
+    do r = 1, maxr
+        call define_domain (valid, r)
+        errnorm(r) = test_nonuniform_neum_bcs (valid)
+    enddo
+    call compute_conv_rate (rate, errnorm)
+    print*, 'Test 2: Non-uniform Neumann BCs'
+    print*, 'Error norm                rate'
+    print*, errnorm(1)
+    do r = 2, maxr
+        print*, errnorm(r), rate(r-1)
+    enddo
 
 
 contains
@@ -371,35 +106,6 @@ contains
 
 
     ! --------------------------------------------------------------------------
-    ! This fills soln's valid _and_ ghost cells.
-    ! --------------------------------------------------------------------------
-    subroutine fill_soln (soln)
-        implicit none
-        type(box_data), intent(inout) :: soln
-        integer                       :: ilo, ihi, jlo, jhi
-        real(dp)                      :: dx, dy
-        integer                       :: i, j
-        real(dp)                      :: x, y
-
-        ilo = soln%bx%ilo
-        ihi = soln%bx%ihi
-        jlo = soln%bx%jlo
-        jhi = soln%bx%jhi
-
-        dx = soln%valid%dx
-        dy = soln%valid%dy
-
-        do j = jlo, jhi
-            y = (j + half) * dy
-            do i = ilo, ihi
-                x = (i + half) * dx
-                soln%data(i,j) = sin((half + four*y/H)*pi*x/L)
-            enddo
-        enddo
-    end subroutine fill_soln
-
-
-    ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
     subroutine compute_conv_rate (rate, errnorm)
         implicit none
@@ -414,7 +120,7 @@ contains
 
         rate = bogus_val
         do r = 1, maxr-1
-            rate(r) = log(errnorm(r+1) / errnorm(r)) / log(two)
+            rate(r) = log(errnorm(r) / errnorm(r+1)) / log(two)
         enddo
 
     end subroutine compute_conv_rate
@@ -422,117 +128,228 @@ contains
 
     ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
-    function test_uniform_diri_bcs (soln) result (res)
+    function test_nonuniform_diri_bcs (valid) result (res)
         implicit none
 
-        real(dp)                   :: res
-        type(box_data), intent(in) :: soln
+        real(dp)              :: res
+        type(box), intent(in) :: valid
 
         integer               :: i,j
         integer               :: ilo, ihi, jlo, jhi
         real(dp)              :: dx, dy
-        real(dp), dimension(:), allocatable :: x, y
+        real(dp)              :: x, y
 
-        type(box_data)        :: state
-        type(bdry_data)       :: diri_bc, neum_bc
-
-
-        ilo = soln%valid%ilo
-        ihi = soln%valid%ihi
-        jlo = soln%valid%jlo
-        jhi = soln%valid%jhi
-
-        dx = soln%valid%dx
-        dy = soln%valid%dy
+        type(box_data)        :: soln, state
+        type(bdry_data)       :: diri_bc
+        real(dp)              :: val
 
 
-        ! ! Define coordinates
-        ! allocate(x(ilo-1:ihi+1))
-        ! x(ilo-1:ihi+1) = (/ ((i + half) * dx, i = ilo-1, ihi+1) /)
+        ilo = valid%ilo
+        ihi = valid%ihi
+        jlo = valid%jlo
+        jhi = valid%jhi
 
-        ! allocate(y(jlo-1:jhi+1))
-        ! y(jlo-1:jhi+1) = (/ ((j + half) * dy, j = jlo-1, jhi+1) /)
+        dx = valid%dx
+        dy = valid%dy
 
-        ! ! Define BCs
-        ! call define_bdry_data (diri_bc, valid, &
-        !                        BCTYPE_DIRI, &   ! xlo
-        !                        BCTYPE_DIRI, &   ! xhi
-        !                        BCTYPE_DIRI, &   ! ylo
-        !                        BCTYPE_DIRI, &   ! yhi
-        !                        BCMODE_UNIFORM, &    ! xlo
-        !                        BCMODE_UNIFORM, &    ! xhi
-        !                        BCMODE_UNIFORM, &    ! ylo
-        !                        BCMODE_UNIFORM)      ! yhi
-        ! diri_bc%data_xlo(1) = five
-        ! diri_bc%data_xhi(1) = six
-        ! diri_bc%data_ylo(1) = seven
-        ! diri_bc%data_yhi(1) = eight
+        ! Set up field
+        call define_box_data (soln, valid, 1, 1)
+        soln%data = three
 
-        ! ! Set BCs
-        ! call fill_ghosts (state, diri_bc, .false.)
+        call define_box_data (state, valid, 1, 1)
+        do j = jlo-1, jhi+1
+            y = (j + half) * dy
+            do i = ilo-1, ihi+1
+                x = (i + half) * dx
+                soln%data(i,j) = sin((half + four*y/H)*pi*x/L)
+            enddo
+        enddo
+        state%data = bogus_val
+        state%data(ilo:ihi, jlo:jhi) = soln%data(ilo:ihi, jlo:jhi)
 
-        ! ! ! Test valid cells
-        ! do j = jlo, jhi
-        !     do i = ilo, ihi
-        !         if (state%data(i,j) .ne. three) then
-        !             print*, 'i = ', i
-        !             print*, 'j = ', j
-        !             print*, 'state%data(i,j) = ', state%data(i,j)
-        !             stop
-        !         endif
-        !     enddo
-        ! enddo
+        ! Define BCs
+        call define_bdry_data (diri_bc, valid, &
+                               BCTYPE_DIRI, &   ! xlo
+                               BCTYPE_DIRI, &   ! xhi
+                               BCTYPE_DIRI, &   ! ylo
+                               BCTYPE_DIRI, &   ! yhi
+                               BCMODE_NONUNIFORM, &    ! xlo
+                               BCMODE_NONUNIFORM, &    ! xhi
+                               BCMODE_NONUNIFORM, &    ! ylo
+                               BCMODE_NONUNIFORM)      ! yhi
 
-        ! ! Test ghost cells
-        ! i = ilo-1
-        ! do j = jlo, jhi
-        !     if (state%data(i,j) .ne. seven) then
-        !         print*, 'i = ', i
-        !         print*, 'j = ', j
-        !         print*, 'state%data(i,j) = ', state%data(i,j)
-        !         stop
-        !     endif
-        ! enddo
+        x = ilo * dx
+        do j = jlo, jhi
+            y = (j + half) * dy
+            diri_bc%data_xlo(j) = sin((half + four*y/H)*pi*x/L)
+        enddo
 
-        ! i = ihi+1
-        ! do j = jlo, jhi
-        !     if (state%data(i,j) .ne. nine) then
-        !         print*, 'i = ', i
-        !         print*, 'j = ', j
-        !         print*, 'state%data(i,j) = ', state%data(i,j)
-        !         stop
-        !     endif
-        ! enddo
+        x = (ihi + 1) * dx
+        do j = jlo, jhi
+            y = (j + half) * dy
+            diri_bc%data_xhi(j) = sin((half + four*y/H)*pi*x/L)
+        enddo
 
-        ! j = jlo-1
-        ! do i = ilo, ihi
-        !     if (state%data(i,j) .ne. eleven) then
-        !         print*, 'i = ', i
-        !         print*, 'j = ', j
-        !         print*, 'state%data(i,j) = ', state%data(i,j)
-        !         stop
-        !     endif
-        ! enddo
+        y = jlo * dy
+        do i = ilo, ihi
+            x = (i + half) * dx
+            diri_bc%data_ylo(i) = sin((half + four*y/H)*pi*x/L)
+        enddo
 
-        ! j = jhi+1
-        ! do i = ilo, ihi
-        !     if (state%data(i,j) .ne. thirteen) then
-        !         print*, 'i = ', i
-        !         print*, 'j = ', j
-        !         print*, 'state%data(i,j) = ', state%data(i,j)
-        !         stop
-        !     endif
-        ! enddo
+        y = (jhi + 1) * dy
+        do i = ilo, ihi
+            x = (i + half) * dx
+            diri_bc%data_yhi(i) = sin((half + four*y/H)*pi*x/L)
+        enddo
+
+        ! Set BCs
+        call fill_ghosts (state, diri_bc, .false.)
+        state%data(ilo-1,jlo-1) = soln%data(ilo-1,jlo-1)
+        state%data(ilo-1,jhi+1) = soln%data(ilo-1,jhi+1)
+        state%data(ihi+1,jlo-1) = soln%data(ihi+1,jlo-1)
+        state%data(ihi+1,jhi+1) = soln%data(ihi+1,jhi+1)
+
+        ! state%data(ilo-1, jlo:jhi) = soln%data(ilo-1, jlo:jhi)
+        ! state%data(ihi+1, jlo:jhi) = soln%data(ihi+1, jlo:jhi)
+        ! state%data(ilo:ihi, jlo-1) = soln%data(ilo:ihi, jlo-1)
+        ! state%data(ilo:ihi, jhi+1) = soln%data(ilo:ihi, jhi+1)
+
+        ! Test valid cells
+        do j = jlo, jhi
+            do i = ilo, ihi
+                val = soln%data(i,j)
+                if (state%data(i,j) .ne. val) then
+                    print*, 'i = ', i
+                    print*, 'j = ', j
+                    print*, 'state%data(i,j) = ', state%data(i,j)
+                    print*, 'state%data(i,j) = ', val
+                    stop
+                endif
+            enddo
+        enddo
+
+        ! Compute norm over ghosts
+        state%data = state%data - soln%data
+        res = pnorm (state, state%bx, norm_type)
+
+        ! Free memory
+        call undefine_bdry_data (diri_bc)
+        call undefine_box_data (state)
+        call undefine_box_data (soln)
+
+    end function test_nonuniform_diri_bcs
 
 
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    function test_nonuniform_neum_bcs (valid) result (res)
+        implicit none
 
-        ! ! Free memory
-        ! ! call undefine_bdry_data (diri_bc)
-        ! ! call undefine_box_data (state)
-        ! if (allocated(y)) deallocate(y)
-        ! if (allocated(x)) deallocate(x)
+        real(dp)              :: res
+        type(box), intent(in) :: valid
 
-        res = zero
-    end function test_uniform_diri_bcs
+        integer               :: i,j
+        integer               :: ilo, ihi, jlo, jhi
+        real(dp)              :: dx, dy
+        real(dp)              :: x, y
+
+        type(box_data)        :: soln, state
+        type(bdry_data)       :: neum_bc
+        real(dp)              :: val
+
+
+        ilo = valid%ilo
+        ihi = valid%ihi
+        jlo = valid%jlo
+        jhi = valid%jhi
+
+        dx = valid%dx
+        dy = valid%dy
+
+        ! Set up field
+        call define_box_data (soln, valid, 1, 1)
+        soln%data = three
+
+        call define_box_data (state, valid, 1, 1)
+        do j = jlo-1, jhi+1
+            y = (j + half) * dy
+            do i = ilo-1, ihi+1
+                x = (i + half) * dx
+                soln%data(i,j) = sin((half + four*y/H)*pi*x/L)
+            enddo
+        enddo
+        state%data = bogus_val
+        state%data(ilo:ihi, jlo:jhi) = soln%data(ilo:ihi, jlo:jhi)
+
+        ! Define BCs
+        call define_bdry_data (neum_bc, valid, &
+                               BCTYPE_NEUM, &   ! xlo
+                               BCTYPE_NEUM, &   ! xhi
+                               BCTYPE_NEUM, &   ! ylo
+                               BCTYPE_NEUM, &   ! yhi
+                               BCMODE_NONUNIFORM, &    ! xlo
+                               BCMODE_NONUNIFORM, &    ! xhi
+                               BCMODE_NONUNIFORM, &    ! ylo
+                               BCMODE_NONUNIFORM)      ! yhi
+        x = ilo * dx
+        do j = jlo, jhi
+            y = (j + half) * dy
+            neum_bc%data_xlo(j) = (half + four*y/H) * (pi/L) * cos((half + four*y/H)*pi*x/L)
+        enddo
+
+        x = (ihi + 1) * dx
+        do j = jlo, jhi
+            y = (j + half) * dy
+            neum_bc%data_xhi(j) = (half + four*y/H) * (pi/L) * cos((half + four*y/H)*pi*x/L)
+        enddo
+
+        y = jlo * dy
+        do i = ilo, ihi
+            x = (i + half) * dx
+            neum_bc%data_ylo(i) = (four*pi*x/L/H) * cos((half + four*y/H)*pi*x/L)
+        enddo
+
+        y = (jhi + 1) * dy
+        do i = ilo, ihi
+            x = (i + half) * dx
+            neum_bc%data_yhi(i) = (four*pi*x/L/H) * cos((half + four*y/H)*pi*x/L)
+        enddo
+
+        ! Set BCs
+        call fill_ghosts (state, neum_bc, .false.)
+        state%data(ilo-1,jlo-1) = soln%data(ilo-1,jlo-1)
+        state%data(ilo-1,jhi+1) = soln%data(ilo-1,jhi+1)
+        state%data(ihi+1,jlo-1) = soln%data(ihi+1,jlo-1)
+        state%data(ihi+1,jhi+1) = soln%data(ihi+1,jhi+1)
+
+        ! state%data(ilo-1, jlo:jhi) = soln%data(ilo-1, jlo:jhi)
+        ! state%data(ihi+1, jlo:jhi) = soln%data(ihi+1, jlo:jhi)
+        ! state%data(ilo:ihi, jlo-1) = soln%data(ilo:ihi, jlo-1)
+        ! state%data(ilo:ihi, jhi+1) = soln%data(ilo:ihi, jhi+1)
+
+        ! Test valid cells
+        do j = jlo, jhi
+            do i = ilo, ihi
+                val = soln%data(i,j)
+                if (state%data(i,j) .ne. val) then
+                    print*, 'i = ', i
+                    print*, 'j = ', j
+                    print*, 'state%data(i,j) = ', state%data(i,j)
+                    print*, 'state%data(i,j) = ', val
+                    stop
+                endif
+            enddo
+        enddo
+
+        ! Compute norm over ghosts
+        state%data = state%data - soln%data
+        res = pnorm (state, state%bx, norm_type)
+
+        ! Free memory
+        call undefine_bdry_data (neum_bc)
+        call undefine_box_data (state)
+        call undefine_box_data (soln)
+
+    end function test_nonuniform_neum_bcs
 
 end program test

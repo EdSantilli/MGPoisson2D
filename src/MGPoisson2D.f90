@@ -163,6 +163,9 @@ contains
         bx%jlo = jlo
         bx%jhi = jhi
 
+        bx%nx = ihi - ilo + 1
+        bx%ny = jhi - jlo + 1
+
         bx%dx = dx
         bx%dy = dy
     end subroutine define_box
@@ -420,6 +423,31 @@ contains
 
 
     ! --------------------------------------------------------------------------
+    ! Computes pnorm = |bd|_p = [Sum_{i,j} bd^p]^(1/p) / (nx*ny)
+    ! WARNING: This function does not check that bd contains bx.
+    ! --------------------------------------------------------------------------
+    function pnorm (bd, bx, p) result (pn)
+        type(box_data), intent(in) :: bd
+        type(box), intent(in)      :: bx
+        integer, intent(in)        :: p
+        real(dp)                   :: pn
+
+        integer :: i, j
+        real(dp) :: volScale
+
+        volScale = bd%bx%dx * bd%bx%dy
+
+        pn = zero
+        do j = bx%jlo, bx%jhi
+            do i = bx%ilo, bx%ihi
+                pn = pn + volScale * bd%data(i,j)**p
+            enddo
+        enddo
+        pn = pn**(one/p)
+    end function pnorm
+
+
+    ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
     subroutine fill_ghosts (phi, bcd, homog, do_neum_opt)
         type(box_data), intent(inout) :: phi
@@ -545,7 +573,7 @@ contains
                             bcval = dx * bcd%data_ylo(1)
                             phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - bcval
                         else
-                            phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - dx * bcd%data_xhi(ilo:ihi)
+                            phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - dx * bcd%data_ylo(ilo:ihi)
                         endif
                     endif
 
