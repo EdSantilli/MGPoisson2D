@@ -26,10 +26,10 @@ program test
     use ArrayUtils
     implicit none
 
-    integer, parameter          :: base_ilo = 1
-    integer, parameter          :: base_ihi = 32
-    integer, parameter          :: base_jlo = 1
-    integer, parameter          :: base_jhi = 32
+    integer, parameter          :: base_ilo = 0
+    integer, parameter          :: base_ihi = 31
+    integer, parameter          :: base_jlo = 0
+    integer, parameter          :: base_jhi = 31
 
     real(8), parameter          :: L = one
     real(8), parameter          :: H = one
@@ -42,6 +42,8 @@ program test
     real(dp), dimension(maxr-1) :: rate          ! Convergence rates
 
     integer, parameter          :: norm_type = 2
+
+    type(box_data) :: x, y
 
 
     ! Test 1: Non-uniform Dirichlet BCs
@@ -75,6 +77,19 @@ program test
     enddo
 
 
+    call define_domain (valid, 1)
+    call define_box_data (x, valid, 1, 1, BD_NODE, BD_NODE)
+    call define_box_data (y, valid, 1, 1, BD_NODE, BD_NODE)
+
+    call fill_x (x)
+    call fill_y (y, x)
+
+    print*, 'x = ', x%data(:,x%valid%jlo)
+    print*, 'y = ', y%data(:,y%valid%jlo)
+
+    call undefine_box_data (x)
+    call undefine_box_data (y)
+
 contains
 
     ! --------------------------------------------------------------------------
@@ -90,10 +105,10 @@ contains
         integer                :: nx, ny
         real(dp)               :: dx, dy
 
-        ilo = (base_ilo-1) * two**(r-1) + 1
-        ihi = base_ihi * two**(r-1)
-        jlo = (base_jlo-1) * two**(r-1) + 1
-        jhi = base_jhi * two**(r-1)
+        ilo = base_ilo * two**(r-1)
+        ihi = (base_ihi+1) * two**(r-1) - 1
+        jlo = base_jlo * two**(r-1)
+        jhi = (base_jhi+1) * two**(r-1) - 1
 
         nx = ihi - ilo + 1
         ny = jhi - jlo + 1
@@ -126,20 +141,205 @@ contains
     end subroutine compute_conv_rate
 
 
+    ! ! --------------------------------------------------------------------------
+    ! ! Construct the geometry.
+    ! ! --------------------------------------------------------------------------
+    ! subroutine fill_geometry (geo, valid)
+    !     implicit none
+
+    !     type(geo_data), intent(out) :: geo
+    !     type(box), intent(in)       :: valid
+
+    !     type(box)                   :: ccbx
+
+    !     ! TODO
+
+    ! end subroutine fill_geometry
+
+
     ! --------------------------------------------------------------------------
-    ! Construct the geometry.
+    ! Fills a box_data with the Cartesian x cell locations.
     ! --------------------------------------------------------------------------
-    subroutine fill_geometry (geo, valid)
+    subroutine fill_x (x)
         implicit none
 
-        type(geo_data), intent(out) :: geo
-        type(box), intent(in)       :: valid
+        type(box_data), intent(inout) :: x
+        real(dp)                      :: dxi1, offx
+        integer                       :: ilo, ihi, i
+        integer                       :: jlo, jhi, j
 
-        type(box)                   :: ccbx
+        ilo = x%bx%ilo
+        ihi = x%bx%ihi
+        jlo = x%bx%jlo
+        jhi = x%bx%jhi
+        dxi1 = x%bx%dx
+        offx = x%offx
 
-        ! TODO
+        ! Identity map
+        x%data(:,jlo) = (/ ((i + offx) * dxi1, i = ilo, ihi) /)
+        do j = jlo+1, jhi
+            x%data(:,j) = x%data(:,jlo)
+        enddo
+    end subroutine fill_x
 
-    end subroutine fill_geometry
+
+    ! --------------------------------------------------------------------------
+    ! Fills a box_data with the Cartesian y cell locations.
+    ! --------------------------------------------------------------------------
+    subroutine fill_y (y, x)
+        implicit none
+
+        type(box_data), intent(inout) :: y
+        type(box_data), intent(in)    :: x
+
+        real(dp)                    :: dxi1, dxi2, offx, offy, L, H, el
+        integer                     :: ilo, ihi, i
+        integer                     :: jlo, jhi, j
+
+        ilo = y%bx%ilo
+        ihi = y%bx%ihi
+        jlo = y%bx%jlo
+        jhi = y%bx%jhi
+        dxi1 = y%bx%dx
+        dxi2 = y%bx%dy
+        offx = y%offx
+        offy = y%offy
+        L = dxi1 * y%valid%nx
+        H = dxi2 * y%valid%ny
+
+        if ((x%offi .ne. y%offi) .or. (x%offj .ne. y%offj)) then
+            print*, 'fill_y: x and y offsets must match.'
+            stop
+        endif
+
+        ! Bottom elevation
+        call fill_elevation (y%data(:,jlo), x%data(:,jlo), ilo, ihi, L)
+
+        ! Map vertically. Do this in reverse order so we don't clobber
+        ! the elevation data.
+        do j = jhi, jlo, -1
+            do i = ilo, ihi
+                el = y%data(i,jlo)
+                y%data(i,j) = el + (one-el/H)*(i+offx)*dxi2
+            enddo
+        enddo
+    end subroutine fill_y
+
+
+    ! --------------------------------------------------------------------------
+    ! Fills an array with bottom elevations.
+    !
+    !                         ///^\\\
+    !                        /       \
+    !                       /         \
+    !                      /           \
+    !                     /             \
+    ! _________________///               \\\_________________
+    ! |---------------|--|----|--|--|----|--|---------------|
+    ! -LxMax        -C1 -C2  -C3 0  C4  C5  C6            LxMax
+    !
+    ! /// Represents smoothed regions.
+    ! For a symmetric hill,
+    !  C1 = -l*cos(angle) - 3P
+    !  C2 = -l*cos(angle) - P
+    !  C3 = -B
+    !  C4 = B
+    !  C5 = l*cos(angle) + P
+    !  C6 = l*cos(angle) + 3P
+    !  Where B and P are the sizes of the smoothed regions.
+    ! LxMax = Lx/2
+    !
+    ! The total width of the ridge is then [2*lp*cos(angle) + 4*Bp + 2*Pp]*Lx
+    !  where Lx is the domain length
+    ! --------------------------------------------------------------------------
+    subroutine fill_elevation (el, x, ilo, ihi, Lx)
+        implicit none
+
+        integer, intent(in)                       :: ilo, ihi
+        real(dp), intent(out), dimension(ilo:ihi) :: el
+        real(dp), intent(in), dimension(ilo:ihi)  :: x
+        real(dp), intent(in)                      :: Lx
+
+        ! Masoud's lab-scale ridge (total ridge width ~ 3.8m with Lx = 40.5m)
+        real(dp), parameter :: angle = 19.2877 * pi / 180.0
+        real(dp), parameter :: lp = 0.009714_dp   ! Length of along-slope critical region   (fraction of the domain width)
+        real(dp), parameter :: Bp = 0.01173_dp    ! Length of smoothed region at ridge base (fraction of the domain width)
+        real(dp), parameter :: Pp = 0.0183542_dp  ! Half-width of smoothed region at ridge peak (fraction of the domain width)
+
+        real(dp) :: l, B, P, F, scale
+        real(dp) :: C1, C2, C3, C4, C5, C6
+        real(dp) :: sa, ca, ta
+        real(dp) :: LxMax, lstar
+        real(dp) :: b0, b1, b2    ! Coefficents of smoothed regions at ridge base
+        real(dp) :: p0, p2        ! Coefficents of smoothed regions at ridge peak
+
+        integer  :: i
+        real(dp) :: xx
+
+        ! These will be used again and again. Cache the values.
+        sa = sin(angle)
+        ca = cos(angle)
+        ta = tan(angle)
+
+        ! lp, Bp, and Pp are fractions of the domain width.
+        ! We need to bring them to scale
+        l = lp*Lx
+        B = Bp*Lx
+        P = Pp*Lx
+
+        ! Length of the critical slope extended to make a triangle shaped ridge
+        lstar = l + (B+P)/ca
+
+        ! Locations of functional changes
+        C1 = -lstar*ca - B
+        C2 = -lstar*ca + B
+        C3 = -P
+        C4 = P
+        C5 = lstar*ca - B
+        C6 = lstar*ca + B
+
+        ! Cubic spline coefficients
+        b0 = fourth*ta*(B+lstar*ca)*(B+lstar*ca)/B
+        b1 = -half*ta*(B+lstar*ca)/B
+        b2 = fourth*ta/B
+
+        p0 = lstar*sa - half*ta*P
+        p2 = -half*ta/P
+
+        do i = ilo, ihi
+            xx = x(i)
+
+            if (xx .le. C1) then
+                ! Left flat region
+                el(i) = zero
+
+            else if ((C1 .lt. xx) .and. (xx .lt. C2)) then
+                ! Curving upwards (left ridge base)
+                el(i) = b2*xx*xx - b1*xx + b0
+
+            else if ((C2 .le. xx) .and. (xx .le. C3)) then
+                ! Left critical region
+                el(i) = lstar*sa + ta*xx
+
+            else if ((C3 .lt. xx) .and. (xx .lt. C4)) then
+                ! Curving downwards (ridge peak)
+                el(i) = p2*xx*xx + p0
+
+            else if ((C4 .le. xx) .and. (xx .le. C5)) then
+                ! Right critical region
+                el(i) = lstar*sa - ta*xx
+
+            else if ((C5 .lt. xx) .and. (xx .lt. C6)) then
+                ! Curving upwards (right ridge base)
+                el(i) = b2*xx*xx + b1*xx + b0
+
+            else
+                ! Right flat region
+                el(i) = zero
+
+            endif
+        enddo
+    end subroutine fill_elevation
 
 
     ! --------------------------------------------------------------------------
@@ -169,10 +369,10 @@ contains
         dy = valid%dy
 
         ! Set up field
-        call define_box_data (soln, valid, 1, 1)
+        call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
         soln%data = three
 
-        call define_box_data (state, valid, 1, 1)
+        call define_box_data (state, valid, 1, 1, BD_CELL, BD_CELL)
         do j = jlo-1, jhi+1
             y = (j + half) * dy
             do i = ilo-1, ihi+1
@@ -283,10 +483,10 @@ contains
         dy = valid%dy
 
         ! Set up field
-        call define_box_data (soln, valid, 1, 1)
+        call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
         soln%data = three
 
-        call define_box_data (state, valid, 1, 1)
+        call define_box_data (state, valid, 1, 1, BD_CELL, BD_CELL)
         do j = jlo-1, jhi+1
             y = (j + half) * dy
             do i = ilo-1, ihi+1

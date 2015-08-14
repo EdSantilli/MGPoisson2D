@@ -51,7 +51,8 @@ module precision
     real(dp), parameter :: nineteen  = 19.0_dp
     real(dp), parameter :: twenty    = 20.0_dp
 
-    real(dp), parameter :: half      = 0.5_dp
+    real(dp), parameter :: half      = 0.50_dp
+    real(dp), parameter :: fourth    = 0.25_dp
 
     real(dp), parameter :: pi        = 4*atan(one)
     real(dp), parameter :: bogus_val = 1.2345E300_dp
@@ -126,6 +127,13 @@ module arrayutils
 
 
     ! --------------------------------------------------------------------------
+    ! When creating a box_data, these constants make the centering clear.
+    ! --------------------------------------------------------------------------
+    integer, parameter :: BD_NODE = 0
+    integer, parameter :: BD_CELL = 1
+
+
+    ! --------------------------------------------------------------------------
     ! These objects hold CC state data along with its metadata.
     ! --------------------------------------------------------------------------
     type box_data
@@ -133,23 +141,13 @@ module arrayutils
         type(box) :: valid      ! The valid region only. Does not include ghosts.
         integer   :: ngx, ngy   ! Nomber of ghosts per side in each dir
 
+        integer   :: offi, offj ! Index offsets.
+        real(dp)  :: offx, offy ! Data offsets. Ex: offx=half, offy=zero gives
+                                ! a face-centered box_data in y.
+
         ! The ghost and valid data array.
         real(dp), dimension(:,:), allocatable :: data
     end type box_data
-
-
-    ! --------------------------------------------------------------------------
-    ! These objects hold FC state data along with its metadata.
-    ! --------------------------------------------------------------------------
-    type face_data
-        type(box) :: bx         ! The FC data box. Includes ghosts.
-        type(box) :: valid      ! The FC valid region only. Does not include ghosts.
-        integer   :: ngx, ngy   ! Nomber of ghosts per side in each dir
-        integer   :: facedir    ! The FC direction
-
-        ! The ghost and valid data array.
-        real(dp), dimension(:,:), allocatable :: data
-    end type face_data
 
 
     ! --------------------------------------------------------------------------
@@ -158,10 +156,10 @@ module arrayutils
     !   Jgup = the FC inverse metric tensor scaled by J
     ! --------------------------------------------------------------------------
     type geo_data
-        type(box_data)  :: J
-        type(face_data) :: Jgup_x
-        type(face_data) :: Jgup_y
-        real(dp)        :: dx, dy
+        type(box_data) :: J
+        type(box_data) :: Jgup_x
+        type(box_data) :: Jgup_y
+        real(dp)       :: dx, dy
     end type geo_data
 
 
@@ -323,24 +321,62 @@ contains
 
     ! --------------------------------------------------------------------------
     ! This makes setting up a box_data object a one line operation.
+    ! ioff = 0 produces node-centered data in x,
+    ! ioff = 1 produces cell-centered data in x,
+    ! etc...
     ! --------------------------------------------------------------------------
-    subroutine define_box_data (bd, valid, ngx, ngy)
+    subroutine define_box_data (bd, cc_valid, ngx, ngy, offi, offj)
         type(box_data), intent(out) :: bd
-        type(box), intent(in)       :: valid
+        type(box), intent(in)       :: cc_valid
         integer, intent(in)         :: ngx, ngy
+        integer, intent(in)         :: offi, offj
 
-        type(box) :: bx
+        type(box) :: bx, valid
         integer   :: ierr
+        real(dp)  :: offx, offy
 
-        call define_box(bx, &
-                        valid%ilo-ngx, valid%ihi+ngx, &
-                        valid%jlo-ngy, valid%jhi+ngy, &
-                        valid%dx, valid%dy)
+        ! Define valid box with the correct staggering.
+        valid = cc_valid
 
+        select case (offi)
+            case (BD_NODE)
+                valid%ihi = valid%ihi + 1
+                valid%nx = valid%nx + 1
+                offx = zero
+            case (BD_CELL)
+                offx = half
+            case default
+                print*, 'define_box_data: Bad offi'
+        end select
+
+        select case (offj)
+            case (BD_NODE)
+                valid%jhi = valid%jhi + 1
+                valid%ny = valid%ny + 1
+                offy = zero
+            case (BD_CELL)
+                offy = half
+            case default
+                print*, 'define_box_data: Bad offj'
+        end select
+
+        ! Define the data box (bx) with the correct number of ghosts.
+        bx = valid
+        bx%ilo = bx%ilo - ngx
+        bx%ihi = bx%ihi + ngx
+        bx%jlo = bx%jlo - ngy
+        bx%jhi = bx%jhi + ngy
+
+        ! Define box_data object.
         bd%valid = valid
         bd%bx = bx
         bd%ngx = ngx
         bd%ngy = ngy
+
+        bd%offx = offx
+        bd%offy = offy
+        bd%offi = offi
+        bd%offj = offj
 
         allocate (bd%data (bx%ilo : bx%ihi, bx%jlo : bx%jhi), stat=ierr)
         if (ierr .ne. 0) then
@@ -360,72 +396,13 @@ contains
         bd%bx = empty_box
         bd%ngx = 0
         bd%ngy = 0
+        bd%offx = bogus_val
+        bd%offy = bogus_val
+        bd%offi = 0
+        bd%offj = 0
 
         if (allocated(bd%data)) deallocate(bd%data)
     end subroutine undefine_box_data
-
-
-    ! --------------------------------------------------------------------------
-    ! This makes setting up a face_data object a one line operation.
-    ! --------------------------------------------------------------------------
-    subroutine define_face_data (fd, valid, facedir, ngx, ngy)
-        type(face_data), intent(out) :: fd
-        type(box), intent(in)        :: valid
-        integer, intent(in)          :: facedir
-        integer, intent(in)          :: ngx, ngy
-
-        type(box) :: bx, fcvalid
-        integer   :: ierr
-
-        if (facedir .eq. 1) then
-            fcvalid = valid
-            fcvalid%ihi = fcvalid%ihi + 1
-            call define_box(bx, &
-                            valid%ilo-ngx, valid%ihi+ngx+1, &
-                            valid%jlo-ngy, valid%jhi+ngy, &
-                            valid%dx, valid%dy)
-
-        else if (facedir .eq. 2) then
-            fcvalid = valid
-            fcvalid%jhi = fcvalid%jhi + 1
-            call define_box(bx, &
-                            valid%ilo-ngx, valid%ihi+ngx, &
-                            valid%jlo-ngy, valid%jhi+ngy+1, &
-                            valid%dx, valid%dy)
-
-        else
-            print*, 'define_face_data: Bad facedir'
-            stop
-        endif
-
-        fd%valid = fcvalid
-        fd%bx = bx
-        fd%ngx = ngx
-        fd%ngy = ngy
-        fd%facedir = facedir
-
-        allocate (fd%data (bx%ilo : bx%ihi, bx%jlo : bx%jhi), stat=ierr)
-        if (ierr .ne. 0) then
-            print*, 'define_box_data: Out of memory'
-            stop
-        endif
-    end subroutine define_face_data
-
-
-    ! --------------------------------------------------------------------------
-    ! Frees memory used by a face_data object.
-    ! --------------------------------------------------------------------------
-    pure subroutine undefine_face_data (fd)
-        type(face_data), intent(inout) :: fd
-
-        fd%valid = empty_box
-        fd%bx = empty_box
-        fd%ngx = 0
-        fd%ngy = 0
-        fd%facedir = 0
-
-        if (allocated(fd%data)) deallocate(fd%data)
-    end subroutine undefine_face_data
 
 
     ! --------------------------------------------------------------------------
@@ -515,7 +492,7 @@ contains
     ! Computes pnorm = |bd|_p = [Sum_{i,j} bd^p]^(1/p) / (nx*ny)
     ! WARNING: This function does not check that bd contains bx.
     ! --------------------------------------------------------------------------
-    pure function pnorm (bd, bx, p) result (pn)
+    function pnorm (bd, bx, p) result (pn)
         type(box_data), intent(in) :: bd
         type(box), intent(in)      :: bx
         integer, intent(in)        :: p
@@ -523,6 +500,11 @@ contains
 
         integer :: i, j
         real(dp) :: volScale
+
+        if ((bd%offi .ne. BD_CELL) .or. (bd%offj .ne. BD_CELL)) then
+            print*, 'pnorm: Only works with cell-centered data for now.'
+            stop
+        endif
 
         volScale = bd%bx%dx * bd%bx%dy
 
@@ -548,6 +530,11 @@ contains
         integer  :: ilo, ihi, jlo, jhi
         real(dp) :: dx, dy, bcval
         logical  :: do_neum
+
+        if ((phi%offi .ne. BD_CELL) .or. (phi%offj .ne. BD_CELL)) then
+            print*, 'fill_ghosts: Only works with cell-centered data for now.'
+            stop
+        endif
 
         xlo = bcd%type_xlo
         xhi = bcd%type_xhi
