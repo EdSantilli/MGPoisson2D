@@ -126,16 +126,43 @@ module arrayutils
 
 
     ! --------------------------------------------------------------------------
-    ! These objects hold the data along with its metadata.
+    ! These objects hold CC state data along with its metadata.
     ! --------------------------------------------------------------------------
     type box_data
         type(box) :: bx         ! The data box. Includes ghosts.
         type(box) :: valid      ! The valid region only. Does not include ghosts.
-        integer :: ngx, ngy     ! Nomber of ghosts per side in each dir
+        integer   :: ngx, ngy   ! Nomber of ghosts per side in each dir
 
         ! The ghost and valid data array.
         real(dp), dimension(:,:), allocatable :: data
     end type box_data
+
+
+    ! --------------------------------------------------------------------------
+    ! These objects hold FC state data along with its metadata.
+    ! --------------------------------------------------------------------------
+    type face_data
+        type(box) :: bx         ! The FC data box. Includes ghosts.
+        type(box) :: valid      ! The FC valid region only. Does not include ghosts.
+        integer   :: ngx, ngy   ! Nomber of ghosts per side in each dir
+        integer   :: facedir    ! The FC direction
+
+        ! The ghost and valid data array.
+        real(dp), dimension(:,:), allocatable :: data
+    end type face_data
+
+
+    ! --------------------------------------------------------------------------
+    ! Contains:
+    !   J = the CC Jacobian determinant
+    !   Jgup = the FC inverse metric tensor scaled by J
+    ! --------------------------------------------------------------------------
+    type geo_data
+        type(box_data)  :: J
+        type(face_data) :: Jgup_x
+        type(face_data) :: Jgup_y
+        real(dp)        :: dx, dy
+    end type geo_data
 
 
     ! --------------------------------------------------------------------------
@@ -277,7 +304,7 @@ contains
     ! --------------------------------------------------------------------------
     ! Frees memory used by a bdry_data object.
     ! --------------------------------------------------------------------------
-    subroutine undefine_bdry_data (bcd)
+    pure subroutine undefine_bdry_data (bcd)
         type(bdry_data), intent(inout) :: bcd
 
         bcd%valid = empty_box
@@ -326,7 +353,7 @@ contains
     ! --------------------------------------------------------------------------
     ! Frees memory used by a box_data object.
     ! --------------------------------------------------------------------------
-    subroutine undefine_box_data (bd)
+    pure subroutine undefine_box_data (bd)
         type(box_data), intent(inout) :: bd
 
         bd%valid = empty_box
@@ -336,6 +363,69 @@ contains
 
         if (allocated(bd%data)) deallocate(bd%data)
     end subroutine undefine_box_data
+
+
+    ! --------------------------------------------------------------------------
+    ! This makes setting up a face_data object a one line operation.
+    ! --------------------------------------------------------------------------
+    subroutine define_face_data (fd, valid, facedir, ngx, ngy)
+        type(face_data), intent(out) :: fd
+        type(box), intent(in)        :: valid
+        integer, intent(in)          :: facedir
+        integer, intent(in)          :: ngx, ngy
+
+        type(box) :: bx, fcvalid
+        integer   :: ierr
+
+        if (facedir .eq. 1) then
+            fcvalid = valid
+            fcvalid%ihi = fcvalid%ihi + 1
+            call define_box(bx, &
+                            valid%ilo-ngx, valid%ihi+ngx+1, &
+                            valid%jlo-ngy, valid%jhi+ngy, &
+                            valid%dx, valid%dy)
+
+        else if (facedir .eq. 2) then
+            fcvalid = valid
+            fcvalid%jhi = fcvalid%jhi + 1
+            call define_box(bx, &
+                            valid%ilo-ngx, valid%ihi+ngx, &
+                            valid%jlo-ngy, valid%jhi+ngy+1, &
+                            valid%dx, valid%dy)
+
+        else
+            print*, 'define_face_data: Bad facedir'
+            stop
+        endif
+
+        fd%valid = fcvalid
+        fd%bx = bx
+        fd%ngx = ngx
+        fd%ngy = ngy
+        fd%facedir = facedir
+
+        allocate (fd%data (bx%ilo : bx%ihi, bx%jlo : bx%jhi), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'define_box_data: Out of memory'
+            stop
+        endif
+    end subroutine define_face_data
+
+
+    ! --------------------------------------------------------------------------
+    ! Frees memory used by a face_data object.
+    ! --------------------------------------------------------------------------
+    pure subroutine undefine_face_data (fd)
+        type(face_data), intent(inout) :: fd
+
+        fd%valid = empty_box
+        fd%bx = empty_box
+        fd%ngx = 0
+        fd%ngy = 0
+        fd%facedir = 0
+
+        if (allocated(fd%data)) deallocate(fd%data)
+    end subroutine undefine_face_data
 
 
     ! --------------------------------------------------------------------------
@@ -418,7 +508,6 @@ contains
 
         ! Compute over entire region (not just valid region).
         ip = inner_prod_array(bd1%data, bd2%data, bd1%bx%nx, bd1%bx%ny)
-
     end function inner_prod_box_data
 
 
@@ -426,7 +515,7 @@ contains
     ! Computes pnorm = |bd|_p = [Sum_{i,j} bd^p]^(1/p) / (nx*ny)
     ! WARNING: This function does not check that bd contains bx.
     ! --------------------------------------------------------------------------
-    function pnorm (bd, bx, p) result (pn)
+    pure function pnorm (bd, bx, p) result (pn)
         type(box_data), intent(in) :: bd
         type(box), intent(in)      :: bx
         integer, intent(in)        :: p

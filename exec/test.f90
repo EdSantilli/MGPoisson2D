@@ -127,6 +127,22 @@ contains
 
 
     ! --------------------------------------------------------------------------
+    ! Construct the geometry.
+    ! --------------------------------------------------------------------------
+    subroutine fill_geometry (geo, valid)
+        implicit none
+
+        type(geo_data), intent(out) :: geo
+        type(box), intent(in)       :: valid
+
+        type(box)                   :: ccbx
+
+        ! TODO
+
+    end subroutine fill_geometry
+
+
+    ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
     function test_nonuniform_diri_bcs (valid) result (res)
         implicit none
