@@ -78,14 +78,14 @@ program test
 
 
     call define_domain (valid, 1)
-    call define_box_data (x, valid, 1, 1, BD_NODE, BD_NODE)
-    call define_box_data (y, valid, 1, 1, BD_NODE, BD_NODE)
+    call define_box_data (x, valid, 0, 0, BD_NODE, BD_NODE)
+    call define_box_data (y, valid, 0, 0, BD_NODE, BD_NODE)
 
     call fill_x (x)
-    call fill_y (y, x)
+    call fill_y (y)
 
-    print*, 'x = ', x%data(:,x%valid%jlo)
-    print*, 'y = ', y%data(:,y%valid%jlo)
+    print*, 'x = ', x%data(:,x%bx%jlo)
+    print*, 'y = ', y%data(:,y%bx%jlo)
 
     call undefine_box_data (x)
     call undefine_box_data (y)
@@ -186,13 +186,15 @@ contains
     ! --------------------------------------------------------------------------
     ! Fills a box_data with the Cartesian y cell locations.
     ! --------------------------------------------------------------------------
-    subroutine fill_y (y, x)
+    subroutine fill_y (y)
         implicit none
 
         type(box_data), intent(inout) :: y
-        type(box_data), intent(in)    :: x
 
+        type(box)                   :: xbox
+        type(box_data)              :: x
         real(dp)                    :: dxi1, dxi2, offx, offy, L, H, el
+        real(dp)                    :: yfrac
         integer                     :: ilo, ihi, i
         integer                     :: jlo, jhi, j
 
@@ -204,23 +206,24 @@ contains
         dxi2 = y%bx%dy
         offx = y%offx
         offy = y%offy
-        L = dxi1 * y%valid%nx
-        H = dxi2 * y%valid%ny
+        L = y%L
+        H = y%H
 
-        if ((x%offi .ne. y%offi) .or. (x%offj .ne. y%offj)) then
-            print*, 'fill_y: x and y offsets must match.'
-            stop
-        endif
+        ! Horizontal positions at bottom boundary
+        call define_box (xbox, y%valid%ilo, y%valid%ihi, y%valid%jlo, y%valid%jlo, dxi1, dxi2)
+        call define_box_data (x, xbox, y%ngx, 0, y%offi, BD_NODE)
+        call fill_x (x)
 
         ! Bottom elevation
-        call fill_elevation (y%data(:,jlo), x%data(:,jlo), ilo, ihi, L)
+        call fill_elevation (y%data(:,jlo), x%data(:,x%valid%jlo), ilo, ihi, L)
 
         ! Map vertically. Do this in reverse order so we don't clobber
         ! the elevation data.
         do j = jhi, jlo, -1
+            yfrac = (j + offy) * dxi2 / H
             do i = ilo, ihi
                 el = y%data(i,jlo)
-                y%data(i,j) = el + (one-el/H)*(i+offx)*dxi2
+                y%data(i,j) = el + (H-el)*yfrac
             enddo
         enddo
     end subroutine fill_y
@@ -309,37 +312,96 @@ contains
         do i = ilo, ihi
             xx = x(i)
 
-            if (xx .le. C1) then
-                ! Left flat region
-                el(i) = zero
+            el(i) = fourth * sin(pi*xx/Lx)
 
-            else if ((C1 .lt. xx) .and. (xx .lt. C2)) then
-                ! Curving upwards (left ridge base)
-                el(i) = b2*xx*xx - b1*xx + b0
+            ! if (xx .le. C1) then
+            !     ! Left flat region
+            !     el(i) = zero
 
-            else if ((C2 .le. xx) .and. (xx .le. C3)) then
-                ! Left critical region
-                el(i) = lstar*sa + ta*xx
+            ! else if ((C1 .lt. xx) .and. (xx .lt. C2)) then
+            !     ! Curving upwards (left ridge base)
+            !     el(i) = b2*xx*xx - b1*xx + b0
 
-            else if ((C3 .lt. xx) .and. (xx .lt. C4)) then
-                ! Curving downwards (ridge peak)
-                el(i) = p2*xx*xx + p0
+            ! else if ((C2 .le. xx) .and. (xx .le. C3)) then
+            !     ! Left critical region
+            !     el(i) = lstar*sa + ta*xx
 
-            else if ((C4 .le. xx) .and. (xx .le. C5)) then
-                ! Right critical region
-                el(i) = lstar*sa - ta*xx
+            ! else if ((C3 .lt. xx) .and. (xx .lt. C4)) then
+            !     ! Curving downwards (ridge peak)
+            !     el(i) = p2*xx*xx + p0
 
-            else if ((C5 .lt. xx) .and. (xx .lt. C6)) then
-                ! Curving upwards (right ridge base)
-                el(i) = b2*xx*xx + b1*xx + b0
+            ! else if ((C4 .le. xx) .and. (xx .le. C5)) then
+            !     ! Right critical region
+            !     el(i) = lstar*sa - ta*xx
 
-            else
-                ! Right flat region
-                el(i) = zero
+            ! else if ((C5 .lt. xx) .and. (xx .lt. C6)) then
+            !     ! Curving upwards (right ridge base)
+            !     el(i) = b2*xx*xx + b1*xx + b0
 
-            endif
+            ! else
+            !     ! Right flat region
+            !     el(i) = zero
+
+            ! endif
         enddo
     end subroutine fill_elevation
+
+
+    ! --------------------------------------------------------------------------
+    ! Fills a box_data with the Jacobian matrix elements d[x^mu] / d[xi^nu].
+    ! --------------------------------------------------------------------------
+    subroutine fill_dxdXi (dest, mu, nu)
+        implicit none
+
+        type(box_data), intent(inout) :: dest
+        integer, intent(in)           :: mu, nu
+
+        type(box_data) :: xmu
+        integer        :: ngx, ngy, ilo, ihi, jlo, jhi
+        real(dp)       :: scale
+
+        ilo = dest%bx%ilo
+        ihi = dest%bx%ihi
+        jlo = dest%bx%jlo
+        jhi = dest%bx%jhi
+        ngx = dest%ngx
+        ngy = dest%ngy
+
+        ! We need xmu to surround the dest region.
+        if (dest%offi .eq. BD_CELL) then
+            call define_box_data (xmu, dest%valid, ngx, ngy, BD_NODE, BD_NODE)
+
+            if (mu .eq. 1) then
+                call fill_x (xmu)
+            else
+                call fill_y (xmu)
+            endif
+
+            if (nu .eq. 1) then
+                scale = one / dest%valid%dx
+                dest%data(ilo:ihi,:) = (xmu%data(ilo+1:ihi+1,:) - xmu%data(ilo:ihi,:)) * scale
+            else
+                scale = one / dest%valid%dy
+                dest%data(:,jlo:jhi) = (xmu%data(:,jlo+1:jhi+1) - xmu%data(:,jlo:jhi)) * scale
+            endif
+        else
+            call define_box_data (xmu, dest%valid, ngx+1, ngy+1, BD_CELL, BD_CELL)
+
+            if (mu .eq. 1) then
+                call fill_x (xmu)
+            else
+                call fill_y (xmu)
+            endif
+
+            if (nu .eq. 1) then
+                scale = one / dest%valid%dx
+                dest%data(ilo:ihi,:) = (xmu%data(ilo:ihi,:) - xmu%data(ilo-1:ihi-1,:)) * scale
+            else
+                scale = one / dest%valid%dy
+                dest%data(:,jlo:jhi) = (xmu%data(:,jlo:jhi) - xmu%data(:,jlo-1:jhi-1)) * scale
+            endif
+        endif
+    end subroutine fill_dxdXi
 
 
     ! --------------------------------------------------------------------------

@@ -51,10 +51,11 @@ module precision
     real(dp), parameter :: nineteen  = 19.0_dp
     real(dp), parameter :: twenty    = 20.0_dp
 
-    real(dp), parameter :: half      = 0.50_dp
-    real(dp), parameter :: fourth    = 0.25_dp
+    real(dp), parameter :: half      = one / two
+    real(dp), parameter :: third     = one / three
+    real(dp), parameter :: fourth    = one / four
 
-    real(dp), parameter :: pi        = 4*atan(one)
+    real(dp), parameter :: pi        = four * atan(one)
     real(dp), parameter :: bogus_val = 1.2345E300_dp
 
 end module precision
@@ -145,6 +146,8 @@ module arrayutils
         real(dp)  :: offx, offy ! Data offsets. Ex: offx=half, offy=zero gives
                                 ! a face-centered box_data in y.
 
+        real(dp)  :: L, H       ! The dimensions of the valid region
+
         ! The ghost and valid data array.
         real(dp), dimension(:,:), allocatable :: data
     end type box_data
@@ -195,6 +198,18 @@ contains
         bx%dy = dy
     end subroutine define_box
 
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    pure subroutine grow_box (bx, growx, growy)
+        type(box), intent(inout) :: bx
+        integer, intent(in)      :: growx, growy
+
+        bx%ilo = bx%ilo - growx
+        bx%ihi = bx%ihi + growx
+        bx%jlo = bx%jlo - growy
+        bx%jhi = bx%jhi + growy
+    end subroutine grow_box
 
     ! --------------------------------------------------------------------------
     ! This makes setting up a bdry_data object a one line operation.
@@ -321,8 +336,8 @@ contains
 
     ! --------------------------------------------------------------------------
     ! This makes setting up a box_data object a one line operation.
-    ! ioff = 0 produces node-centered data in x,
-    ! ioff = 1 produces cell-centered data in x,
+    ! ioff = BD_NODE = 0 produces node-centered data in x,
+    ! ioff = BD_CELL = 1 produces cell-centered data in x,
     ! etc...
     ! --------------------------------------------------------------------------
     subroutine define_box_data (bd, cc_valid, ngx, ngy, offi, offj)
@@ -334,6 +349,7 @@ contains
         type(box) :: bx, valid
         integer   :: ierr
         real(dp)  :: offx, offy
+        real(dp)  :: L, H
 
         ! Define valid box with the correct staggering.
         valid = cc_valid
@@ -378,6 +394,9 @@ contains
         bd%offi = offi
         bd%offj = offj
 
+        bd%L = cc_valid%nx * cc_valid%dx
+        bd%H = cc_valid%ny * cc_valid%dy
+
         allocate (bd%data (bx%ilo : bx%ihi, bx%jlo : bx%jhi), stat=ierr)
         if (ierr .ne. 0) then
             print*, 'define_box_data: Out of memory'
@@ -400,6 +419,8 @@ contains
         bd%offy = bogus_val
         bd%offi = 0
         bd%offj = 0
+        bd%L = bogus_val
+        bd%H = bogus_val
 
         if (allocated(bd%data)) deallocate(bd%data)
     end subroutine undefine_box_data
