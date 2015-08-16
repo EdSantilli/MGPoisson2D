@@ -152,6 +152,11 @@ module arrayutils
         real(dp), dimension(:,:), allocatable :: data
     end type box_data
 
+    ! --------------------------------------------------------------------------
+    ! Side enumeration.
+    ! --------------------------------------------------------------------------
+    integer, parameter :: SIDE_LO = 0
+    integer, parameter :: SIDE_HI = 1
 
     ! --------------------------------------------------------------------------
     ! Contains:
@@ -159,11 +164,22 @@ module arrayutils
     !   Jgup = the FC inverse metric tensor scaled by J
     ! --------------------------------------------------------------------------
     type geo_data
-        type(box_data) :: J
-        type(box_data) :: Jgup_x
-        type(box_data) :: Jgup_y
+        type(box_data) :: J             ! Cell-centered.
+        type(box_data) :: Jgup_xx       ! Face-centered in x-direction.
+        type(box_data) :: Jgup_xy       ! Face-centered in x-direction.
+        type(box_data) :: Jgup_yx       ! Face-centered in y-direction.
+        type(box_data) :: Jgup_yy       ! Face-centered in y-direction.
         real(dp)       :: dx, dy
     end type geo_data
+
+
+    ! --------------------------------------------------------------------------
+    ! This makes defining a box_data a one line operation.
+    ! --------------------------------------------------------------------------
+    interface define_box_data
+        module procedure define_box_data_itemize
+        module procedure define_box_data_dup
+    end interface
 
 
     ! --------------------------------------------------------------------------
@@ -210,6 +226,56 @@ contains
         bx%jlo = bx%jlo - growy
         bx%jhi = bx%jhi + growy
     end subroutine grow_box
+
+
+    ! ! --------------------------------------------------------------------------
+    ! ! Returns a face-centered box at the boundary of src.
+    ! ! off = src's centering in dir.
+    ! ! --------------------------------------------------------------------------
+    ! function bdry_box (src, off, dir, side) result (bx)
+    !     type(box), intent(in) :: src
+    !     integer, intent(in)   :: off, dir, side
+    !     type(box)             :: bx
+    !     integer               :: ilo, ihi, jlo, jhi, offi, offj
+    !     real(dp)              :: dx, dy
+
+    !     ilo = src%ilo
+    !     ihi = src%ihi
+    !     jlo = src%jlo
+    !     jhi = src%jhi
+    !     dx = src%dx
+    !     dy = src%dy
+
+    !     if (dir .eq. 1) then
+    !         if (side .eq. SIDE_LO) then
+    !             call define_box (bx, ilo, ilo, jlo, jhi, dx, dy)
+
+    !         else if (side .eq. SIDE_HI) then
+    !             call define_box (bx, ihi+off, ihi+off, jlo, jhi, dx, dy)
+
+    !         else
+    !             print*, 'bdry_box: Bad side.'
+    !             stop
+    !         endif
+
+    !     else if (dir .eq. 2) then
+    !         if (side .eq. SIDE_LO) then
+    !             call define_box (bx, ilo, ihi, jlo, jlo, dx, dy)
+
+    !         else if (side .eq. SIDE_HI) then
+    !             call define_box (bx, ilo, ihi, jhi+off, jhi+off, dx, dy)
+
+    !         else
+    !             print*, 'bdry_box: Bad side.'
+    !             stop
+    !         endif
+
+    !     else
+    !         print*, 'bdry_box: Bad dir.'
+    !         stop
+    !     endif
+    ! end function bdry_box
+
 
     ! --------------------------------------------------------------------------
     ! This makes setting up a bdry_data object a one line operation.
@@ -340,7 +406,7 @@ contains
     ! ioff = BD_CELL = 1 produces cell-centered data in x,
     ! etc...
     ! --------------------------------------------------------------------------
-    subroutine define_box_data (bd, cc_valid, ngx, ngy, offi, offj)
+    subroutine define_box_data_itemize (bd, cc_valid, ngx, ngy, offi, offj)
         type(box_data), intent(out) :: bd
         type(box), intent(in)       :: cc_valid
         integer, intent(in)         :: ngx, ngy
@@ -402,7 +468,19 @@ contains
             print*, 'define_box_data: Out of memory'
             stop
         endif
-    end subroutine define_box_data
+    end subroutine define_box_data_itemize
+
+
+    ! --------------------------------------------------------------------------
+    ! Copies all metadata from src to dest. This defines dest over the exact
+    ! same box as src, but doesn't copy src's data.
+    ! --------------------------------------------------------------------------
+    subroutine define_box_data_dup (dest, src)
+        type(box_data), intent(inout) :: dest
+        type(box_data), intent(in)    :: src
+
+        call define_box_data (dest, src%valid, src%ngx, src%ngy, src%offi, src%offj)
+    end subroutine define_box_data_dup
 
 
     ! --------------------------------------------------------------------------

@@ -34,8 +34,6 @@ program test
     real(8), parameter          :: L = one
     real(8), parameter          :: H = one
 
-    type(box)                   :: valid
-
     integer                     :: r             ! Current refinement level
     integer, parameter          :: maxr = 7      ! Max refinement level
     real(dp), dimension(maxr)   :: errnorm       ! Error norm at each level
@@ -43,14 +41,27 @@ program test
 
     integer, parameter          :: norm_type = 2
 
-    type(box_data) :: x, y
+    ! type(box_data) :: x, y
+    type(box)                       :: valid
+    type(geo_data), dimension(maxr) :: geo
+    real(dp) :: t1, t2
+
+
+    ! Geometry setup
+    call cpu_time (t1)
+    do r = 1, maxr
+        call define_domain (valid, r)
+        call define_geometry (geo(r), valid)
+    enddo
+    call cpu_time (t2)
+    print*, 'Geometry setup: elapsed time (s) = ', t2-t1
+    print*
 
 
     ! Test 1: Non-uniform Dirichlet BCs
     errnorm = bogus_val
     do r = 1, maxr
-        call define_domain (valid, r)
-        errnorm(r) = test_nonuniform_diri_bcs (valid)
+        errnorm(r) = test_nonuniform_diri_bcs (geo(r))
     enddo
     call compute_conv_rate (rate, errnorm)
     print*, 'Test 1: Non-uniform Dirichlet BCs'
@@ -59,14 +70,13 @@ program test
     do r = 2, maxr
         print*, errnorm(r), rate(r-1)
     enddo
-    print*, ''
+    print*
 
 
     ! Test 2: Non-uniform Neumann BCs
     errnorm = bogus_val
     do r = 1, maxr
-        call define_domain (valid, r)
-        errnorm(r) = test_nonuniform_neum_bcs (valid)
+        errnorm(r) = test_nonuniform_neum_bcs (geo(r))
     enddo
     call compute_conv_rate (rate, errnorm)
     print*, 'Test 2: Non-uniform Neumann BCs'
@@ -77,18 +87,25 @@ program test
     enddo
 
 
-    call define_domain (valid, 1)
-    call define_box_data (x, valid, 0, 0, BD_NODE, BD_NODE)
-    call define_box_data (y, valid, 0, 0, BD_NODE, BD_NODE)
+    ! Prints x and y coordinates to the terminal.
+    ! call define_domain (valid, 1)
+    ! call define_box_data (x, valid, 0, 0, BD_NODE, BD_NODE)
+    ! call define_box_data (y, valid, 0, 0, BD_NODE, BD_NODE)
 
-    call fill_x (x)
-    call fill_y (y)
+    ! call fill_x (x)
+    ! call fill_y (y)
 
-    print*, 'x = ', x%data(:,x%bx%jlo)
-    print*, 'y = ', y%data(:,y%bx%jlo)
+    ! print*, 'x = ', x%data(:,x%bx%jlo)
+    ! print*, 'y = ', y%data(:,y%bx%jlo)
 
-    call undefine_box_data (x)
-    call undefine_box_data (y)
+    ! call undefine_box_data (x)
+    ! call undefine_box_data (y)
+
+
+    ! Free memory
+    do r = 1, maxr
+        call undefine_geometry (geo(r))
+    enddo
 
 contains
 
@@ -141,20 +158,53 @@ contains
     end subroutine compute_conv_rate
 
 
-    ! ! --------------------------------------------------------------------------
-    ! ! Construct the geometry.
-    ! ! --------------------------------------------------------------------------
-    ! subroutine fill_geometry (geo, valid)
-    !     implicit none
+    ! --------------------------------------------------------------------------
+    ! Allocate and compute various geometric quantities.
+    ! --------------------------------------------------------------------------
+    subroutine define_geometry (geo, valid)
+        implicit none
 
-    !     type(geo_data), intent(out) :: geo
-    !     type(box), intent(in)       :: valid
+        type(geo_data), intent(out) :: geo
+        type(box), intent(in)       :: valid
 
-    !     type(box)                   :: ccbx
+        type(box)                   :: ccbx
+        integer, parameter          :: ng = 1
 
-    !     ! TODO
+        ! Allocate space
+        call define_box_data (geo%J, valid, ng, ng, BD_CELL, BD_CELL)
+        call define_box_data (geo%Jgup_xx, valid, ng, ng, BD_NODE, BD_CELL)
+        call define_box_data (geo%Jgup_xy, valid, ng, ng, BD_NODE, BD_CELL)
+        call define_box_data (geo%Jgup_yx, valid, ng, ng, BD_CELL, BD_NODE)
+        call define_box_data (geo%Jgup_yy, valid, ng, ng, BD_CELL, BD_NODE)
 
-    ! end subroutine fill_geometry
+        ! Fill with data
+        call fill_J (geo%J)
+        call fill_Jgup (geo%Jgup_xx, 1, 1)
+        call fill_Jgup (geo%Jgup_xy, 1, 2)
+        call fill_Jgup (geo%Jgup_yx, 2, 1)
+        call fill_Jgup (geo%Jgup_yy, 2, 2)
+        geo%dx = valid%dx
+        geo%dy = valid%dy
+
+    end subroutine define_geometry
+
+
+    ! --------------------------------------------------------------------------
+    ! Frees memory used by a geo_data object.
+    ! --------------------------------------------------------------------------
+    subroutine undefine_geometry (geo)
+        implicit none
+        type(geo_data), intent(inout) :: geo
+
+        call undefine_box_data (geo%J)
+        call undefine_box_data (geo%Jgup_xx)
+        call undefine_box_data (geo%Jgup_xy)
+        call undefine_box_data (geo%Jgup_yx)
+        call undefine_box_data (geo%Jgup_yy)
+        geo%dx = bogus_val
+        geo%dy = bogus_val
+
+    end subroutine undefine_geometry
 
 
     ! --------------------------------------------------------------------------
@@ -226,6 +276,10 @@ contains
                 y%data(i,j) = el + (H-el)*yfrac
             enddo
         enddo
+
+        ! Free memory
+        call undefine_box_data (x)
+
     end subroutine fill_y
 
 
@@ -312,7 +366,8 @@ contains
         do i = ilo, ihi
             xx = x(i)
 
-            el(i) = fourth * sin(pi*xx/Lx)
+            ! el(i) = fourth * sin(pi*xx/Lx)
+            el(i) = zero
 
             ! if (xx .le. C1) then
             !     ! Left flat region
@@ -401,26 +456,114 @@ contains
                 dest%data(:,jlo:jhi) = (xmu%data(:,jlo:jhi) - xmu%data(:,jlo-1:jhi-1)) * scale
             endif
         endif
+
+        ! Free memory
+        call undefine_box_data (xmu)
+
     end subroutine fill_dxdXi
 
 
     ! --------------------------------------------------------------------------
+    ! Fills a box_data with J = det[Jacobian] = (dx/dXi) * (dy/dEta)
     ! --------------------------------------------------------------------------
-    function test_nonuniform_diri_bcs (valid) result (res)
+    subroutine fill_J (dest)
         implicit none
 
-        real(dp)              :: res
-        type(box), intent(in) :: valid
+        type(box_data), intent(inout) :: dest
+        type(box_data)                :: dxdxi
 
-        integer               :: i,j
-        integer               :: ilo, ihi, jlo, jhi
-        real(dp)              :: dx, dy
-        real(dp)              :: x, y
+        ! Initialize with dx/dXi
+        call fill_dxdxi (dest, 1, 1)
 
-        type(box_data)        :: soln, state
-        type(bdry_data)       :: diri_bc
-        real(dp)              :: val
+        ! Multiply by dy/dEta
+        call define_box_data (dxdxi, dest)
+        call fill_dxdXi (dxdxi, 2, 2)
+        dest%data = dest%data * dxdxi%data
 
+        ! Free memory
+        call undefine_box_data(dxdxi)
+
+    end subroutine fill_J
+
+
+    ! --------------------------------------------------------------------------
+    ! Fills a box_data with the contravariant metric elements
+    ! gup^{mu,nu} = Sum over rho [ dXi^{mu}/dx^{rho} * dXi^{nu}/dx^{rho} ]
+    ! --------------------------------------------------------------------------
+    subroutine fill_gup (dest, mu, nu)
+        implicit none
+
+        type(box_data), intent(inout) :: dest
+        integer, intent(in)           :: mu, nu
+
+        type(box_data)                :: dxdxi_mu_rho
+        type(box_data)                :: dxdxi_nu_rho
+        integer                       :: rho
+
+        ! Create space for Jacobian matrix elements
+        call define_box_data (dxdxi_mu_rho, dest)
+        call define_box_data (dxdxi_nu_rho, dest)
+
+        ! rho = 1 (x)...
+        call fill_dxdxi(dxdxi_mu_rho, mu, 1)
+        call fill_dxdxi(dxdxi_nu_rho, nu, 1)
+        dest%data = dxdxi_mu_rho%data * dxdxi_nu_rho%data
+
+        ! rho = 2 (y)...
+        call fill_dxdxi(dxdxi_mu_rho, mu, 2)
+        call fill_dxdxi(dxdxi_nu_rho, nu, 2)
+        dest%data = dest%data + dxdxi_mu_rho%data * dxdxi_nu_rho%data
+
+        ! Free memory
+        call undefine_box_data(dxdxi_mu_rho)
+        call undefine_box_data(dxdxi_nu_rho)
+
+    end subroutine fill_gup
+
+
+    ! --------------------------------------------------------------------------
+    ! Fills a box_data with detJ * gup
+    ! --------------------------------------------------------------------------
+    subroutine fill_Jgup (dest, mu, nu)
+        implicit none
+
+        type(box_data), intent(inout) :: dest
+        integer, intent(in)           :: mu, nu
+
+        type(box_data)                :: J
+
+        ! Initialize to gup
+        call fill_gup (dest, mu, nu)
+
+        ! Multiply by J
+        call define_box_data (J, dest)
+        dest%data = dest%data * J%data
+
+        ! Free memory
+        call undefine_box_data (J)
+
+    end subroutine fill_Jgup
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    function test_nonuniform_diri_bcs (geo) result (res)
+        implicit none
+
+        real(dp)                   :: res
+        type(geo_data), intent(in) :: geo
+
+        type(box)                  :: valid
+        integer                    :: i,j
+        integer                    :: ilo, ihi, jlo, jhi
+        real(dp)                   :: dx, dy
+        real(dp)                   :: x, y
+        type(box_data)             :: bdx, bdy, xlo, xhi, ylo, yhi
+
+        type(box_data)             :: soln, state
+        type(bdry_data)            :: diri_bc
+        real(dp)                   :: val
+
+        valid = geo%J%valid
 
         ilo = valid%ilo
         ihi = valid%ihi
@@ -430,18 +573,30 @@ contains
         dx = valid%dx
         dy = valid%dy
 
-        ! Set up field
-        call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
-        soln%data = three
+        ! Compute Cartesian locations of cell-centers
+        call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
+        call define_box_data (bdy, bdx)
 
-        call define_box_data (state, valid, 1, 1, BD_CELL, BD_CELL)
-        do j = jlo-1, jhi+1
-            y = (j + half) * dy
-            do i = ilo-1, ihi+1
-                x = (i + half) * dx
-                soln%data(i,j) = sin((half + four*y/H)*pi*x/L)
-            enddo
-        enddo
+        ! TODO: Compute x and y arrays at boundaries and use them to fill bdry_data
+        ! call define_box_data (xlo, bdry_box(valid, BD_CELL, 1, SIDE_LO), 0, 0, BD_NODE, )
+
+        call fill_x (bdx)
+        call fill_y (bdy)
+
+        ! Set up soln
+        call define_box_data (soln, bdx)
+        soln%data = sin((half + four*bdy%data/H)*pi*bdx%data/L)
+        ! do j = jlo-1, jhi+1
+        !     y = (j + half) * dy
+        !     do i = ilo-1, ihi+1
+        !         x = (i + half) * dx
+        !         soln%data(i,j) = sin((half + four*y/H)*pi*x/L)
+        !     enddo
+        ! enddo
+
+        ! Set up state with the true solution in the interior (valid) cells
+        ! and bogus values in the ghost cells.
+        call define_box_data (state, bdx)
         state%data = bogus_val
         state%data(ilo:ihi, jlo:jhi) = soln%data(ilo:ihi, jlo:jhi)
 
@@ -456,6 +611,7 @@ contains
                                BCMODE_NONUNIFORM, &    ! ylo
                                BCMODE_NONUNIFORM)      ! yhi
 
+        ! Fill state's ghost cells.
         x = ilo * dx
         do j = jlo, jhi
             y = (j + half) * dy
@@ -514,27 +670,32 @@ contains
         call undefine_bdry_data (diri_bc)
         call undefine_box_data (state)
         call undefine_box_data (soln)
+        call undefine_box_data (bdy)
+        call undefine_box_data (bdx)
 
     end function test_nonuniform_diri_bcs
 
 
     ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
-    function test_nonuniform_neum_bcs (valid) result (res)
+    function test_nonuniform_neum_bcs (geo) result (res)
         implicit none
 
-        real(dp)              :: res
-        type(box), intent(in) :: valid
+        real(dp)                   :: res
+        type(geo_data), intent(in) :: geo
 
-        integer               :: i,j
-        integer               :: ilo, ihi, jlo, jhi
-        real(dp)              :: dx, dy
-        real(dp)              :: x, y
+        type(box)                  :: valid
+        integer                    :: i,j
+        integer                    :: ilo, ihi, jlo, jhi
+        real(dp)                   :: dx, dy
+        real(dp)                   :: x, y
 
-        type(box_data)        :: soln, state
-        type(bdry_data)       :: neum_bc
-        real(dp)              :: val
+        type(box_data)             :: soln, state
+        type(bdry_data)            :: neum_bc
+        real(dp)                   :: val
 
+
+        valid = geo%J%valid
 
         ilo = valid%ilo
         ihi = valid%ihi
