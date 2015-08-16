@@ -228,53 +228,53 @@ contains
     end subroutine grow_box
 
 
-    ! ! --------------------------------------------------------------------------
-    ! ! Returns a face-centered box at the boundary of src.
-    ! ! off = src's centering in dir.
-    ! ! --------------------------------------------------------------------------
-    ! function bdry_box (src, off, dir, side) result (bx)
-    !     type(box), intent(in) :: src
-    !     integer, intent(in)   :: off, dir, side
-    !     type(box)             :: bx
-    !     integer               :: ilo, ihi, jlo, jhi, offi, offj
-    !     real(dp)              :: dx, dy
+    ! --------------------------------------------------------------------------
+    ! Returns a face-centered box at the boundary of src.
+    ! off = src's centering in dir.
+    ! --------------------------------------------------------------------------
+    function bdry_box (src, off, dir, side) result (bx)
+        type(box), intent(in) :: src
+        integer, intent(in)   :: off, dir, side
+        type(box)             :: bx
+        integer               :: ilo, ihi, jlo, jhi, offi, offj
+        real(dp)              :: dx, dy
 
-    !     ilo = src%ilo
-    !     ihi = src%ihi
-    !     jlo = src%jlo
-    !     jhi = src%jhi
-    !     dx = src%dx
-    !     dy = src%dy
+        ilo = src%ilo
+        ihi = src%ihi
+        jlo = src%jlo
+        jhi = src%jhi
+        dx = src%dx
+        dy = src%dy
 
-    !     if (dir .eq. 1) then
-    !         if (side .eq. SIDE_LO) then
-    !             call define_box (bx, ilo, ilo, jlo, jhi, dx, dy)
+        if (dir .eq. 1) then
+            if (side .eq. SIDE_LO) then
+                call define_box (bx, ilo, ilo, jlo, jhi, dx, dy)
 
-    !         else if (side .eq. SIDE_HI) then
-    !             call define_box (bx, ihi+off, ihi+off, jlo, jhi, dx, dy)
+            else if (side .eq. SIDE_HI) then
+                call define_box (bx, ihi+off, ihi+off, jlo, jhi, dx, dy)
 
-    !         else
-    !             print*, 'bdry_box: Bad side.'
-    !             stop
-    !         endif
+            else
+                print*, 'bdry_box: Bad side.'
+                stop
+            endif
 
-    !     else if (dir .eq. 2) then
-    !         if (side .eq. SIDE_LO) then
-    !             call define_box (bx, ilo, ihi, jlo, jlo, dx, dy)
+        else if (dir .eq. 2) then
+            if (side .eq. SIDE_LO) then
+                call define_box (bx, ilo, ihi, jlo, jlo, dx, dy)
 
-    !         else if (side .eq. SIDE_HI) then
-    !             call define_box (bx, ilo, ihi, jhi+off, jhi+off, dx, dy)
+            else if (side .eq. SIDE_HI) then
+                call define_box (bx, ilo, ihi, jhi+off, jhi+off, dx, dy)
 
-    !         else
-    !             print*, 'bdry_box: Bad side.'
-    !             stop
-    !         endif
+            else
+                print*, 'bdry_box: Bad side.'
+                stop
+            endif
 
-    !     else
-    !         print*, 'bdry_box: Bad dir.'
-    !         stop
-    !     endif
-    ! end function bdry_box
+        else
+            print*, 'bdry_box: Bad dir.'
+            stop
+        endif
+    end function bdry_box
 
 
     ! --------------------------------------------------------------------------
@@ -481,6 +481,55 @@ contains
 
         call define_box_data (dest, src%valid, src%ngx, src%ngy, src%offi, src%offj)
     end subroutine define_box_data_dup
+
+
+    ! --------------------------------------------------------------------------
+    ! Defines bd at the boundary faces of src.
+    ! NOTE: bd%data will be a 1D array!
+    ! --------------------------------------------------------------------------
+    subroutine define_box_data_bdry (bd, src, dir, side)
+        type(box_data), intent(inout) :: bd
+        type(box_data), intent(in)    :: src
+        integer, intent(in)           :: dir, side
+        integer                       :: ierr
+
+        if (dir .eq. 1) then
+            bd%valid = bdry_box (src%valid, src%offi, dir, side)
+            bd%bx = bd%valid
+            bd%ngx = 0
+            bd%ngy = 0
+
+            bd%offi = BD_NODE
+            bd%offx = zero
+            bd%offj = src%offj
+            bd%offy = src%offy
+
+            bd%L = zero
+            bd%H = src%H
+
+        else if (dir .eq. 2) then
+            bd%valid = bdry_box (src%valid, src%offj, dir, side)
+            bd%bx = bd%valid
+            bd%ngx = 0
+            bd%ngy = 0
+
+            bd%offi = src%offi
+            bd%offx = src%offx
+            bd%offj = BD_NODE
+            bd%offy = zero
+
+            bd%L = src%L
+            bd%H = zero
+        else
+            print*, 'define_box_data_bdry: Bad dir'
+        endif
+
+        allocate (bd%data (bd%bx%ilo : bd%bx%ihi, bd%bx%jlo : bd%bx%jhi), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'define_box_data: Out of memory'
+            stop
+        endif
+    end subroutine define_box_data_bdry
 
 
     ! --------------------------------------------------------------------------

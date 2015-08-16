@@ -35,7 +35,7 @@ program test
     real(8), parameter          :: H = one
 
     integer                     :: r             ! Current refinement level
-    integer, parameter          :: maxr = 7      ! Max refinement level
+    integer, parameter          :: maxr = 6      ! Max refinement level
     real(dp), dimension(maxr)   :: errnorm       ! Error norm at each level
     real(dp), dimension(maxr-1) :: rate          ! Convergence rates
 
@@ -557,7 +557,10 @@ contains
         integer                    :: ilo, ihi, jlo, jhi
         real(dp)                   :: dx, dy
         real(dp)                   :: x, y
-        type(box_data)             :: bdx, bdy, xlo, xhi, ylo, yhi
+        type(box_data)             :: bdx, bdy
+        type(box_data), target     :: bdx_xlo, bdx_xhi, bdx_ylo, bdx_yhi
+        type(box_data), target     :: bdy_xlo, bdy_xhi, bdy_ylo, bdy_yhi
+        real(dp), dimension(:), pointer :: xp, yp
 
         type(box_data)             :: soln, state
         type(bdry_data)            :: diri_bc
@@ -575,24 +578,33 @@ contains
 
         ! Compute Cartesian locations of cell-centers
         call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
-        call define_box_data (bdy, bdx)
+        call define_box_data_bdry (bdx_xlo, bdx, 1, SIDE_LO)
+        call define_box_data_bdry (bdx_xhi, bdx, 1, SIDE_HI)
+        call define_box_data_bdry (bdx_ylo, bdx, 2, SIDE_LO)
+        call define_box_data_bdry (bdx_yhi, bdx, 2, SIDE_HI)
 
-        ! TODO: Compute x and y arrays at boundaries and use them to fill bdry_data
-        ! call define_box_data (xlo, bdry_box(valid, BD_CELL, 1, SIDE_LO), 0, 0, BD_NODE, )
+        call define_box_data (bdy, bdx)
+        call define_box_data_bdry (bdy_xlo, bdy, 1, SIDE_LO)
+        call define_box_data_bdry (bdy_xhi, bdy, 1, SIDE_HI)
+        call define_box_data_bdry (bdy_ylo, bdy, 2, SIDE_LO)
+        call define_box_data_bdry (bdy_yhi, bdy, 2, SIDE_HI)
 
         call fill_x (bdx)
+        call fill_x (bdx_xlo)
+        call fill_x (bdx_xhi)
+        call fill_x (bdx_ylo)
+        call fill_x (bdx_yhi)
+
         call fill_y (bdy)
+        call fill_y (bdy_xlo)
+        call fill_y (bdy_xhi)
+        call fill_y (bdy_ylo)
+        call fill_y (bdy_yhi)
+
 
         ! Set up soln
         call define_box_data (soln, bdx)
         soln%data = sin((half + four*bdy%data/H)*pi*bdx%data/L)
-        ! do j = jlo-1, jhi+1
-        !     y = (j + half) * dy
-        !     do i = ilo-1, ihi+1
-        !         x = (i + half) * dx
-        !         soln%data(i,j) = sin((half + four*y/H)*pi*x/L)
-        !     enddo
-        ! enddo
 
         ! Set up state with the true solution in the interior (valid) cells
         ! and bogus values in the ghost cells.
@@ -612,11 +624,13 @@ contains
                                BCMODE_NONUNIFORM)      ! yhi
 
         ! Fill state's ghost cells.
-        x = ilo * dx
-        do j = jlo, jhi
-            y = (j + half) * dy
-            diri_bc%data_xlo(j) = sin((half + four*y/H)*pi*x/L)
-        enddo
+        xp => bdx_xlo%data(ilo,:)
+        diri_bc%data_xlo(:) = sin((half + four*bdy_xlo%data(ilo,:)/H)*pi*xp(:)/L)
+        ! x = ilo * dx
+        ! do j = jlo, jhi
+        !     y = (j + half) * dy
+        !     diri_bc%data_xlo(j) = sin((half + four*y/H)*pi*x/L)
+        ! enddo
 
         x = (ihi + 1) * dx
         do j = jlo, jhi
@@ -670,8 +684,18 @@ contains
         call undefine_bdry_data (diri_bc)
         call undefine_box_data (state)
         call undefine_box_data (soln)
-        call undefine_box_data (bdy)
+
         call undefine_box_data (bdx)
+        call undefine_box_data (bdx_xlo)
+        call undefine_box_data (bdx_xhi)
+        call undefine_box_data (bdx_ylo)
+        call undefine_box_data (bdx_yhi)
+
+        call undefine_box_data (bdy)
+        call undefine_box_data (bdy_xlo)
+        call undefine_box_data (bdy_xhi)
+        call undefine_box_data (bdy_ylo)
+        call undefine_box_data (bdy_yhi)
 
     end function test_nonuniform_diri_bcs
 
