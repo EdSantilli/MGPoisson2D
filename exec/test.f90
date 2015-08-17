@@ -35,7 +35,7 @@ program test
     real(8), parameter          :: H = one
 
     integer                     :: r             ! Current refinement level
-    integer, parameter          :: maxr = 6      ! Max refinement level
+    integer, parameter          :: maxr = 5      ! Max refinement level
     real(dp), dimension(maxr)   :: errnorm       ! Error norm at each level
     real(dp), dimension(maxr-1) :: rate          ! Convergence rates
 
@@ -366,8 +366,7 @@ contains
         do i = ilo, ihi
             xx = x(i)
 
-            ! el(i) = fourth * sin(pi*xx/Lx)
-            el(i) = zero
+            el(i) = fourth * sin(pi*xx/Lx)   ! Temporary, sinusoidal bottom.
 
             ! if (xx .le. C1) then
             !     ! Left flat region
@@ -601,7 +600,6 @@ contains
         call fill_y (bdy_ylo)
         call fill_y (bdy_yhi)
 
-
         ! Set up soln
         call define_box_data (soln, bdx)
         soln%data = sin((half + four*bdy%data/H)*pi*bdx%data/L)
@@ -625,30 +623,20 @@ contains
 
         ! Fill state's ghost cells.
         xp => bdx_xlo%data(ilo,:)
-        diri_bc%data_xlo(:) = sin((half + four*bdy_xlo%data(ilo,:)/H)*pi*xp(:)/L)
-        ! x = ilo * dx
-        ! do j = jlo, jhi
-        !     y = (j + half) * dy
-        !     diri_bc%data_xlo(j) = sin((half + four*y/H)*pi*x/L)
-        ! enddo
+        yp => bdy_xlo%data(ilo,:)
+        diri_bc%data_xlo = sin((half + four*yp/H)*pi*xp/L)
 
-        x = (ihi + 1) * dx
-        do j = jlo, jhi
-            y = (j + half) * dy
-            diri_bc%data_xhi(j) = sin((half + four*y/H)*pi*x/L)
-        enddo
+        xp => bdx_xhi%data(ihi+1,:)
+        yp => bdy_xhi%data(ihi+1,:)
+        diri_bc%data_xhi = sin((half + four*yp/H)*pi*xp/L)
 
-        y = jlo * dy
-        do i = ilo, ihi
-            x = (i + half) * dx
-            diri_bc%data_ylo(i) = sin((half + four*y/H)*pi*x/L)
-        enddo
+        xp => bdx_ylo%data(:,jlo)
+        yp => bdy_ylo%data(:,jlo)
+        diri_bc%data_ylo = sin((half + four*yp/H)*pi*xp/L)
 
-        y = (jhi + 1) * dy
-        do i = ilo, ihi
-            x = (i + half) * dx
-            diri_bc%data_yhi(i) = sin((half + four*y/H)*pi*x/L)
-        enddo
+        xp => bdx_yhi%data(:,jhi+1)
+        yp => bdy_yhi%data(:,jhi+1)
+        diri_bc%data_yhi = sin((half + four*yp/H)*pi*xp/L)
 
         ! Set BCs
         call fill_ghosts (state, diri_bc, .false.)

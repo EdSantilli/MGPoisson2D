@@ -485,7 +485,6 @@ contains
 
     ! --------------------------------------------------------------------------
     ! Defines bd at the boundary faces of src.
-    ! NOTE: bd%data will be a 1D array!
     ! --------------------------------------------------------------------------
     subroutine define_box_data_bdry (bd, src, dir, side)
         type(box_data), intent(inout) :: bd
@@ -504,7 +503,7 @@ contains
             bd%offj = src%offj
             bd%offy = src%offy
 
-            bd%L = zero
+            bd%L = src%L
             bd%H = src%H
 
         else if (dir .eq. 2) then
@@ -519,7 +518,7 @@ contains
             bd%offy = zero
 
             bd%L = src%L
-            bd%H = zero
+            bd%H = src%H
         else
             print*, 'define_box_data_bdry: Bad dir'
         endif
