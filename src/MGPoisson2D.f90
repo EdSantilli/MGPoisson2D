@@ -55,6 +55,9 @@ module precision
     real(dp), parameter :: third     = one / three
     real(dp), parameter :: fourth    = one / four
 
+    real(dp), parameter :: threehalves  = three / two
+    real(dp), parameter :: threefourths = three / four
+
     real(dp), parameter :: pi        = four * atan(one)
     real(dp), parameter :: bogus_val = 1.2345E300_dp
 
@@ -666,16 +669,65 @@ contains
 
 
     ! --------------------------------------------------------------------------
+    ! Computes the pnorm over ghost cells only, skipping corner ghosts.
     ! --------------------------------------------------------------------------
-    subroutine fill_ghosts (phi, bcd, homog, do_neum_opt)
+    function gpnorm (bd, p) result (pn)
+        type(box_data), intent(in) :: bd
+        integer, intent(in)        :: p
+        real(dp)                   :: pn
+        type(box)                  :: bx
+
+        integer :: i, j
+        real(dp) :: dx, dy
+
+        if ((bd%offi .ne. BD_CELL) .or. (bd%offj .ne. BD_CELL)) then
+            print*, 'gpnorm: Only works with cell-centered data for now.'
+            stop
+        endif
+
+        bx = bd%valid
+        dx = bx%dx
+        dy = bx%dy
+
+        pn = zero
+        ! Lower x-boundary
+        i = bx%jlo-1
+        do j = bx%jlo, bx%jhi
+            pn = pn + dy * bd%data(i,j)**p
+        enddo
+        ! Upper x-boundary
+        i = bx%jhi+1
+        do j = bx%jlo, bx%jhi
+            pn = pn + dy * bd%data(i,j)**p
+        enddo
+        ! Lower y-boundary
+        j = bx%ilo-1
+        do i = bx%ilo, bx%ihi
+            pn = pn + dx * bd%data(i,j)**p
+        enddo
+        ! Upper y-boundary
+        j = bx%ihi+1
+        do i = bx%ilo, bx%ihi
+            pn = pn + dx * bd%data(i,j)**p
+        enddo
+        pn = pn**(one/p)
+    end function gpnorm
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    subroutine fill_ghosts (phi, bcd, geo, homog, do_neum_opt)
         type(box_data), intent(inout) :: phi
         type(bdry_data), intent(in)   :: bcd
+        type(geo_data), intent(in)    :: geo
         logical, intent(in)           :: homog
         logical, intent(in), optional :: do_neum_opt
 
         integer  :: xlo, xhi, ylo, yhi
         integer  :: ilo, ihi, jlo, jhi
+        integer  :: i, j
         real(dp) :: dx, dy, bcval
+        real(dp) :: xscale, yscale, cross, dpn, dpf
         logical  :: do_neum
 
         if ((phi%offi .ne. BD_CELL) .or. (phi%offj .ne. BD_CELL)) then
@@ -714,6 +766,8 @@ contains
             select case (xlo)
                 case (BCTYPE_NEUM)
                     if (do_neum) then
+                        ! print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                        ! stop
                         if (homog) then
                             phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi)
                         else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
@@ -751,6 +805,8 @@ contains
             select case (xhi)
                 case (BCTYPE_NEUM)
                     if (do_neum) then
+                        ! print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                        ! stop
                         if (homog) then
                             phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi)
                         else if (bcd%mode_xhi .eq. BCMODE_UNIFORM) then
@@ -790,13 +846,36 @@ contains
             select case (ylo)
                 case (BCTYPE_NEUM)
                     if (do_neum) then
+                        ! print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                        ! stop
                         if (homog) then
                             phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo)
                         else if (bcd%mode_ylo .eq. BCMODE_UNIFORM) then
                             bcval = dx * bcd%data_ylo(1)
                             phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - bcval
                         else
-                            phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - dx * bcd%data_ylo(ilo:ihi)
+                            ! phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - dy * bcd%data_ylo(ilo:ihi)
+
+                            j = jlo
+                            i = ilo
+                            dpn = -(three*phi%data(i,j  ) - four*phi%data(i+1,j  ) + phi%data(i+2,j  )) * half/dx
+                            dpf = -(three*phi%data(i,j+1) - four*phi%data(i+1,j+1) + phi%data(i+2,j+1)) * half/dx
+                            cross = (threehalves*dpn - half*dpf) * geo%Jgup_yx%data(i,j)
+                            phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
+
+                            do i = ilo+1, ihi-1
+                                dpn = (phi%data(i+1,j  ) - phi%data(i-1,j  )) * half/dx
+                                dpf = (phi%data(i+1,j+1) - phi%data(i-1,j+1)) * half/dx
+                                cross = (threehalves*dpn - half*dpf) * geo%Jgup_yx%data(i,j)
+                                phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
+                            enddo
+
+                            i = ihi
+                            dpn = (three*phi%data(i,j  ) - four*phi%data(i-1,j  ) + phi%data(i-2,j  )) * half/dx
+                            dpf = (three*phi%data(i,j+1) - four*phi%data(i-1,j+1) + phi%data(i-2,j+1)) * half/dx
+                            cross = (threehalves*dpn - half*dpf) * geo%Jgup_yx%data(i,j)
+                            phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
+
                         endif
                     endif
 
@@ -827,13 +906,15 @@ contains
             select case (yhi)
                 case (BCTYPE_NEUM)
                     if (do_neum) then
+                        ! print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                        ! stop
                         if (homog) then
                             phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi)
                         else if (bcd%mode_yhi .eq. BCMODE_UNIFORM) then
                             bcval = dx * bcd%data_yhi(1)
                             phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + bcval
                         else
-                            phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + dx * bcd%data_yhi(ilo:ihi)
+                            phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + dy * bcd%data_yhi(ilo:ihi)
                         endif
                     endif
 

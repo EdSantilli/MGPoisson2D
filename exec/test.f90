@@ -87,6 +87,9 @@ program test
     enddo
 
 
+
+
+
     ! Prints x and y coordinates to the terminal.
     ! call define_domain (valid, 1)
     ! call define_box_data (x, valid, 0, 0, BD_NODE, BD_NODE)
@@ -366,7 +369,9 @@ contains
         do i = ilo, ihi
             xx = x(i)
 
-            el(i) = fourth * sin(pi*xx/Lx)   ! Temporary, sinusoidal bottom.
+            ! el(i) = zero ! Temporary, flat bottom.
+            el(i) = half * xx ! Sloped bottom
+            ! el(i) = fourth * sin(pi*xx/Lx)   ! Temporary, sinusoidal bottom.
 
             ! if (xx .le. C1) then
             !     ! Left flat region
@@ -536,6 +541,7 @@ contains
 
         ! Multiply by J
         call define_box_data (J, dest)
+        call fill_J (J)
         dest%data = dest%data * J%data
 
         ! Free memory
@@ -543,19 +549,20 @@ contains
 
     end subroutine fill_Jgup
 
+
     ! --------------------------------------------------------------------------
+    ! This only works with a constant-slope bottom.
     ! --------------------------------------------------------------------------
-    function test_nonuniform_diri_bcs (geo) result (res)
+    function test_geometry (geo) result (res)
         implicit none
 
         real(dp)                   :: res
         type(geo_data), intent(in) :: geo
 
         type(box)                  :: valid
-        integer                    :: i,j
+        ! integer                    :: i,j
         integer                    :: ilo, ihi, jlo, jhi
         real(dp)                   :: dx, dy
-        real(dp)                   :: x, y
         type(box_data)             :: bdx, bdy
         type(box_data), target     :: bdx_xlo, bdx_xhi, bdx_ylo, bdx_yhi
         type(box_data), target     :: bdy_xlo, bdy_xhi, bdy_ylo, bdy_yhi
@@ -575,7 +582,68 @@ contains
         dx = valid%dx
         dy = valid%dy
 
-        ! Compute Cartesian locations of cell-centers
+        ! Compute Cartesian locations
+        call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
+        call define_box_data_bdry (bdx_xlo, bdx, 1, SIDE_LO)
+        call define_box_data_bdry (bdx_xhi, bdx, 1, SIDE_HI)
+        call define_box_data_bdry (bdx_ylo, bdx, 2, SIDE_LO)
+        call define_box_data_bdry (bdx_yhi, bdx, 2, SIDE_HI)
+
+        call define_box_data (bdy, bdx)
+        call define_box_data_bdry (bdy_xlo, bdy, 1, SIDE_LO)
+        call define_box_data_bdry (bdy_xhi, bdy, 1, SIDE_HI)
+        call define_box_data_bdry (bdy_ylo, bdy, 2, SIDE_LO)
+        call define_box_data_bdry (bdy_yhi, bdy, 2, SIDE_HI)
+
+        call fill_x (bdx)
+        call fill_x (bdx_xlo)
+        call fill_x (bdx_xhi)
+        call fill_x (bdx_ylo)
+        call fill_x (bdx_yhi)
+
+        call fill_y (bdy)
+        call fill_y (bdy_xlo)
+        call fill_y (bdy_xhi)
+        call fill_y (bdy_ylo)
+        call fill_y (bdy_yhi)
+
+        ! TODO
+
+    end function test_geometry
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    function test_nonuniform_diri_bcs (geo) result (res)
+        implicit none
+
+        real(dp)                   :: res
+        type(geo_data), intent(in) :: geo
+
+        type(box)                  :: valid
+        integer                    :: i,j
+        integer                    :: ilo, ihi, jlo, jhi
+        real(dp)                   :: dx, dy
+        type(box_data)             :: bdx, bdy
+        type(box_data), target     :: bdx_xlo, bdx_xhi, bdx_ylo, bdx_yhi
+        type(box_data), target     :: bdy_xlo, bdy_xhi, bdy_ylo, bdy_yhi
+        real(dp), dimension(:), pointer :: xp, yp
+
+        type(box_data)             :: soln, state
+        type(bdry_data)            :: diri_bc
+        real(dp)                   :: val
+
+        valid = geo%J%valid
+
+        ilo = valid%ilo
+        ihi = valid%ihi
+        jlo = valid%jlo
+        jhi = valid%jhi
+
+        dx = valid%dx
+        dy = valid%dy
+
+        ! Compute Cartesian locations
         call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
         call define_box_data_bdry (bdx_xlo, bdx, 1, SIDE_LO)
         call define_box_data_bdry (bdx_xhi, bdx, 1, SIDE_HI)
@@ -621,7 +689,6 @@ contains
                                BCMODE_NONUNIFORM, &    ! ylo
                                BCMODE_NONUNIFORM)      ! yhi
 
-        ! Fill state's ghost cells.
         xp => bdx_xlo%data(ilo,:)
         yp => bdy_xlo%data(ilo,:)
         diri_bc%data_xlo = sin((half + four*yp/H)*pi*xp/L)
@@ -638,12 +705,11 @@ contains
         yp => bdy_yhi%data(:,jhi+1)
         diri_bc%data_yhi = sin((half + four*yp/H)*pi*xp/L)
 
-        ! Set BCs
-        call fill_ghosts (state, diri_bc, .false.)
-        state%data(ilo-1,jlo-1) = soln%data(ilo-1,jlo-1)
-        state%data(ilo-1,jhi+1) = soln%data(ilo-1,jhi+1)
-        state%data(ihi+1,jlo-1) = soln%data(ihi+1,jlo-1)
-        state%data(ihi+1,jhi+1) = soln%data(ihi+1,jhi+1)
+        nullify(xp)
+        nullify(yp)
+
+        ! Fill state's ghost cells.
+        call fill_ghosts (state, diri_bc, geo, .false.)
 
         ! state%data(ilo-1, jlo:jhi) = soln%data(ilo-1, jlo:jhi)
         ! state%data(ihi+1, jlo:jhi) = soln%data(ihi+1, jlo:jhi)
@@ -666,7 +732,7 @@ contains
 
         ! Compute norm over ghosts
         state%data = state%data - soln%data
-        res = pnorm (state, state%bx, norm_type)
+        res = gpnorm (state, norm_type)
 
         ! Free memory
         call undefine_bdry_data (diri_bc)
@@ -700,12 +766,14 @@ contains
         integer                    :: i,j
         integer                    :: ilo, ihi, jlo, jhi
         real(dp)                   :: dx, dy
-        real(dp)                   :: x, y
+        type(box_data)             :: bdx, bdy
+        type(box_data), target     :: bdx_xlo, bdx_xhi, bdx_ylo, bdx_yhi
+        type(box_data), target     :: bdy_xlo, bdy_xhi, bdy_ylo, bdy_yhi
+        real(dp), dimension(:), pointer :: xp, yp
 
         type(box_data)             :: soln, state
         type(bdry_data)            :: neum_bc
         real(dp)                   :: val
-
 
         valid = geo%J%valid
 
@@ -717,18 +785,38 @@ contains
         dx = valid%dx
         dy = valid%dy
 
-        ! Set up field
-        call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
-        soln%data = three
+        ! Compute Cartesian locations
+        call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
+        call define_box_data_bdry (bdx_xlo, bdx, 1, SIDE_LO)
+        call define_box_data_bdry (bdx_xhi, bdx, 1, SIDE_HI)
+        call define_box_data_bdry (bdx_ylo, bdx, 2, SIDE_LO)
+        call define_box_data_bdry (bdx_yhi, bdx, 2, SIDE_HI)
 
-        call define_box_data (state, valid, 1, 1, BD_CELL, BD_CELL)
-        do j = jlo-1, jhi+1
-            y = (j + half) * dy
-            do i = ilo-1, ihi+1
-                x = (i + half) * dx
-                soln%data(i,j) = sin((half + four*y/H)*pi*x/L)
-            enddo
-        enddo
+        call define_box_data (bdy, bdx)
+        call define_box_data_bdry (bdy_xlo, bdy, 1, SIDE_LO)
+        call define_box_data_bdry (bdy_xhi, bdy, 1, SIDE_HI)
+        call define_box_data_bdry (bdy_ylo, bdy, 2, SIDE_LO)
+        call define_box_data_bdry (bdy_yhi, bdy, 2, SIDE_HI)
+
+        call fill_x (bdx)
+        call fill_x (bdx_xlo)
+        call fill_x (bdx_xhi)
+        call fill_x (bdx_ylo)
+        call fill_x (bdx_yhi)
+
+        call fill_y (bdy)
+        call fill_y (bdy_xlo)
+        call fill_y (bdy_xhi)
+        call fill_y (bdy_ylo)
+        call fill_y (bdy_yhi)
+
+        ! Set up soln
+        call define_box_data (soln, bdx)
+        soln%data = sin((half + four*bdy%data/H)*pi*bdx%data/L)
+
+        ! Set up state with the true solution in the interior (valid) cells
+        ! and bogus values in the ghost cells.
+        call define_box_data (state, bdx)
         state%data = bogus_val
         state%data(ilo:ihi, jlo:jhi) = soln%data(ilo:ihi, jlo:jhi)
 
@@ -742,41 +830,40 @@ contains
                                BCMODE_NONUNIFORM, &    ! xhi
                                BCMODE_NONUNIFORM, &    ! ylo
                                BCMODE_NONUNIFORM)      ! yhi
-        x = ilo * dx
-        do j = jlo, jhi
-            y = (j + half) * dy
-            neum_bc%data_xlo(j) = (half + four*y/H) * (pi/L) * cos((half + four*y/H)*pi*x/L)
-        enddo
 
-        x = (ihi + 1) * dx
-        do j = jlo, jhi
-            y = (j + half) * dy
-            neum_bc%data_xhi(j) = (half + four*y/H) * (pi/L) * cos((half + four*y/H)*pi*x/L)
-        enddo
+        xp => bdx_xlo%data(ilo,:)
+        yp => bdy_xlo%data(ilo,:)
+        neum_bc%data_xlo = ((half + four*yp/H) * (pi/L) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_xx%data(ilo,:) &
+                         + ((four*pi*xp/L/H) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_xy%data(ilo,:)
+        ! print*, 'Jgup_xx = '
+        ! print*, geo%Jgup_xx%data(ilo,:)
+        ! print*
 
-        y = jlo * dy
-        do i = ilo, ihi
-            x = (i + half) * dx
-            neum_bc%data_ylo(i) = (four*pi*x/L/H) * cos((half + four*y/H)*pi*x/L)
-        enddo
+        xp => bdx_xhi%data(ihi+1,:)
+        yp => bdy_xhi%data(ihi+1,:)
+        neum_bc%data_xhi = ((half + four*yp/H) * (pi/L) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_xx%data(ihi+1,:) &
+                         + ((four*pi*xp/L/H) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_xy%data(ihi+1,:)
 
-        y = (jhi + 1) * dy
-        do i = ilo, ihi
-            x = (i + half) * dx
-            neum_bc%data_yhi(i) = (four*pi*x/L/H) * cos((half + four*y/H)*pi*x/L)
-        enddo
+        xp => bdx_ylo%data(:,jlo)
+        yp => bdy_ylo%data(:,jlo)
+        neum_bc%data_ylo = ((half + four*yp/H) * (pi/L) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_yx%data(:,jlo) &
+                         + ((four*pi*xp/L/H) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_yy%data(:,jlo)
 
-        ! Set BCs
-        call fill_ghosts (state, neum_bc, .false.)
-        state%data(ilo-1,jlo-1) = soln%data(ilo-1,jlo-1)
-        state%data(ilo-1,jhi+1) = soln%data(ilo-1,jhi+1)
-        state%data(ihi+1,jlo-1) = soln%data(ihi+1,jlo-1)
-        state%data(ihi+1,jhi+1) = soln%data(ihi+1,jhi+1)
+        xp => bdx_yhi%data(:,jhi+1)
+        yp => bdy_yhi%data(:,jhi+1)
+        neum_bc%data_yhi = ((half + four*yp/H) * (pi/L) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_yx%data(:,jhi+1) &
+                         + ((four*pi*xp/L/H) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_yy%data(:,jhi+1)
 
-        ! state%data(ilo-1, jlo:jhi) = soln%data(ilo-1, jlo:jhi)
-        ! state%data(ihi+1, jlo:jhi) = soln%data(ihi+1, jlo:jhi)
+        nullify(xp)
+        nullify(yp)
+
+        ! Fill state's ghost cells.
+        call fill_ghosts (state, neum_bc, geo, .false.)
+
+        state%data(ilo-1, jlo:jhi) = soln%data(ilo-1, jlo:jhi)
+        state%data(ihi+1, jlo:jhi) = soln%data(ihi+1, jlo:jhi)
         ! state%data(ilo:ihi, jlo-1) = soln%data(ilo:ihi, jlo-1)
-        ! state%data(ilo:ihi, jhi+1) = soln%data(ilo:ihi, jhi+1)
+        state%data(ilo:ihi, jhi+1) = soln%data(ilo:ihi, jhi+1)
 
         ! Test valid cells
         do j = jlo, jhi
@@ -794,12 +881,24 @@ contains
 
         ! Compute norm over ghosts
         state%data = state%data - soln%data
-        res = pnorm (state, state%bx, norm_type)
+        res = gpnorm (state, norm_type)
 
         ! Free memory
         call undefine_bdry_data (neum_bc)
         call undefine_box_data (state)
         call undefine_box_data (soln)
+
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdx_xlo)
+        call undefine_box_data (bdx_xhi)
+        call undefine_box_data (bdx_ylo)
+        call undefine_box_data (bdx_yhi)
+
+        call undefine_box_data (bdy)
+        call undefine_box_data (bdy_xlo)
+        call undefine_box_data (bdy_xhi)
+        call undefine_box_data (bdy_ylo)
+        call undefine_box_data (bdy_yhi)
 
     end function test_nonuniform_neum_bcs
 
