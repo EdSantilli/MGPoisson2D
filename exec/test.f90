@@ -35,7 +35,7 @@ program test
     real(8), parameter          :: H = one
 
     integer                     :: r             ! Current refinement level
-    integer, parameter          :: maxr = 5      ! Max refinement level
+    integer, parameter          :: maxr = 3      ! Max refinement level
     real(dp), dimension(maxr)   :: errnorm       ! Error norm at each level
     real(dp), dimension(maxr-1) :: rate          ! Convergence rates
 
@@ -58,13 +58,13 @@ program test
     print*
 
 
-    ! Test 1: Non-uniform Dirichlet BCs
+    ! Test 1: Geometry
     errnorm = bogus_val
     do r = 1, maxr
-        errnorm(r) = test_nonuniform_diri_bcs (geo(r))
+        errnorm(r) = test_geometry (geo(r))
     enddo
     call compute_conv_rate (rate, errnorm)
-    print*, 'Test 1: Non-uniform Dirichlet BCs'
+    print*, 'Test 1: geometry'
     print*, 'Error norm                rate'
     print*, errnorm(1)
     do r = 2, maxr
@@ -73,13 +73,28 @@ program test
     print*
 
 
-    ! Test 2: Non-uniform Neumann BCs
+    ! Test 2: Non-uniform Dirichlet BCs
+    errnorm = bogus_val
+    do r = 1, maxr
+        errnorm(r) = test_nonuniform_diri_bcs (geo(r))
+    enddo
+    call compute_conv_rate (rate, errnorm)
+    print*, 'Test 2: Non-uniform Dirichlet BCs'
+    print*, 'Error norm                rate'
+    print*, errnorm(1)
+    do r = 2, maxr
+        print*, errnorm(r), rate(r-1)
+    enddo
+    print*
+
+
+    ! Test 3: Non-uniform Neumann BCs
     errnorm = bogus_val
     do r = 1, maxr
         errnorm(r) = test_nonuniform_neum_bcs (geo(r))
     enddo
     call compute_conv_rate (rate, errnorm)
-    print*, 'Test 2: Non-uniform Neumann BCs'
+    print*, 'Test 3: Non-uniform Neumann BCs'
     print*, 'Error norm                rate'
     print*, errnorm(1)
     do r = 2, maxr
@@ -426,6 +441,7 @@ contains
         ngx = dest%ngx
         ngy = dest%ngy
 
+        ! TODO: Centering is wrong!!!
         ! We need xmu to surround the dest region.
         if (dest%offi .eq. BD_CELL) then
             call define_box_data (xmu, dest%valid, ngx, ngy, BD_NODE, BD_NODE)
@@ -560,17 +576,15 @@ contains
         type(geo_data), intent(in) :: geo
 
         type(box)                  :: valid
-        ! integer                    :: i,j
+        integer                    :: i,j
         integer                    :: ilo, ihi, jlo, jhi
-        real(dp)                   :: dx, dy
-        type(box_data)             :: bdx, bdy
-        type(box_data), target     :: bdx_xlo, bdx_xhi, bdx_ylo, bdx_yhi
-        type(box_data), target     :: bdy_xlo, bdy_xhi, bdy_ylo, bdy_yhi
-        real(dp), dimension(:), pointer :: xp, yp
+        real(dp)                   :: dx, dy, L, H
+        type(box_data), target     :: bdx, bdy
+        type(box_data), target     :: bdx_x, bdx_y
+        type(box_data), target     :: bdy_x, bdy_y
+        real(dp), dimension(:,:), pointer :: xp, yp
 
-        type(box_data)             :: soln, state
-        type(bdry_data)            :: diri_bc
-        real(dp)                   :: val
+        type(box_data)             :: state, soln, soln_xx, soln_xy, soln_yx, soln_yy
 
         valid = geo%J%valid
 
@@ -582,32 +596,109 @@ contains
         dx = valid%dx
         dy = valid%dy
 
+        L = geo%J%L
+        H = geo%J%H
+
         ! Compute Cartesian locations
-        call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
-        call define_box_data_bdry (bdx_xlo, bdx, 1, SIDE_LO)
-        call define_box_data_bdry (bdx_xhi, bdx, 1, SIDE_HI)
-        call define_box_data_bdry (bdx_ylo, bdx, 2, SIDE_LO)
-        call define_box_data_bdry (bdx_yhi, bdx, 2, SIDE_HI)
+        call define_box_data (bdx, valid, 0, 0, BD_CELL, BD_CELL)
+        call define_box_data (bdx_x, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (bdx_y, valid, 0, 0, BD_CELL, BD_NODE)
 
         call define_box_data (bdy, bdx)
-        call define_box_data_bdry (bdy_xlo, bdy, 1, SIDE_LO)
-        call define_box_data_bdry (bdy_xhi, bdy, 1, SIDE_HI)
-        call define_box_data_bdry (bdy_ylo, bdy, 2, SIDE_LO)
-        call define_box_data_bdry (bdy_yhi, bdy, 2, SIDE_HI)
+        call define_box_data (bdy_x, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (bdy_y, valid, 0, 0, BD_CELL, BD_NODE)
 
-        call fill_x (bdx)
-        call fill_x (bdx_xlo)
-        call fill_x (bdx_xhi)
-        call fill_x (bdx_ylo)
-        call fill_x (bdx_yhi)
+        bdx%data(:,jhi) = (/ ((i+half)*dx, i=ilo,ihi) /)
+        bdx_x%data(:,jhi) = (/ (i*dx, i=ilo,ihi+1) /)
+        bdx_y%data(:,jhi+1) = bdx%data(:,jhi)
+        do j = jlo, jhi
+            bdx%data(:,j) = bdx%data(:,jhi)
+            bdx_x%data(:,j) = bdx_x%data(:,jhi)
+            bdx_y%data(:,j) = bdx_y%data(:,jhi+1)
+        enddo
 
-        call fill_y (bdy)
-        call fill_y (bdy_xlo)
-        call fill_y (bdy_xhi)
-        call fill_y (bdy_ylo)
-        call fill_y (bdy_yhi)
+        bdy%data(ihi,:) = (/ ((j+half)*dy, j=jlo,jhi) /)
+        bdy_x%data(ihi+1,:) = bdy%data(ihi,:)
+        bdy_y%data(ihi,:) = (/ (j*dy, j=jlo,jhi+1) /)
+        do i = ilo, ihi
+            bdy%data(i,:) = bdy%data(ihi,:)
+            bdy_x%data(i,:) = bdy_x%data(ihi+1,:)
+            bdy_y%data(i,:) = bdy_y%data(ihi,:)
+        enddo
 
-        ! TODO
+        ! Allocate the solution spaces
+        call define_box_data (soln, valid, 0, 0, BD_CELL, BD_CELL)
+        call define_box_data (soln_xx, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (soln_xy, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (soln_yx, valid, 0, 0, BD_CELL, BD_NODE)
+        call define_box_data (soln_yy, valid, 0, 0, BD_CELL, BD_NODE)
+
+
+        ! Test dxdXi
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_dxdxi (state, 2, 1)
+        ! xp => bdx%data
+        ! yp => bdy%data
+        ! soln%data = yp/(two*L)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! ! do j = jlo,jhi
+        ! !     do i = ilo,ihi
+        ! !         print*, soln%data, state%data
+        ! !     enddo
+        ! ! enddo
+        ! soln%data = state%data - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        call fill_dxdxi (state, 2, 2)
+        xp => bdx%data
+        yp => bdy%data
+        soln%data = half + half*xp/L
+        nullify (xp)
+        nullify (yp)
+        ! do j = jlo,jhi
+        !     do i = ilo,ihi
+        !         print*, soln%data, state%data
+        !     enddo
+        ! enddo
+        soln%data = state%data - soln%data
+        res = pnorm (soln, valid, norm_type)
+        call undefine_box_data (state)
+
+
+        ! ! Test J = (L+Xi) / (2L)
+        ! xp => bdx%data
+        ! yp => bdy%data
+        ! soln%data = (L+xp)/(two*L)
+        ! do j = jlo,jhi
+        !     do i = ilo,ihi
+        !         print*, soln%data, geo%J%data
+        !     enddo
+        ! enddo
+        ! nullify (xp)
+        ! nullify (yp)
+
+        ! Compute norm
+        ! soln%data = geo%J%data(ilo:ihi,jlo:jhi) - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+
+
+        ! Free memory
+        call undefine_box_data (soln)
+        call undefine_box_data (soln_xx)
+        call undefine_box_data (soln_xy)
+        call undefine_box_data (soln_yx)
+        call undefine_box_data (soln_yy)
+
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdx_x)
+        call undefine_box_data (bdx_y)
+
+        call undefine_box_data (bdy)
+        call undefine_box_data (bdy_x)
+        call undefine_box_data (bdy_y)
 
     end function test_geometry
 
