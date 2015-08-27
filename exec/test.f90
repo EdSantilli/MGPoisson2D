@@ -35,7 +35,7 @@ program test
     real(8), parameter          :: H = one
 
     integer                     :: r             ! Current refinement level
-    integer, parameter          :: maxr = 3      ! Max refinement level
+    integer, parameter          :: maxr = 5      ! Max refinement level
     real(dp), dimension(maxr)   :: errnorm       ! Error norm at each level
     real(dp), dimension(maxr-1) :: rate          ! Convergence rates
 
@@ -283,7 +283,7 @@ contains
         call fill_x (x)
 
         ! Bottom elevation
-        call fill_elevation (y%data(:,jlo), x%data(:,x%valid%jlo), ilo, ihi, L)
+        call fill_elevation (y%data(:,jlo), x%data(:,x%valid%jlo), ilo, ihi, L, H)
 
         ! Map vertically. Do this in reverse order so we don't clobber
         ! the elevation data.
@@ -325,15 +325,15 @@ contains
     ! LxMax = Lx/2
     !
     ! The total width of the ridge is then [2*lp*cos(angle) + 4*Bp + 2*Pp]*Lx
-    !  where Lx is the domain length
+    !  where Lx is the domain length and Hz is the domain height
     ! --------------------------------------------------------------------------
-    subroutine fill_elevation (el, x, ilo, ihi, Lx)
+    subroutine fill_elevation (el, x, ilo, ihi, Lx, Hz)
         implicit none
 
         integer, intent(in)                       :: ilo, ihi
         real(dp), intent(out), dimension(ilo:ihi) :: el
         real(dp), intent(in), dimension(ilo:ihi)  :: x
-        real(dp), intent(in)                      :: Lx
+        real(dp), intent(in)                      :: Lx, Hz
 
         ! Masoud's lab-scale ridge (total ridge width ~ 3.8m with Lx = 40.5m)
         real(dp), parameter :: angle = 19.2877 * pi / 180.0
@@ -385,7 +385,8 @@ contains
             xx = x(i)
 
             ! el(i) = zero ! Temporary, flat bottom.
-            el(i) = half * xx ! Sloped bottom
+            ! el(i) = half * xx ! Sloped bottom
+            el(i) = Hz*half*(one-xx/Lx) ! Sloped bottom
             ! el(i) = fourth * sin(pi*xx/Lx)   ! Temporary, sinusoidal bottom.
 
             ! if (xx .le. C1) then
@@ -441,37 +442,47 @@ contains
         ngx = dest%ngx
         ngy = dest%ngy
 
-        ! TODO: Centering is wrong!!!
-        ! We need xmu to surround the dest region.
-        if (dest%offi .eq. BD_CELL) then
-            call define_box_data (xmu, dest%valid, ngx, ngy, BD_NODE, BD_NODE)
-
-            if (mu .eq. 1) then
-                call fill_x (xmu)
-            else
-                call fill_y (xmu)
-            endif
-
-            if (nu .eq. 1) then
+        if (nu .eq. 1) then
+            if (dest%offi .eq. BD_CELL) then
+                ! Need x^mu with node centering in Xi^1
+                call define_box_data (xmu, dest%valid, ngx, ngy, BD_NODE, BD_CELL)
+                if (mu .eq. 1) then
+                    call fill_x (xmu)
+                else
+                    call fill_y (xmu)
+                endif
                 scale = one / dest%valid%dx
                 dest%data(ilo:ihi,:) = (xmu%data(ilo+1:ihi+1,:) - xmu%data(ilo:ihi,:)) * scale
             else
-                scale = one / dest%valid%dy
-                dest%data(:,jlo:jhi) = (xmu%data(:,jlo+1:jhi+1) - xmu%data(:,jlo:jhi)) * scale
-            endif
-        else
-            call define_box_data (xmu, dest%valid, ngx+1, ngy+1, BD_CELL, BD_CELL)
-
-            if (mu .eq. 1) then
-                call fill_x (xmu)
-            else
-                call fill_y (xmu)
-            endif
-
-            if (nu .eq. 1) then
+                ! Need x^mu with cell centering in Xi^1
+                call define_box_data (xmu, dest%valid, ngx+1, ngy, BD_CELL, BD_CELL)
+                if (mu .eq. 1) then
+                    call fill_x (xmu)
+                else
+                    call fill_y (xmu)
+                endif
                 scale = one / dest%valid%dx
                 dest%data(ilo:ihi,:) = (xmu%data(ilo:ihi,:) - xmu%data(ilo-1:ihi-1,:)) * scale
+            endif
+        else
+            if (dest%offj .eq. BD_CELL) then
+                ! Need x^mu with node centering in Xi^2
+                call define_box_data (xmu, dest%valid, ngx, ngy, BD_CELL, BD_NODE)
+                if (mu .eq. 1) then
+                    call fill_x (xmu)
+                else
+                    call fill_y (xmu)
+                endif
+                scale = one / dest%valid%dy
+                dest%data(:,jlo:jhi) = (xmu%data(:,jlo+1:jhi+1) - xmu%data(:,jlo:jhi)) * scale
             else
+                ! Need x^mu with cell centering in Xi^2
+                call define_box_data (xmu, dest%valid, ngx, ngy+1, BD_CELL, BD_CELL)
+                if (mu .eq. 1) then
+                    call fill_x (xmu)
+                else
+                    call fill_y (xmu)
+                endif
                 scale = one / dest%valid%dy
                 dest%data(:,jlo:jhi) = (xmu%data(:,jlo:jhi) - xmu%data(:,jlo-1:jhi-1)) * scale
             endif
@@ -635,37 +646,62 @@ contains
 
 
         ! Test dxdXi
+        call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        call fill_dxdxi (state, 1, 1)
+        xp => bdx%data
+        yp => bdy%data
+        soln%data = one
+        nullify (xp)
+        nullify (yp)
+        soln%data = state%data - soln%data
+        res = pnorm (soln, valid, norm_type)
+        call undefine_box_data (state)
+
+        ! ! Test dxdEta
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_dxdxi (state, 1, 2)
+        ! xp => bdx%data
+        ! yp => bdy%data
+        ! soln%data = zero
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln%data = state%data - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test dydXi
         ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
         ! call fill_dxdxi (state, 2, 1)
         ! xp => bdx%data
         ! yp => bdy%data
-        ! soln%data = yp/(two*L)
+        ! soln%data = (-H*half/L)*(one-yp/H)
         ! nullify (xp)
         ! nullify (yp)
-        ! ! do j = jlo,jhi
-        ! !     do i = ilo,ihi
-        ! !         print*, soln%data, state%data
+        ! do i = ilo,ihi
+        !     do j = jlo,jhi
+        !         print*, soln%data(i,j), state%data(i,j)
+        !     enddo
+        ! enddo
+        ! soln%data = state%data - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test dy/dEta
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_dxdxi (state, 2, 2)
+        ! xp => bdx%data
+        ! yp => bdy%data
+        ! soln%data = half + half*xp/L
+        ! nullify (xp)
+        ! nullify (yp)
+        ! ! do i = ilo,ihi
+        ! !     do j = jlo,jhi
+        ! !         print*, soln%data(i,j), state%data(i,j)
         ! !     enddo
         ! ! enddo
         ! soln%data = state%data - soln%data
         ! res = pnorm (soln, valid, norm_type)
         ! call undefine_box_data (state)
-
-        call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
-        call fill_dxdxi (state, 2, 2)
-        xp => bdx%data
-        yp => bdy%data
-        soln%data = half + half*xp/L
-        nullify (xp)
-        nullify (yp)
-        ! do j = jlo,jhi
-        !     do i = ilo,ihi
-        !         print*, soln%data, state%data
-        !     enddo
-        ! enddo
-        soln%data = state%data - soln%data
-        res = pnorm (soln, valid, norm_type)
-        call undefine_box_data (state)
 
 
         ! ! Test J = (L+Xi) / (2L)
