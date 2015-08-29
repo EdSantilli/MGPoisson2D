@@ -432,8 +432,9 @@ contains
         integer, intent(in)           :: mu, nu
 
         type(box_data) :: xmu
-        integer        :: ngx, ngy, ilo, ihi, jlo, jhi
-        real(dp)       :: scale
+        integer        :: ngx, ngy, ilo, ihi, jlo, jhi, i, j, offi, offj
+        real(dp)       :: scale, xi, eta
+        type(box)      :: cc_valid
 
         ilo = dest%bx%ilo
         ihi = dest%bx%ihi
@@ -441,49 +442,62 @@ contains
         jhi = dest%bx%jhi
         ngx = dest%ngx
         ngy = dest%ngy
+        offi = dest%offi
+        offj = dest%offj
+
+        ! ! Shortcuts...
+        ! if ((mu .eq. 1) .and. (nu .eq. 1)) then
+        !     dest%data = one
+        ! else if ((mu .eq. 1) .and. (nu .eq. 2)) then
+        !     dest%data = zero
+        ! endif
+
+        ! Construct the cell-centered box needed by the define functions.
+        cc_valid = dest%valid
+        if (dest%offi .eq. BD_NODE) then
+            cc_valid%ihi = cc_valid%ihi - 1
+            cc_valid%nx = cc_valid%nx - 1
+        endif
+        if (dest%offj .eq. BD_NODE) then
+            cc_valid%jhi = cc_valid%jhi - 1
+            cc_valid%ny = cc_valid%ny - 1
+        endif
 
         if (nu .eq. 1) then
-            if (dest%offi .eq. BD_CELL) then
-                ! Need x^mu with node centering in Xi^1
-                call define_box_data (xmu, dest%valid, ngx, ngy, BD_NODE, BD_CELL)
-                if (mu .eq. 1) then
-                    call fill_x (xmu)
-                else
-                    call fill_y (xmu)
-                endif
-                scale = one / dest%valid%dx
+            ! Allocate
+            call define_box_data (xmu, cc_valid, ngx+1, ngy, stagger(offi), offj)
+
+            ! Fill with x or y
+            if (mu .eq. 1) then
+                call fill_x (xmu)
+            else
+                call fill_y (xmu)
+            endif
+
+            ! Differentiate
+            scale = one / dest%valid%dx
+            if (offi .eq. BD_CELL) then
                 dest%data(ilo:ihi,:) = (xmu%data(ilo+1:ihi+1,:) - xmu%data(ilo:ihi,:)) * scale
             else
-                ! Need x^mu with cell centering in Xi^1
-                call define_box_data (xmu, dest%valid, ngx+1, ngy, BD_CELL, BD_CELL)
-                if (mu .eq. 1) then
-                    call fill_x (xmu)
-                else
-                    call fill_y (xmu)
-                endif
-                scale = one / dest%valid%dx
                 dest%data(ilo:ihi,:) = (xmu%data(ilo:ihi,:) - xmu%data(ilo-1:ihi-1,:)) * scale
             endif
+
         else
-            if (dest%offj .eq. BD_CELL) then
-                ! Need x^mu with node centering in Xi^2
-                call define_box_data (xmu, dest%valid, ngx, ngy, BD_CELL, BD_NODE)
-                if (mu .eq. 1) then
-                    call fill_x (xmu)
-                else
-                    call fill_y (xmu)
-                endif
-                scale = one / dest%valid%dy
+            ! Allocate
+            call define_box_data (xmu, cc_valid, ngx, ngy+1, offi, stagger(offj))
+
+            ! Fill with x or y
+            if (mu .eq. 1) then
+                call fill_x (xmu)
+            else
+                call fill_y (xmu)
+            endif
+
+            ! Differentiate
+            scale = one / dest%valid%dy
+            if (offj .eq. BD_CELL) then
                 dest%data(:,jlo:jhi) = (xmu%data(:,jlo+1:jhi+1) - xmu%data(:,jlo:jhi)) * scale
             else
-                ! Need x^mu with cell centering in Xi^2
-                call define_box_data (xmu, dest%valid, ngx, ngy+1, BD_CELL, BD_CELL)
-                if (mu .eq. 1) then
-                    call fill_x (xmu)
-                else
-                    call fill_y (xmu)
-                endif
-                scale = one / dest%valid%dy
                 dest%data(:,jlo:jhi) = (xmu%data(:,jlo:jhi) - xmu%data(:,jlo-1:jhi-1)) * scale
             endif
         endif
@@ -495,25 +509,12 @@ contains
 
 
     ! --------------------------------------------------------------------------
-    ! Fills a box_data with J = det[Jacobian] = (dx/dXi) * (dy/dEta)
+    ! Fills a box_data with J = det[Jacobian] = (dy/dEta)
     ! --------------------------------------------------------------------------
     subroutine fill_J (dest)
         implicit none
-
         type(box_data), intent(inout) :: dest
-        type(box_data)                :: dxdxi
-
-        ! Initialize with dx/dXi
-        call fill_dxdxi (dest, 1, 1)
-
-        ! Multiply by dy/dEta
-        call define_box_data (dxdxi, dest)
-        call fill_dxdXi (dxdxi, 2, 2)
-        dest%data = dest%data * dxdxi%data
-
-        ! Free memory
-        call undefine_box_data(dxdxi)
-
+        call fill_dxdXi (dest, 2, 2)
     end subroutine fill_J
 
 
@@ -526,28 +527,16 @@ contains
 
         type(box_data), intent(inout) :: dest
         integer, intent(in)           :: mu, nu
+        type(box_data)                :: tmp
 
-        type(box_data)                :: dxdxi_mu_rho
-        type(box_data)                :: dxdxi_nu_rho
-        integer                       :: rho
+        ! Don't do anything special here. Just remove the J from Jgup.
+        call define_box_data (tmp, dest)
 
-        ! Create space for Jacobian matrix elements
-        call define_box_data (dxdxi_mu_rho, dest)
-        call define_box_data (dxdxi_nu_rho, dest)
+        call fill_J (tmp)
+        call fill_Jgup (dest, mu, nu)
+        dest%data = dest%data / tmp%data
 
-        ! rho = 1 (x)...
-        call fill_dxdxi(dxdxi_mu_rho, mu, 1)
-        call fill_dxdxi(dxdxi_nu_rho, nu, 1)
-        dest%data = dxdxi_mu_rho%data * dxdxi_nu_rho%data
-
-        ! rho = 2 (y)...
-        call fill_dxdxi(dxdxi_mu_rho, mu, 2)
-        call fill_dxdxi(dxdxi_nu_rho, nu, 2)
-        dest%data = dest%data + dxdxi_mu_rho%data * dxdxi_nu_rho%data
-
-        ! Free memory
-        call undefine_box_data(dxdxi_mu_rho)
-        call undefine_box_data(dxdxi_nu_rho)
+        call undefine_box_data (tmp)
 
     end subroutine fill_gup
 
@@ -560,19 +549,31 @@ contains
 
         type(box_data), intent(inout) :: dest
         integer, intent(in)           :: mu, nu
+        type(box_data)                :: tmp
 
-        type(box_data)                :: J
-
-        ! Initialize to gup
-        call fill_gup (dest, mu, nu)
-
-        ! Multiply by J
-        call define_box_data (J, dest)
-        call fill_J (J)
-        dest%data = dest%data * J%data
-
-        ! Free memory
-        call undefine_box_data (J)
+        if (mu .eq. 1) then
+            if (nu .eq. 1) then
+                ! Jgup^{1,1} = y_eta
+                call fill_dxdxi (dest, 2, 2)
+            else
+                ! Jgup^{1,2} = -y_xi
+                call fill_dxdxi (dest, 2, 1)
+                dest%data = -dest%data
+            endif
+        else
+            if (nu .eq. 1) then
+                ! Jgup^{2,1} = -y_xi
+                call fill_dxdxi (dest, 2, 1)
+                dest%data = -dest%data
+            else
+                ! Jgup^{2,2} = (1 + y_xi**2) / y_eta
+                call define_box_data (tmp, dest)
+                call fill_dxdxi (dest, 2, 1)
+                call fill_dxdxi (tmp, 2, 2)
+                dest%data = (one + dest%data**2) / tmp%data
+                call undefine_box_data (tmp)
+            endif
+        endif
 
     end subroutine fill_Jgup
 
@@ -595,7 +596,7 @@ contains
         type(box_data), target     :: bdy_x, bdy_y
         real(dp), dimension(:,:), pointer :: xp, yp
 
-        type(box_data)             :: state, soln, soln_xx, soln_xy, soln_yx, soln_yy
+        type(box_data)             :: state, soln, soln_x, soln_y
 
         valid = geo%J%valid
 
@@ -639,23 +640,46 @@ contains
 
         ! Allocate the solution spaces
         call define_box_data (soln, valid, 0, 0, BD_CELL, BD_CELL)
-        call define_box_data (soln_xx, valid, 0, 0, BD_NODE, BD_CELL)
-        call define_box_data (soln_xy, valid, 0, 0, BD_NODE, BD_CELL)
-        call define_box_data (soln_yx, valid, 0, 0, BD_CELL, BD_NODE)
-        call define_box_data (soln_yy, valid, 0, 0, BD_CELL, BD_NODE)
+        call define_box_data (soln_x, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (soln_y, valid, 0, 0, BD_CELL, BD_NODE)
 
+        ! CC tests...
 
-        ! Test dxdXi
-        call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
-        call fill_dxdxi (state, 1, 1)
-        xp => bdx%data
-        yp => bdy%data
-        soln%data = one
-        nullify (xp)
-        nullify (yp)
-        soln%data = state%data - soln%data
-        res = pnorm (soln, valid, norm_type)
-        call undefine_box_data (state)
+        ! ! Test x
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_x (state)
+        ! xp => bdx%data
+        ! ! yp => bdy%data
+        ! soln%data = xp
+        ! nullify (xp)
+        ! ! nullify (yp)
+        ! soln%data = state%data - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test y
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_y (state)
+        ! xp => bdx%data
+        ! yp => bdy%data
+        ! soln%data = yp + half*H*(one-xp/L)*(one-yp/H)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln%data = state%data - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test dxdXi
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_dxdxi (state, 1, 1)
+        ! xp => bdx%data
+        ! yp => bdy%data
+        ! soln%data = one
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln%data = state%data - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
 
         ! ! Test dxdEta
         ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
@@ -677,11 +701,6 @@ contains
         ! soln%data = (-H*half/L)*(one-yp/H)
         ! nullify (xp)
         ! nullify (yp)
-        ! do i = ilo,ihi
-        !     do j = jlo,jhi
-        !         print*, soln%data(i,j), state%data(i,j)
-        !     enddo
-        ! enddo
         ! soln%data = state%data - soln%data
         ! res = pnorm (soln, valid, norm_type)
         ! call undefine_box_data (state)
@@ -703,30 +722,243 @@ contains
         ! res = pnorm (soln, valid, norm_type)
         ! call undefine_box_data (state)
 
-
         ! ! Test J = (L+Xi) / (2L)
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_J (state)
         ! xp => bdx%data
         ! yp => bdy%data
-        ! soln%data = (L+xp)/(two*L)
-        ! do j = jlo,jhi
-        !     do i = ilo,ihi
-        !         print*, soln%data, geo%J%data
-        !     enddo
-        ! enddo
+        ! soln%data = half + half*xp/L
         ! nullify (xp)
         ! nullify (yp)
-
-        ! Compute norm
-        ! soln%data = geo%J%data(ilo:ihi,jlo:jhi) - soln%data
+        ! soln%data = state%data - soln%data
         ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{1,1}
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_Jgup (state, 1, 1)
+        ! xp => bdx%data
+        ! yp => bdy%data
+        ! soln%data = half*(one+xp/L)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln%data = state%data - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{1,2}
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_Jgup (state, 1, 2)
+        ! xp => bdx%data
+        ! yp => bdy%data
+        ! soln%data = half*H/L*(one-yp/H)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln%data = state%data - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{2,1}
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_Jgup (state, 2, 1)
+        ! xp => bdx%data
+        ! yp => bdy%data
+        ! soln%data = half*H/L*(one-yp/H)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln%data = state%data - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{2,2}
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
+        ! call fill_Jgup (state, 2, 2)
+        ! xp => bdx%data
+        ! yp => bdy%data
+        ! soln%data = (one + (half*H/L*(one-yp/H))**2) / (half+half*xp/L)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln%data = state%data - soln%data
+        ! res = pnorm (soln, valid, norm_type)
+        ! call undefine_box_data (state)
+
+
+        ! FC tests...
+
+        ! ! Test dxdXi
+        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
+        ! call fill_dxdxi (state, 1, 1)
+        ! xp => bdx_x%data
+        ! yp => bdy_x%data
+        ! soln_x%data = one
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_x%data = state%data - soln_x%data
+        ! res = pnorm (soln_x, soln_x%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test dxdEta
+        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
+        ! call fill_dxdxi (state, 1, 2)
+        ! xp => bdx_x%data
+        ! yp => bdy_x%data
+        ! soln_x%data = zero
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_x%data = state%data - soln_x%data
+        ! res = pnorm (soln_x, soln_x%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test dydXi
+        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
+        ! call fill_dxdxi (state, 2, 1)
+        ! xp => bdx_x%data
+        ! yp => bdy_x%data
+        ! soln_x%data = (-H*half/L)*(one-yp/H)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_x%data = state%data - soln_x%data
+        ! res = pnorm (soln_x, soln_x%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test dy/dEta
+        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
+        ! call fill_dxdxi (state, 2, 2)
+        ! xp => bdx_x%data
+        ! yp => bdy_x%data
+        ! soln_x%data = half + half*xp/L
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_x%data = state%data - soln_x%data
+        ! res = pnorm (soln_x, soln_x%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test J = (L+Xi) / (2L)
+        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
+        ! call fill_J (state)
+        ! xp => bdx_x%data
+        ! yp => bdy_x%data
+        ! soln_x%data = half + half*xp/L
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_x%data = state%data - soln_x%data
+        ! res = pnorm (soln_x, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test J = (L+Xi) / (2L)
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
+        ! call fill_J (state)
+        ! xp => bdx_y%data
+        ! yp => bdy_y%data
+        ! soln_y%data = half + half*xp/L
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_y%data = state%data - soln_y%data
+        ! res = pnorm (soln_y, valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{1,1}
+        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
+        ! call fill_Jgup (state, 1, 1)
+        ! xp => bdx_x%data
+        ! yp => bdy_x%data
+        ! soln_x%data = half*(one+xp/L)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_x%data = state%data - soln_x%data
+        ! res = pnorm (soln_x, soln_x%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{1,2}
+        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
+        ! call fill_Jgup (state, 1, 2)
+        ! xp => bdx_x%data
+        ! yp => bdy_x%data
+        ! soln_x%data = half*H/L*(one-yp/H)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_x%data = state%data - soln_x%data
+        ! res = pnorm (soln_x, soln_x%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{2,1}
+        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
+        ! call fill_Jgup (state, 2, 1)
+        ! xp => bdx_x%data
+        ! yp => bdy_x%data
+        ! soln_x%data = half*H/L*(one-yp/H)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_x%data = state%data - soln_x%data
+        ! res = pnorm (soln_x, soln_x%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{2,2}
+        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
+        ! call fill_Jgup (state, 2, 2)
+        ! xp => bdx_x%data
+        ! yp => bdy_x%data
+        ! soln_x%data = (one + (half*H/L*(one-yp/H))**2) / (half+half*xp/L)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_x%data = state%data - soln_x%data
+        ! res = pnorm (soln_x, soln_x%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{1,1}
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
+        ! call fill_Jgup (state, 1, 1)
+        ! xp => bdx_y%data
+        ! yp => bdy_y%data
+        ! soln_y%data = half*(one+xp/L)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_y%data = state%data - soln_y%data
+        ! res = pnorm (soln_y, soln_y%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{1,2}
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
+        ! call fill_Jgup (state, 1, 2)
+        ! xp => bdx_y%data
+        ! yp => bdy_y%data
+        ! soln_y%data = half*H/L*(one-yp/H)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_y%data = state%data - soln_y%data
+        ! res = pnorm (soln_y, soln_y%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{2,1}
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
+        ! call fill_Jgup (state, 2, 1)
+        ! xp => bdx_y%data
+        ! yp => bdy_y%data
+        ! soln_y%data = half*H/L*(one-yp/H)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_y%data = state%data - soln_y%data
+        ! res = pnorm (soln_y, soln_y%valid, norm_type)
+        ! call undefine_box_data (state)
+
+        ! ! Test Jgup^{2,2}
+        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
+        ! call fill_Jgup (state, 2, 2)
+        ! xp => bdx_y%data
+        ! yp => bdy_y%data
+        ! soln_y%data = (one + (half*H/L*(one-yp/H))**2) / (half+half*xp/L)
+        ! nullify (xp)
+        ! nullify (yp)
+        ! soln_y%data = state%data - soln_y%data
+        ! res = pnorm (soln_y, soln_y%valid, norm_type)
+        ! call undefine_box_data (state)
+
 
 
         ! Free memory
         call undefine_box_data (soln)
-        call undefine_box_data (soln_xx)
-        call undefine_box_data (soln_xy)
-        call undefine_box_data (soln_yx)
-        call undefine_box_data (soln_yy)
+        call undefine_box_data (soln_x)
+        call undefine_box_data (soln_y)
 
         call undefine_box_data (bdx)
         call undefine_box_data (bdx_x)

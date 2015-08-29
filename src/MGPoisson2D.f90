@@ -481,8 +481,20 @@ contains
     subroutine define_box_data_dup (dest, src)
         type(box_data), intent(inout) :: dest
         type(box_data), intent(in)    :: src
+        type(box)                     :: cc_valid
 
-        call define_box_data (dest, src%valid, src%ngx, src%ngy, src%offi, src%offj)
+        ! Construct the cell-centered box needed by the define function.
+        cc_valid = src%valid
+        if (src%offi .eq. BD_NODE) then
+            cc_valid%ihi = cc_valid%ihi - 1
+            cc_valid%nx = cc_valid%nx - 1
+        endif
+        if (src%offj .eq. BD_NODE) then
+            cc_valid%jhi = cc_valid%jhi - 1
+            cc_valid%ny = cc_valid%ny - 1
+        endif
+
+        call define_box_data (dest, cc_valid, src%ngx, src%ngy, src%offi, src%offj)
     end subroutine define_box_data_dup
 
 
@@ -553,6 +565,16 @@ contains
 
         if (allocated(bd%data)) deallocate(bd%data)
     end subroutine undefine_box_data
+
+
+    ! --------------------------------------------------------------------------
+    ! Returns the opposite centering
+    ! --------------------------------------------------------------------------
+    pure function stagger (min) result (mout)
+        integer, intent(in) :: min
+        integer             :: mout
+        mout = 1 - min
+    end function stagger
 
 
     ! --------------------------------------------------------------------------
@@ -651,10 +673,10 @@ contains
         integer :: i, j
         real(dp) :: volScale
 
-        if ((bd%offi .ne. BD_CELL) .or. (bd%offj .ne. BD_CELL)) then
-            print*, 'pnorm: Only works with cell-centered data for now.'
-            stop
-        endif
+        ! if ((bd%offi .ne. BD_CELL) .or. (bd%offj .ne. BD_CELL)) then
+        !     print*, 'pnorm: Only works with cell-centered data for now.'
+        !     stop
+        ! endif
 
         volScale = bd%bx%dx * bd%bx%dy
 
