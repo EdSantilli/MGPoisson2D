@@ -723,16 +723,13 @@ contains
         ! call undefine_box_data (state)
 
         ! ! Test J = (L+Xi) / (2L)
-        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
-        ! call fill_J (state)
         ! xp => bdx%data
         ! yp => bdy%data
         ! soln%data = half + half*xp/L
         ! nullify (xp)
         ! nullify (yp)
-        ! soln%data = state%data - soln%data
+        ! soln%data(ilo:ihi,jlo:jhi) = geo%J%data(ilo:ihi,jlo:jhi) - soln%data(ilo:ihi,jlo:jhi)
         ! res = pnorm (soln, valid, norm_type)
-        ! call undefine_box_data (state)
 
         ! ! Test Jgup^{1,1}
         ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_CELL)
@@ -858,28 +855,22 @@ contains
         ! call undefine_box_data (state)
 
         ! ! Test Jgup^{1,1}
-        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
-        ! call fill_Jgup (state, 1, 1)
         ! xp => bdx_x%data
         ! yp => bdy_x%data
         ! soln_x%data = half*(one+xp/L)
         ! nullify (xp)
         ! nullify (yp)
-        ! soln_x%data = state%data - soln_x%data
+        ! soln_x%data(ilo:ihi+1,jlo:jhi) = geo%Jgup_xx%data(ilo:ihi+1,jlo:jhi) - soln_x%data(ilo:ihi+1,jlo:jhi)
         ! res = pnorm (soln_x, soln_x%valid, norm_type)
-        ! call undefine_box_data (state)
 
         ! ! Test Jgup^{1,2}
-        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
-        ! call fill_Jgup (state, 1, 2)
         ! xp => bdx_x%data
         ! yp => bdy_x%data
         ! soln_x%data = half*H/L*(one-yp/H)
         ! nullify (xp)
         ! nullify (yp)
-        ! soln_x%data = state%data - soln_x%data
+        ! soln_x%data(ilo:ihi+1,jlo:jhi) = geo%Jgup_xy%data(ilo:ihi+1,jlo:jhi) - soln_x%data(ilo:ihi+1,jlo:jhi)
         ! res = pnorm (soln_x, soln_x%valid, norm_type)
-        ! call undefine_box_data (state)
 
         ! ! Test Jgup^{2,1}
         ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
@@ -930,28 +921,22 @@ contains
         ! call undefine_box_data (state)
 
         ! ! Test Jgup^{2,1}
-        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
-        ! call fill_Jgup (state, 2, 1)
         ! xp => bdx_y%data
         ! yp => bdy_y%data
         ! soln_y%data = half*H/L*(one-yp/H)
         ! nullify (xp)
         ! nullify (yp)
-        ! soln_y%data = state%data - soln_y%data
+        ! soln_y%data(ilo:ihi,jlo:jhi+1) = geo%Jgup_yx%data(ilo:ihi,jlo:jhi+1) - soln_y%data(ilo:ihi,jlo:jhi+1)
         ! res = pnorm (soln_y, soln_y%valid, norm_type)
-        ! call undefine_box_data (state)
 
-        ! ! Test Jgup^{2,2}
-        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
-        ! call fill_Jgup (state, 2, 2)
-        ! xp => bdx_y%data
-        ! yp => bdy_y%data
-        ! soln_y%data = (one + (half*H/L*(one-yp/H))**2) / (half+half*xp/L)
-        ! nullify (xp)
-        ! nullify (yp)
-        ! soln_y%data = state%data - soln_y%data
-        ! res = pnorm (soln_y, soln_y%valid, norm_type)
-        ! call undefine_box_data (state)
+        ! Test Jgup^{2,2}
+        xp => bdx_y%data
+        yp => bdy_y%data
+        soln_y%data = (one + (half*H/L*(one-yp/H))**2) / (half+half*xp/L)
+        nullify (xp)
+        nullify (yp)
+        soln_y%data(ilo:ihi,jlo:jhi+1) = geo%Jgup_yy%data(ilo:ihi,jlo:jhi+1) - soln_y%data(ilo:ihi,jlo:jhi+1)
+        res = pnorm (soln_y, soln_y%valid, norm_type)
 
 
 
@@ -1169,9 +1154,28 @@ contains
         call fill_y (bdy_ylo)
         call fill_y (bdy_yhi)
 
+        ! ! BEGIN TEMPORARY!!!
+        ! call define_box_data (soln, bdx)
+        ! ! soln%data = sin((half + four*bdy%data/H)*pi*bdx%data/L)
+        ! soln%data = bdx%data**3
+
+        ! call define_box_data (state, bdx)
+        ! state%data(ilo:ihi,:) = (soln%data(ilo+1:ihi+1,:) - soln%data(ilo-1:ihi-1,:)) * half / dx
+        ! ! do i = ilo, ihi-1
+        ! !     state%data(i,:) = -(three*soln%data(i,:) - four*soln%data(i+1,:) + soln%data(i+2,:)) * half/dx
+        ! ! enddo
+        ! ! state%data(ihi,:) = (soln%data(ihi+1,:) - soln%data(ihi-1,:)) * half / dx
+
+        ! ! soln%data = (half + four*bdy%data/H) * (pi/L) * cos((half + four*bdy%data/H)*pi*bdx%data/L)
+        ! soln%data = three*bdx%data**2
+        ! state%data = state%data - soln%data
+        ! res = pnorm (state, state%valid, norm_type)
+        ! ! END TEMPORARY!!!
+
+
         ! Set up soln
         call define_box_data (soln, bdx)
-        soln%data = sin((half + four*bdy%data/H)*pi*bdx%data/L)
+        soln%data = (bdx%data**3) * (bdy%data**3)
 
         ! Set up state with the true solution in the interior (valid) cells
         ! and bogus values in the ghost cells.
@@ -1192,26 +1196,23 @@ contains
 
         xp => bdx_xlo%data(ilo,:)
         yp => bdy_xlo%data(ilo,:)
-        neum_bc%data_xlo = ((half + four*yp/H) * (pi/L) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_xx%data(ilo,:) &
-                         + ((four*pi*xp/L/H) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_xy%data(ilo,:)
-        ! print*, 'Jgup_xx = '
-        ! print*, geo%Jgup_xx%data(ilo,:)
-        ! print*
+        neum_bc%data_xlo = (three*xp**2*yp**3) * geo%Jgup_xx%data(ilo,:) &
+                         + (xp**3*three*yp**2) * geo%Jgup_xy%data(ilo,:)
 
         xp => bdx_xhi%data(ihi+1,:)
         yp => bdy_xhi%data(ihi+1,:)
-        neum_bc%data_xhi = ((half + four*yp/H) * (pi/L) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_xx%data(ihi+1,:) &
-                         + ((four*pi*xp/L/H) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_xy%data(ihi+1,:)
+        neum_bc%data_xhi = (three*xp**2*yp**3) * geo%Jgup_xx%data(ihi+1,:) &
+                         + (xp**3*three*yp**2) * geo%Jgup_xy%data(ihi+1,:)
 
         xp => bdx_ylo%data(:,jlo)
         yp => bdy_ylo%data(:,jlo)
-        neum_bc%data_ylo = ((half + four*yp/H) * (pi/L) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_yx%data(:,jlo) &
-                         + ((four*pi*xp/L/H) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_yy%data(:,jlo)
+        neum_bc%data_ylo = ((three*xp**2)*(yp**3)) * geo%Jgup_yx%data(:,jlo) &
+                         + ((xp**3)*(three*yp**2)) * geo%Jgup_yy%data(:,jlo)
 
         xp => bdx_yhi%data(:,jhi+1)
         yp => bdy_yhi%data(:,jhi+1)
-        neum_bc%data_yhi = ((half + four*yp/H) * (pi/L) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_yx%data(:,jhi+1) &
-                         + ((four*pi*xp/L/H) * cos((half + four*yp/H)*pi*xp/L)) * geo%Jgup_yy%data(:,jhi+1)
+        neum_bc%data_yhi = (three*xp**2*yp**3) * geo%Jgup_yx%data(:,jhi+1) &
+                         + (xp**3*three*yp**2) * geo%Jgup_yy%data(:,jhi+1)
 
         nullify(xp)
         nullify(yp)
@@ -1224,19 +1225,19 @@ contains
         ! state%data(ilo:ihi, jlo-1) = soln%data(ilo:ihi, jlo-1)
         state%data(ilo:ihi, jhi+1) = soln%data(ilo:ihi, jhi+1)
 
-        ! Test valid cells
-        do j = jlo, jhi
-            do i = ilo, ihi
-                val = soln%data(i,j)
-                if (state%data(i,j) .ne. val) then
-                    print*, 'i = ', i
-                    print*, 'j = ', j
-                    print*, 'state%data(i,j) = ', state%data(i,j)
-                    print*, 'state%data(i,j) = ', val
-                    stop
-                endif
-            enddo
-        enddo
+        ! ! Test valid cells
+        ! do j = jlo, jhi
+        !     do i = ilo, ihi
+        !         val = soln%data(i,j)
+        !         if (state%data(i,j) .ne. val) then
+        !             print*, 'i = ', i
+        !             print*, 'j = ', j
+        !             print*, 'state%data(i,j) = ', state%data(i,j)
+        !             print*, 'state%data(i,j) = ', val
+        !             stop
+        !         endif
+        !     enddo
+        ! enddo
 
         ! Compute norm over ghosts
         state%data = state%data - soln%data

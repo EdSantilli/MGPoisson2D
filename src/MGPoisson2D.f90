@@ -752,6 +752,8 @@ contains
         real(dp) :: xscale, yscale, cross, dpn, dpf
         logical  :: do_neum
 
+        real(dp) :: xp, yp, H, L ! TEMP!!!
+
         if ((phi%offi .ne. BD_CELL) .or. (phi%offj .ne. BD_CELL)) then
             print*, 'fill_ghosts: Only works with cell-centered data for now.'
             stop
@@ -897,7 +899,6 @@ contains
                             dpf = (three*phi%data(i,j+1) - four*phi%data(i-1,j+1) + phi%data(i-2,j+1)) * half/dx
                             cross = (threehalves*dpn - half*dpf) * geo%Jgup_yx%data(i,j)
                             phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
-
                         endif
                     endif
 
