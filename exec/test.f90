@@ -88,18 +88,18 @@ program test
     print*
 
 
-    ! Test 3: Non-uniform Neumann BCs
-    errnorm = bogus_val
-    do r = 1, maxr
-        errnorm(r) = test_nonuniform_neum_bcs (geo(r))
-    enddo
-    call compute_conv_rate (rate, errnorm)
-    print*, 'Test 3: Non-uniform Neumann BCs'
-    print*, 'Error norm                rate'
-    print*, errnorm(1)
-    do r = 2, maxr
-        print*, errnorm(r), rate(r-1)
-    enddo
+    ! ! Test 3: Non-uniform Neumann BCs
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_nonuniform_neum_bcs (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 3: Non-uniform Neumann BCs'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
 
 
 

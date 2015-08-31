@@ -790,16 +790,16 @@ contains
             select case (xlo)
                 case (BCTYPE_NEUM)
                     if (do_neum) then
-                        ! print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
-                        ! stop
-                        if (homog) then
-                            phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi)
-                        else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
-                            bcval = dx * bcd%data_xlo(1)
-                            phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi) - bcval
-                        else
-                            phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi) - dx * bcd%data_xlo(jlo:jhi)
-                        endif
+                        print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                        stop
+                        ! if (homog) then
+                        !     phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi)
+                        ! else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                        !     bcval = dx * bcd%data_xlo(1)
+                        !     phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi) - bcval
+                        ! else
+                        !     phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi) - dx * bcd%data_xlo(jlo:jhi)
+                        ! endif
                     endif
 
                 case (BCTYPE_DIRI)
@@ -829,16 +829,16 @@ contains
             select case (xhi)
                 case (BCTYPE_NEUM)
                     if (do_neum) then
-                        ! print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
-                        ! stop
-                        if (homog) then
-                            phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi)
-                        else if (bcd%mode_xhi .eq. BCMODE_UNIFORM) then
-                            bcval = dx * bcd%data_xhi(1)
-                            phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi) + bcval
-                        else
-                            phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi) + dx * bcd%data_xhi(jlo:jhi)
-                        endif
+                        print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                        stop
+                        ! if (homog) then
+                        !     phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi)
+                        ! else if (bcd%mode_xhi .eq. BCMODE_UNIFORM) then
+                        !     bcval = dx * bcd%data_xhi(1)
+                        !     phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi) + bcval
+                        ! else
+                        !     phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi) + dx * bcd%data_xhi(jlo:jhi)
+                        ! endif
                     endif
 
                 case (BCTYPE_DIRI)
@@ -870,36 +870,36 @@ contains
             select case (ylo)
                 case (BCTYPE_NEUM)
                     if (do_neum) then
-                        ! print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
-                        ! stop
-                        if (homog) then
-                            phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo)
-                        else if (bcd%mode_ylo .eq. BCMODE_UNIFORM) then
-                            bcval = dx * bcd%data_ylo(1)
-                            phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - bcval
-                        else
-                            ! phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - dy * bcd%data_ylo(ilo:ihi)
+                        print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                        stop
+                        ! if (homog) then
+                        !     phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo)
+                        ! else if (bcd%mode_ylo .eq. BCMODE_UNIFORM) then
+                        !     bcval = dx * bcd%data_ylo(1)
+                        !     phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - bcval
+                        ! else
+                        !     ! phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - dy * bcd%data_ylo(ilo:ihi)
 
-                            j = jlo
-                            i = ilo
-                            dpn = -(three*phi%data(i,j  ) - four*phi%data(i+1,j  ) + phi%data(i+2,j  )) * half/dx
-                            dpf = -(three*phi%data(i,j+1) - four*phi%data(i+1,j+1) + phi%data(i+2,j+1)) * half/dx
-                            cross = (threehalves*dpn - half*dpf) * geo%Jgup_yx%data(i,j)
-                            phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
+                        !     j = jlo
+                        !     i = ilo
+                        !     dpn = -(three*phi%data(i,j  ) - four*phi%data(i+1,j  ) + phi%data(i+2,j  )) * half/dx
+                        !     dpf = -(three*phi%data(i,j+1) - four*phi%data(i+1,j+1) + phi%data(i+2,j+1)) * half/dx
+                        !     cross = half*(three*dpn - dpf) * geo%Jgup_yx%data(i,j)
+                        !     phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
 
-                            do i = ilo+1, ihi-1
-                                dpn = (phi%data(i+1,j  ) - phi%data(i-1,j  )) * half/dx
-                                dpf = (phi%data(i+1,j+1) - phi%data(i-1,j+1)) * half/dx
-                                cross = (threehalves*dpn - half*dpf) * geo%Jgup_yx%data(i,j)
-                                phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
-                            enddo
+                        !     do i = ilo+1, ihi-1
+                        !         dpn = (phi%data(i+1,j  ) - phi%data(i-1,j  )) * half/dx
+                        !         dpf = (phi%data(i+1,j+1) - phi%data(i-1,j+1)) * half/dx
+                        !         cross = (threehalves*dpn - half*dpf) * geo%Jgup_yx%data(i,j)
+                        !         phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
+                        !     enddo
 
-                            i = ihi
-                            dpn = (three*phi%data(i,j  ) - four*phi%data(i-1,j  ) + phi%data(i-2,j  )) * half/dx
-                            dpf = (three*phi%data(i,j+1) - four*phi%data(i-1,j+1) + phi%data(i-2,j+1)) * half/dx
-                            cross = (threehalves*dpn - half*dpf) * geo%Jgup_yx%data(i,j)
-                            phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
-                        endif
+                        !     i = ihi
+                        !     dpn = (three*phi%data(i,j  ) - four*phi%data(i-1,j  ) + phi%data(i-2,j  )) * half/dx
+                        !     dpf = (three*phi%data(i,j+1) - four*phi%data(i-1,j+1) + phi%data(i-2,j+1)) * half/dx
+                        !     cross = half*(three*dpn - dpf) * geo%Jgup_yx%data(i,j)
+                        !     phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
+                        ! endif
                     endif
 
                 case (BCTYPE_DIRI)
@@ -929,16 +929,16 @@ contains
             select case (yhi)
                 case (BCTYPE_NEUM)
                     if (do_neum) then
-                        ! print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
-                        ! stop
-                        if (homog) then
-                            phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi)
-                        else if (bcd%mode_yhi .eq. BCMODE_UNIFORM) then
-                            bcval = dx * bcd%data_yhi(1)
-                            phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + bcval
-                        else
-                            phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + dy * bcd%data_yhi(ilo:ihi)
-                        endif
+                        print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                        stop
+                        ! if (homog) then
+                        !     phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi)
+                        ! else if (bcd%mode_yhi .eq. BCMODE_UNIFORM) then
+                        !     bcval = dx * bcd%data_yhi(1)
+                        !     phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + bcval
+                        ! else
+                        !     phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + dy * bcd%data_yhi(ilo:ihi)
+                        ! endif
                     endif
 
                 case (BCTYPE_DIRI)
@@ -977,31 +977,164 @@ end module ArrayUtils
 
 
 
-! ! ------------------------------------------------------------------------------
-! ! ------------------------------------------------------------------------------
-! module MGPoisson2D
-!     use ArrayUtils
-!     implicit none
-!     private
+! ------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
+module MGPoisson2D
+    use ArrayUtils
+    implicit none
+    private
 
-!     save
+    save
 
-! contains
+contains
 
-!     ! --------------------------------------------------------------------------
-!     ! Computes 1.0 / the Laplacian's diagonal matrix elements.
-!     ! invDiags must be prepared (allocated and box set) prior to call.
-!     ! --------------------------------------------------------------------------
-!     subroutine ComputeInvDiags (invDiags)
-!         implicit none
-!         type(BoxData), intent(inout) :: invDiags
-!         real(dp)                     :: dxScale, dyScale
+    ! --------------------------------------------------------------------------
+    ! Computes 1.0 / the Laplacian's diagonal matrix elements.
+    ! invDiags must be prepared (allocated and box set) prior to call.
+    ! --------------------------------------------------------------------------
+    pure subroutine compute_inverse_diags (idiags, geo)
+        type(box_data), intent(inout) :: idiags
+        type(geo_data), intent(in)    :: geo
 
-!         dxScale = 2.0d0 / (invDiags%box%dx**2)
-!         dyScale = 2.0d0 / (invDiags%box%dy**2)
-!         invDiags%data = -1.0d0 / (dxScale + dyScale)
-!     end subroutine ComputeInvDiags
+        real(dp)                      :: invdxsq, invdysq
+        integer                       :: ilo, ihi, jlo, jhi
+
+        invdxsq = -one / (idiags%valid%dx**2)
+        invdysq = -one / (idiags%valid%dy**2)
+
+        ilo = idiags%valid%ilo
+        ihi = idiags%valid%ihi
+        jlo = idiags%valid%jlo
+        jhi = idiags%valid%jhi
+
+        idiags%data(ilo:ihi,jlo:jhi) = &
+            ( (geo%Jgup_xx%data(ilo+1:ihi+1,jlo:jhi) + geo%Jgup_xx%data(ilo:ihi,jlo:jhi)) * invdxsq    &
+             +(geo%Jgup_yy%data(ilo:ihi,jlo+1:jhi+1) + geo%Jgup_yy%data(ilo:ihi,jlo:jhi)) * invdysq  ) &
+            / geo%J%data(ilo:ihi,jlo:jhi)
+    end subroutine compute_inverse_diags
 
 
-! end module MGPoisson2D
+    ! ------------------------------------------------------------------------------
+    ! Computes J*Grad[Phi].
+    ! phi is expected to be cell-centered.
+    ! *flux is expected to be face-centered with no ghosts.
+    ! bc* = 0 for Neum, 1 for Diri, 2 for Periodic, 3 for CF.
+    !
+    ! NOTE: This function does not use ghosts.
+    ! ------------------------------------------------------------------------------
+    subroutine compute_grad_phi (xflux, yflux, phi, bc)
+        type(box_data), intent(inout) :: xflux, yflux
+        type(box_data), intent(in)    :: phi
+        type(bdry_data), intent(in)   :: bc
+
+        real(dp)                      :: invdx, invdy
+        integer                       :: ilo, ihi, jlo, jhi
+
+        invdx = one / phi%valid%dx
+        invdy = one / phi%valid%dy
+
+        ilo = phi%valid%ilo
+        ihi = phi%valid%ihi
+        jlo = phi%valid%jlo
+        jhi = phi%valid%jhi
+
+        ! Compute xflux...
+
+        ! Interior
+        xflux%data(ilo+1:ihi-1,jlo:jhi) = invdx * (phi%data(ilo+1:ihi-1,jlo:jhi) - phi%data(ilo:ihi-2,jlo:jhi))
+
+        ! Lower BCs
+        select case (bc%type_xlo)
+            case (BCTYPE_NEUM)
+                xflux%data(ilo,:) = zero
+            case (BCTYPE_DIRI)
+                xflux%data(ilo,jlo:jhi) = two * invdx * phi%data(ilo,jlo:jhi)
+            case (BCTYPE_PERIODIC)
+                xflux%data(ilo,jlo:jhi) = invdx * (phi%data(ilo,jlo:jhi) - phi%data(ihi,jlo:jhi))
+            case (BCTYPE_CF)
+                ! TODO
+                print*, 'compute_grad_phi: Cannot handle BCTYPE_CF yet.'
+                stop
+        end select
+
+        ! Upper BCs
+        select case (bc%type_xhi)
+            case (BCTYPE_NEUM)
+                xflux%data(ihi+1,:) = zero
+            case (BCTYPE_DIRI)
+                xflux%data(ihi+1,jlo:jhi) = -two * invdx * phi%data(ihi,jlo:jhi)
+            case (BCTYPE_PERIODIC)
+                xflux%data(ihi+1,jlo:jhi) = xflux%data(ilo,jlo:jhi)
+            case (BCTYPE_CF)
+                ! TODO
+                print*, 'compute_grad_phi: Cannot handle BCTYPE_CF yet.'
+                stop
+        end select
+
+        ! Compute yflux...
+
+        ! Interior
+        yflux%data(ilo:ihi,jlo+1:jhi-1) = invdy * (phi%data(ilo:ihi,jlo+1:jhi-1) - phi%data(ilo:ihi,jlo:jhi-2))
+
+        ! Lower BCs
+        select case (bc%type_ylo)
+            case (BCTYPE_NEUM)
+                yflux%data(:,jlo) = zero
+            case (BCTYPE_DIRI)
+                yflux%data(ilo:ihi,jlo) = two * invdx * phi%data(ilo:ihi,jlo)
+            case (BCTYPE_PERIODIC)
+                yflux%data(ilo:ihi,jlo) = invdx * (phi%data(ilo:ihi,jlo) - phi%data(ilo:ihi,jhi))
+            case (BCTYPE_CF)
+                ! TODO
+                print*, 'compute_grad_phi: Cannot handle BCTYPE_CF yet.'
+                stop
+        end select
+
+        ! Upper BCs
+        select case (bc%type_yhi)
+            case (BCTYPE_NEUM)
+                yflux%data(:,jhi+1) = zero
+            case (BCTYPE_DIRI)
+                yflux%data(ilo:ihi,jhi+1) = two * invdx * phi%data(ilo:ihi,jhi)
+            case (BCTYPE_PERIODIC)
+                yflux%data(ilo:ihi,jhi+1) = yflux%data(ilo:ihi,jlo)
+            case (BCTYPE_CF)
+                ! TODO
+                print*, 'compute_grad_phi: Cannot handle BCTYPE_CF yet.'
+                stop
+        end select
+    end subroutine compute_grad_phi
+
+
+    ! ------------------------------------------------------------------------------
+    ! Computes J*Div[Flux].
+    ! We multiply by J (that is, don't divide by J) because the rhs is expected to
+    ! be scaled by J.
+    ! *flux is expected to be face-centered with BCs computed.
+    ! div is expected to be cell-centered with no ghosts.
+    ! ------------------------------------------------------------------------------
+    subroutine div_flux (div, xflux, yflux)
+        type(box_data), intent(inout) :: div
+        type(box_data), intent(in)    :: xflux, yflux
+
+        real(dp)                      :: invdx, invdy
+        integer                       :: ilo, ihi, jlo, jhi
+
+        invdx = one / div%valid%dx
+        invdy = one / div%valid%dy
+
+        ilo = div%valid%ilo
+        ihi = div%valid%ihi
+        jlo = div%valid%jlo
+        jhi = div%valid%jhi
+
+
+        div%data(ilo:ihi,jlo:jhi) = &
+              invdx * (xflux%data(ilo+1:ihi+1,jlo:jhi) - xflux%data(ilo:ihi,jlo:jhi)) &
+            + invdy * (yflux%data(ilo:ihi,jlo+1:jhi+1) - yflux%data(ilo:ihi,jlo:jhi))
+
+    end subroutine div_flux
+
+
+end module MGPoisson2D
 
