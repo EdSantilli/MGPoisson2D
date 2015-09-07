@@ -982,7 +982,6 @@ end module ArrayUtils
 module MGPoisson2D
     use ArrayUtils
     implicit none
-    private
 
     save
 
@@ -1015,20 +1014,114 @@ contains
 
 
     ! ------------------------------------------------------------------------------
+    ! Computes partial derivatives.
+    ! phi is expected to be cell-centered with ghosts filled if needed.
+    ! pd is expected to be face-centered with no ghosts.
+    !
+    ! NOTE: This function only uses ghosts if we are differentiating in the
+    !       nodal direction.
+    ! NOTE: pd must be nodal in exactly one direction.
+    ! ------------------------------------------------------------------------------
+    subroutine compute_pd (pd, phi, dir)
+        type(box_data), intent(inout) :: pd
+        type(box_data), intent(in)    :: phi
+        integer, intent(in)           :: dir
+
+        real(dp)                      :: scale
+        integer                       :: ilo, ihi, jlo, jhi
+        integer                       :: nodedir
+
+        ilo = phi%valid%ilo
+        ihi = phi%valid%ihi
+        jlo = phi%valid%jlo
+        jhi = phi%valid%jhi
+
+        ! Find the nodal direction
+        nodedir = 1
+        if (pd%offj .eq. 0) nodedir = 2
+
+        ! Compute xflux...
+
+        if (dir .eq. 1) then
+            if (nodedir .eq. dir) then
+                ! TODO: Need to fill ghosts.
+                scale = one / phi%valid%dx
+                pd%data(ilo:ihi+1,jlo:jhi) = scale * (phi%data(ilo:ihi+1,jlo:jhi) - phi%data(ilo-1:ihi,jlo:jhi))
+            else
+                scale = fourth / phi%valid%dx
+
+                ! Away from y boundaries...
+
+                ! Interior
+                pd%data(ilo+1:ihi-1,jlo+1:jhi) = scale * (  phi%data(ilo+2:ihi,jlo+1:jhi) - phi%data(ilo:ihi-2,jlo+1:jhi) &
+                                                          + phi%data(ilo+2:ihi,jlo:jhi-1) - phi%data(ilo:ihi-2,jlo:jhi-1)  )
+                ! Upper x boundary
+                pd%data(ihi,jlo+1:jhi) = scale * (  three*phi%data(ihi,jlo+1:jhi) - four*phi%data(ihi-1,jlo+1:jhi) + phi%data(ihi-2,jlo+1:jhi) &
+                                                  + three*phi%data(ihi,jlo:jhi-1) - four*phi%data(ihi-1,jlo:jhi-1) + phi%data(ihi-2,jlo:jhi-1)  )
+
+                ! Lower x boundary
+                pd%data(ilo,jlo+1:jhi) = -scale * (  three*phi%data(ilo,jlo+1:jhi) - four*phi%data(ilo+1,jlo+1:jhi) + phi%data(ilo+2,jlo+1:jhi) &
+                                                   + three*phi%data(ilo,jlo:jhi-1) - four*phi%data(ilo+1,jlo:jhi-1) + phi%data(ilo+2,jlo:jhi-1)  )
+
+                ! Lower y boundary
+                pd%data(ilo:ihi,jlo) = two*pd%data(ilo:ihi,jlo+1) - pd%data(ilo:ihi,jlo+2)
+
+                ! Upper y boundary
+                pd%data(ilo:ihi,jhi+1) = two*pd%data(ilo:ihi,jhi) - pd%data(ilo:ihi,jhi-1)
+            endif
+        else
+            if (nodedir .eq. dir) then
+                ! TODO: Need to fill ghosts.
+                scale = one / phi%valid%dy
+                pd%data(ilo:ihi,jlo:jhi+1) = scale * (phi%data(ilo:ihi,jlo:jhi+1) - phi%data(ilo:ihi,jlo-1:jhi))
+            else
+                scale = fourth / phi%valid%dy
+
+                ! Away from x boundaries...
+
+                ! Interior
+                pd%data(ilo+1:ihi,jlo+1:jhi-1) = scale * (  phi%data(ilo+1:ihi,jlo+2:jhi) - phi%data(ilo+1:ihi,jlo:jhi-2) &
+                                                          + phi%data(ilo:ihi-1,jlo+2:jhi) - phi%data(ilo:ihi-1,jlo:jhi-2)  )
+                ! Upper y boundary
+                pd%data(ilo+1:ihi,jhi) = scale * (  three*phi%data(ilo+1:ihi,jhi) - four*phi%data(ilo+1:ihi,jhi-1) + phi%data(ilo+1:ihi,jhi-2) &
+                                                  + three*phi%data(ilo:ihi-1,jhi) - four*phi%data(ilo:ihi-1,jhi-1) + phi%data(ilo:ihi-1,jhi-2)  )
+
+                ! Lower y boundary
+                pd%data(ilo+1:ihi,jlo) = -scale * (  three*phi%data(ilo+1:ihi,jlo) - four*phi%data(ilo+1:ihi,jlo+1) + phi%data(ilo+1:ihi,jlo+2) &
+                                                   + three*phi%data(ilo:ihi-1,jlo) - four*phi%data(ilo:ihi-1,jlo+1) + phi%data(ilo:ihi-1,jlo+2)  )
+
+                ! Lower x boundary
+                pd%data(ilo,jlo:jhi) = two*pd%data(ilo+1,jlo:jhi) - pd%data(ilo+2,jlo:jhi)
+
+                ! Upper x boundary
+                pd%data(ihi+1,jlo:jhi) = two*pd%data(ihi,jlo:jhi) - pd%data(ihi-1,jlo:jhi)
+            endif
+        endif
+
+    end subroutine compute_pd
+
+
+    ! ------------------------------------------------------------------------------
     ! Computes J*Grad[Phi].
-    ! phi is expected to be cell-centered.
+    ! phi is expected to be cell-centered and have at least 1 ghost layer.
     ! *flux is expected to be face-centered with no ghosts.
     ! bc* = 0 for Neum, 1 for Diri, 2 for Periodic, 3 for CF.
-    !
-    ! NOTE: This function does not use ghosts.
     ! ------------------------------------------------------------------------------
-    subroutine compute_grad_phi (xflux, yflux, phi, bc)
+    subroutine compute_grad (xflux, yflux, phi, geo, bc, homog)
         type(box_data), intent(inout) :: xflux, yflux
-        type(box_data), intent(in)    :: phi
+        type(box_data), intent(inout) :: phi
         type(bdry_data), intent(in)   :: bc
+        type(geo_data), intent(in)    :: geo
+        logical, intent(in)           :: homog
 
         real(dp)                      :: invdx, invdy
         integer                       :: ilo, ihi, jlo, jhi
+
+        type(box_data)                :: pdx, pdy
+
+        ! Allocate scratch space
+        call define_box_data (pdx, xflux)
+        call define_box_data (pdy, yflux)
 
         invdx = one / phi%valid%dx
         invdy = one / phi%valid%dy
@@ -1038,72 +1131,32 @@ contains
         jlo = phi%valid%jlo
         jhi = phi%valid%jhi
 
+        ! Fill ghosts
+        call fill_ghosts (phi, bc, geo, homog, .false.)
+
         ! Compute xflux...
-
-        ! Interior
-        xflux%data(ilo+1:ihi-1,jlo:jhi) = invdx * (phi%data(ilo+1:ihi-1,jlo:jhi) - phi%data(ilo:ihi-2,jlo:jhi))
-
-        ! Lower BCs
-        select case (bc%type_xlo)
-            case (BCTYPE_NEUM)
-                xflux%data(ilo,:) = zero
-            case (BCTYPE_DIRI)
-                xflux%data(ilo,jlo:jhi) = two * invdx * phi%data(ilo,jlo:jhi)
-            case (BCTYPE_PERIODIC)
-                xflux%data(ilo,jlo:jhi) = invdx * (phi%data(ilo,jlo:jhi) - phi%data(ihi,jlo:jhi))
-            case (BCTYPE_CF)
-                ! TODO
-                print*, 'compute_grad_phi: Cannot handle BCTYPE_CF yet.'
-                stop
-        end select
-
-        ! Upper BCs
-        select case (bc%type_xhi)
-            case (BCTYPE_NEUM)
-                xflux%data(ihi+1,:) = zero
-            case (BCTYPE_DIRI)
-                xflux%data(ihi+1,jlo:jhi) = -two * invdx * phi%data(ihi,jlo:jhi)
-            case (BCTYPE_PERIODIC)
-                xflux%data(ihi+1,jlo:jhi) = xflux%data(ilo,jlo:jhi)
-            case (BCTYPE_CF)
-                ! TODO
-                print*, 'compute_grad_phi: Cannot handle BCTYPE_CF yet.'
-                stop
-        end select
+        call compute_pd (xflux, phi, 1)
+        call compute_pd (pdx, phi, 2)
+        xflux%data(ilo:ihi+1,jlo:jhi) = geo%Jgup_xx%data(ilo:ihi+1,jlo:jhi) * xflux%data(ilo:ihi+1,jlo:jhi) &
+                                      + geo%Jgup_xy%data(ilo:ihi+1,jlo:jhi) * pdx%data(ilo:ihi+1,jlo:jhi)
 
         ! Compute yflux...
+        call compute_pd (pdy, phi, 1)
+        call compute_pd (yflux, phi, 2)
+        yflux%data(ilo:ihi,jlo:jhi+1) = geo%Jgup_yx%data(ilo:ihi,jlo:jhi+1) * pdy%data(ilo:ihi,jlo:jhi+1) &
+                                      + geo%Jgup_yy%data(ilo:ihi,jlo:jhi+1) * yflux%data(ilo:ihi,jlo:jhi+1)
 
-        ! Interior
-        yflux%data(ilo:ihi,jlo+1:jhi-1) = invdy * (phi%data(ilo:ihi,jlo+1:jhi-1) - phi%data(ilo:ihi,jlo:jhi-2))
+        ! Set boundary fluxes
+        xflux%data(ilo,:) = bc%data_xlo
+        xflux%data(ihi+1,:) = bc%data_xhi
+        yflux%data(:,jlo) = bc%data_ylo
+        yflux%data(:,jhi+1) = bc%data_yhi
 
-        ! Lower BCs
-        select case (bc%type_ylo)
-            case (BCTYPE_NEUM)
-                yflux%data(:,jlo) = zero
-            case (BCTYPE_DIRI)
-                yflux%data(ilo:ihi,jlo) = two * invdx * phi%data(ilo:ihi,jlo)
-            case (BCTYPE_PERIODIC)
-                yflux%data(ilo:ihi,jlo) = invdx * (phi%data(ilo:ihi,jlo) - phi%data(ilo:ihi,jhi))
-            case (BCTYPE_CF)
-                ! TODO
-                print*, 'compute_grad_phi: Cannot handle BCTYPE_CF yet.'
-                stop
-        end select
+        ! Free memory
+        call undefine_box_data (pdx)
+        call undefine_box_data (pdy)
 
-        ! Upper BCs
-        select case (bc%type_yhi)
-            case (BCTYPE_NEUM)
-                yflux%data(:,jhi+1) = zero
-            case (BCTYPE_DIRI)
-                yflux%data(ilo:ihi,jhi+1) = two * invdx * phi%data(ilo:ihi,jhi)
-            case (BCTYPE_PERIODIC)
-                yflux%data(ilo:ihi,jhi+1) = yflux%data(ilo:ihi,jlo)
-            case (BCTYPE_CF)
-                ! TODO
-                print*, 'compute_grad_phi: Cannot handle BCTYPE_CF yet.'
-                stop
-        end select
-    end subroutine compute_grad_phi
+    end subroutine compute_grad
 
 
     ! ------------------------------------------------------------------------------
@@ -1113,7 +1166,7 @@ contains
     ! *flux is expected to be face-centered with BCs computed.
     ! div is expected to be cell-centered with no ghosts.
     ! ------------------------------------------------------------------------------
-    subroutine div_flux (div, xflux, yflux)
+    subroutine compute_div (div, xflux, yflux)
         type(box_data), intent(inout) :: div
         type(box_data), intent(in)    :: xflux, yflux
 
@@ -1128,13 +1181,36 @@ contains
         jlo = div%valid%jlo
         jhi = div%valid%jhi
 
-
         div%data(ilo:ihi,jlo:jhi) = &
               invdx * (xflux%data(ilo+1:ihi+1,jlo:jhi) - xflux%data(ilo:ihi,jlo:jhi)) &
             + invdy * (yflux%data(ilo:ihi,jlo+1:jhi+1) - yflux%data(ilo:ihi,jlo:jhi))
 
-    end subroutine div_flux
+    end subroutine compute_div
 
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    subroutine compute_laplacian (lap, phi, geo)
+        ! type(box_data), intent(inout) :: div
+        ! type(box_data), intent(in)    :: xflux, yflux
+
+        ! real(dp)                      :: invdx, invdy
+        ! integer                       :: ilo, ihi, jlo, jhi
+
+        ! invdx = one / div%valid%dx
+        ! invdy = one / div%valid%dy
+
+        ! ilo = div%valid%ilo
+        ! ihi = div%valid%ihi
+        ! jlo = div%valid%jlo
+        ! jhi = div%valid%jhi
+
+
+        ! div%data(ilo:ihi,jlo:jhi) = &
+        !       invdx * (xflux%data(ilo+1:ihi+1,jlo:jhi) - xflux%data(ilo:ihi,jlo:jhi)) &
+        !     + invdy * (yflux%data(ilo:ihi,jlo+1:jhi+1) - yflux%data(ilo:ihi,jlo:jhi))
+
+    end subroutine compute_laplacian
 
 end module MGPoisson2D
 

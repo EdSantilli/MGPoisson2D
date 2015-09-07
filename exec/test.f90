@@ -58,34 +58,34 @@ program test
     print*
 
 
-    ! Test 1: Geometry
-    errnorm = bogus_val
-    do r = 1, maxr
-        errnorm(r) = test_geometry (geo(r))
-    enddo
-    call compute_conv_rate (rate, errnorm)
-    print*, 'Test 1: geometry'
-    print*, 'Error norm                rate'
-    print*, errnorm(1)
-    do r = 2, maxr
-        print*, errnorm(r), rate(r-1)
-    enddo
-    print*
+    ! ! Test 1: Geometry
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_geometry (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 1: geometry'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
+    ! print*
 
 
-    ! Test 2: Non-uniform Dirichlet BCs
-    errnorm = bogus_val
-    do r = 1, maxr
-        errnorm(r) = test_nonuniform_diri_bcs (geo(r))
-    enddo
-    call compute_conv_rate (rate, errnorm)
-    print*, 'Test 2: Non-uniform Dirichlet BCs'
-    print*, 'Error norm                rate'
-    print*, errnorm(1)
-    do r = 2, maxr
-        print*, errnorm(r), rate(r-1)
-    enddo
-    print*
+    ! ! Test 2: Non-uniform Dirichlet BCs
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_nonuniform_diri_bcs (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 2: Non-uniform Dirichlet BCs'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
+    ! print*
 
 
     ! ! Test 3: Non-uniform Neumann BCs
@@ -101,6 +101,19 @@ program test
     !     print*, errnorm(r), rate(r-1)
     ! enddo
 
+    ! Test 4: Staggered partial derivatives
+    errnorm = bogus_val
+    do r = 1, maxr
+        errnorm(r) = test_derivatives (geo(r))
+    enddo
+    call compute_conv_rate (rate, errnorm)
+    print*, 'Test 4: Staggered partial derivatives'
+    print*, 'Error norm                rate'
+    print*, errnorm(1)
+    do r = 2, maxr
+        print*, errnorm(r), rate(r-1)
+    enddo
+    print*
 
 
 
@@ -1261,5 +1274,85 @@ contains
         call undefine_box_data (bdy_yhi)
 
     end function test_nonuniform_neum_bcs
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    function test_derivatives (geo) result (res)
+        use MGPoisson2D
+        implicit none
+
+        real(dp)                   :: res
+        type(geo_data), intent(in) :: geo
+
+        type(box)                  :: valid
+        integer                    :: ilo, ihi, jlo, jhi, i, j
+        real(dp)                   :: dx, dy
+        type(box_data)             :: bdx, bdy
+
+        type(box_data)             :: soln, state, phi
+
+        valid = geo%J%valid
+
+        ilo = valid%ilo
+        ihi = valid%ihi
+        jlo = valid%jlo
+        jhi = valid%jhi
+
+        dx = valid%dx
+        dy = valid%dy
+
+        ! Compute cell-centered Cartesian locations
+        call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
+        call define_box_data (bdy, bdx)
+        do j = jlo-1, jhi+1
+            do i = ilo-1, ihi+1
+                bdx%data(i,j) = (i + half) * dx
+                bdy%data(i,j) = (j + half) * dy
+            enddo
+        enddo
+
+        ! Define phi
+        call define_box_data (phi, bdx)
+        ! phi%data = (bdx%data**3) * (bdy%data**3)
+        phi%data = bogus_val
+        ! phi%data(:,jlo:jhi) = (bdx%data(:,jlo:jhi)**3) * (bdy%data(:,jlo:jhi)**3)
+        phi%data(ilo:ihi,:) = (bdx%data(ilo:ihi,:)**3) * (bdy%data(ilo:ihi,:)**3)
+
+        ! Compute x derivative
+        call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
+        state%data = bogus_val
+        call compute_pd (state, phi, 2)
+        ! state%data(ilo:ihi+1,jlo:jhi) = (phi%data(ilo:ihi+1,jlo:jhi) - phi%data(ilo-1:ihi,jlo:jhi)) / dx
+        ! state%data(ilo:ihi,jlo:jhi+1) = (  phi%data(ilo+1:ihi+1,jlo:jhi+1) - phi%data(ilo-1:ihi-1,jlo:jhi+1) &
+        !                                  + phi%data(ilo+1:ihi+1,jlo-1:jhi) - phi%data(ilo-1:ihi-1,jlo-1:jhi)  ) * fourth / dx
+
+        ! Re-center Cartesian locations
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdy)
+        call define_box_data (bdx, state)
+        call define_box_data (bdy, state)
+        do j = jlo, jhi + 1 - state%offj
+            do i = ilo, ihi + 1 - state%offi
+                bdx%data(i,j) = (i + state%offx) * dx
+                bdy%data(i,j) = (j + state%offy) * dy
+            enddo
+        enddo
+
+        ! Define true soln
+        call define_box_data (soln, state)
+        soln%data = (bdx%data**3) * three*(bdy%data**2)
+
+        ! Compute norm
+        state%data = state%data - soln%data
+        res = pnorm (state, state%valid, norm_type)
+
+        ! Free memory
+        call undefine_box_data (state)
+        call undefine_box_data (soln)
+        call undefine_box_data (phi)
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdy)
+
+    end function test_derivatives
 
 end program test
