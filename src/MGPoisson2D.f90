@@ -973,6 +973,28 @@ contains
 
     end subroutine fill_ghosts
 
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    subroutine fill_boundary_fluxes (xflux, yflux, bc, homog)
+        type(box_data), intent(inout) :: xflux, yflux
+        type(bdry_data), intent(in)   :: bc
+        logical, intent(in)           :: homog
+
+        if (homog) then
+            if (bc%type_xlo .eq. BCTYPE_NEUM) xflux%data(xflux%valid%ilo,:) = zero
+            if (bc%type_xhi .eq. BCTYPE_NEUM) xflux%data(xflux%valid%ihi,:) = zero
+            if (bc%type_ylo .eq. BCTYPE_NEUM) yflux%data(:,yflux%valid%jlo) = zero
+            if (bc%type_yhi .eq. BCTYPE_NEUM) yflux%data(:,yflux%valid%jhi) = zero
+        else
+            if (bc%type_xlo .eq. BCTYPE_NEUM) xflux%data(xflux%valid%ilo,:) = bc%data_xlo
+            if (bc%type_xhi .eq. BCTYPE_NEUM) xflux%data(xflux%valid%ihi,:) = bc%data_xhi
+            if (bc%type_ylo .eq. BCTYPE_NEUM) yflux%data(:,yflux%valid%jlo) = bc%data_ylo
+            if (bc%type_yhi .eq. BCTYPE_NEUM) yflux%data(:,yflux%valid%jhi) = bc%data_yhi
+        endif
+
+    end subroutine fill_boundary_fluxes
+
 end module ArrayUtils
 
 
@@ -1106,22 +1128,19 @@ contains
     ! phi is expected to be cell-centered and have at least 1 ghost layer.
     ! *flux is expected to be face-centered with no ghosts.
     ! bc* = 0 for Neum, 1 for Diri, 2 for Periodic, 3 for CF.
+    ! xwk is workspace that must be node-centered in x and cell-centered in y.
+    ! ywk is workspace that must be node-centered in y and cell-centered in x.
     ! ------------------------------------------------------------------------------
-    subroutine compute_grad (xflux, yflux, phi, geo, bc, homog)
+    subroutine compute_grad (xflux, yflux, phi, geo, bc, homog, xwk, ywk)
         type(box_data), intent(inout) :: xflux, yflux
         type(box_data), intent(inout) :: phi
-        type(bdry_data), intent(in)   :: bc
         type(geo_data), intent(in)    :: geo
+        type(bdry_data), intent(in)   :: bc
         logical, intent(in)           :: homog
+        type(box_data), intent(inout) :: xwk, ywk
 
         real(dp)                      :: invdx, invdy
         integer                       :: ilo, ihi, jlo, jhi
-
-        type(box_data)                :: pdx, pdy
-
-        ! Allocate scratch space
-        call define_box_data (pdx, xflux)
-        call define_box_data (pdy, yflux)
 
         invdx = one / phi%valid%dx
         invdy = one / phi%valid%dy
@@ -1136,25 +1155,18 @@ contains
 
         ! Compute xflux...
         call compute_pd (xflux, phi, 1)
-        call compute_pd (pdx, phi, 2)
+        call compute_pd (xwk, phi, 2)
         xflux%data(ilo:ihi+1,jlo:jhi) = geo%Jgup_xx%data(ilo:ihi+1,jlo:jhi) * xflux%data(ilo:ihi+1,jlo:jhi) &
-                                      + geo%Jgup_xy%data(ilo:ihi+1,jlo:jhi) * pdx%data(ilo:ihi+1,jlo:jhi)
+                                      + geo%Jgup_xy%data(ilo:ihi+1,jlo:jhi) * xwk%data(ilo:ihi+1,jlo:jhi)
 
         ! Compute yflux...
-        call compute_pd (pdy, phi, 1)
+        call compute_pd (ywk, phi, 1)
         call compute_pd (yflux, phi, 2)
-        yflux%data(ilo:ihi,jlo:jhi+1) = geo%Jgup_yx%data(ilo:ihi,jlo:jhi+1) * pdy%data(ilo:ihi,jlo:jhi+1) &
+        yflux%data(ilo:ihi,jlo:jhi+1) = geo%Jgup_yx%data(ilo:ihi,jlo:jhi+1) * ywk%data(ilo:ihi,jlo:jhi+1) &
                                       + geo%Jgup_yy%data(ilo:ihi,jlo:jhi+1) * yflux%data(ilo:ihi,jlo:jhi+1)
 
         ! Set boundary fluxes
-        xflux%data(ilo,:) = bc%data_xlo
-        xflux%data(ihi+1,:) = bc%data_xhi
-        yflux%data(:,jlo) = bc%data_ylo
-        yflux%data(:,jhi+1) = bc%data_yhi
-
-        ! Free memory
-        call undefine_box_data (pdx)
-        call undefine_box_data (pdy)
+        call fill_boundary_fluxes (xflux, yflux, bc, homog)
 
     end subroutine compute_grad
 
@@ -1190,27 +1202,152 @@ contains
 
     ! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
-    subroutine compute_laplacian (lap, phi, geo)
-        ! type(box_data), intent(inout) :: div
-        ! type(box_data), intent(in)    :: xflux, yflux
+    subroutine compute_laplacian (lap, phi, geo, bc, homog)
+        type(box_data), intent(inout) :: lap
+        type(box_data), intent(inout) :: phi
+        type(geo_data), intent(in)    :: geo
+        type(bdry_data), intent(in)   :: bc
+        logical, intent(in)           :: homog
 
-        ! real(dp)                      :: invdx, invdy
-        ! integer                       :: ilo, ihi, jlo, jhi
+        type(box_data)                :: xflux, yflux
+        type(box_data)                :: xwk, ywk
 
-        ! invdx = one / div%valid%dx
-        ! invdy = one / div%valid%dy
+        ! Allocate scratch space
+        call define_box_data (xflux, phi%valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (yflux, phi%valid, 0, 0, BD_CELL, BD_NODE)
+        call define_box_data (xwk, xflux)
+        call define_box_data (ywk, yflux)
 
-        ! ilo = div%valid%ilo
-        ! ihi = div%valid%ihi
-        ! jlo = div%valid%jlo
-        ! jhi = div%valid%jhi
+        ! Compute Div[Grad[phi]]
+        call compute_grad (xflux, yflux, phi, geo, bc, homog, xwk, ywk)
+        call compute_div (lap, xflux, yflux)
 
-
-        ! div%data(ilo:ihi,jlo:jhi) = &
-        !       invdx * (xflux%data(ilo+1:ihi+1,jlo:jhi) - xflux%data(ilo:ihi,jlo:jhi)) &
-        !     + invdy * (yflux%data(ilo:ihi,jlo+1:jhi+1) - yflux%data(ilo:ihi,jlo:jhi))
+        ! Free memory
+        call undefine_box_data (xflux)
+        call undefine_box_data (yflux)
+        call undefine_box_data (xwk)
+        call undefine_box_data (ywk)
 
     end subroutine compute_laplacian
+
+
+    ! ------------------------------------------------------------------------------
+    ! Compute res = rhs - L[phi].
+    ! NOTE: res and rhs must be exactly the same size!
+    ! ------------------------------------------------------------------------------
+    subroutine compute_residual (res, rhs, phi, geo, bc, homog)
+        type(box_data), intent(inout) :: res, phi
+        type(box_data), intent(in)    :: rhs
+        type(geo_data), intent(in)    :: geo
+        type(bdry_data), intent(in)   :: bc
+        logical, intent(in)           :: homog
+
+        call compute_laplacian (res, phi, geo, bc, homog)
+        res%data = rhs%data - res%data
+    end subroutine compute_residual
+
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    subroutine relax_gsrb (phi, rhs, geo, bc, homog, &
+                           invdiags, omega, tol, maxiters, rbgs, zerophi)
+        type(box_data), intent(inout) :: phi
+        type(box_data), intent(in)    :: rhs
+        type(geo_data), intent(in)    :: geo
+        type(bdry_data), intent(in)   :: bc
+        logical, intent(in)           :: homog
+        type(box_data), intent(in)    :: invdiags
+        real(dp), intent(in)          :: omega
+        real(dp), intent(in)          :: tol
+        integer, intent(in)           :: maxiters
+        integer, intent(in)           :: rbgs
+        integer, intent(in)           :: zerophi
+
+        ! ! Do we even need to be here?
+        ! if (maxIters .eq. 0) then
+        !     return
+        ! endif
+
+        ! dxScale = 1.0d0 / (dx**2)
+        ! dyScale = 1.0d0 / (dy**2)
+
+        ! if (tol .gt. 0.0d0) then
+        !     ! Allocate workspace
+        !     allocate (r(1:nx, 1:ny), stat=ierr)
+        !     if (ierr .ne. 0) then
+        !         print*, 'Out of memory'
+        !         call MAYDAYERROR()
+        !     endif
+        ! endif
+
+        ! ! Initialize phi to zero if necessary
+        ! if (zeroPhi .ne. 0) then
+        !     phi = 0.0d0
+        ! endif
+
+        ! ! Compute initial residual
+        ! if (tol .gt. 0.0d0) then
+        !     call MGPoissonSolverSerial2D_Residual(r, rhs, phi, nx, ny, ngx, ngy, dx, dy, &
+        !                                           bclox, bcloy, bchix, bchiy)
+        !     call MGPoissonSolverSerial2D_InnerProd(resScale, r, r, nx, ny)
+        !     relres(0) = 1.0d0
+        !     print*, 'scale sq res = ', resScale
+        !     print*, 'iter ', 0, ': sq res = ', relres(0)
+        ! endif
+
+        ! ! Iterate
+        ! do iter = 1, maxIters
+        !     if (doRB .eq. 0) then
+        !         ! Update phi via standard Gauss-Seidel
+        !         call MGPoissonSolverSerial2D_fillGhostsHomog(phi, nx, ny, ngx, ngy, &
+        !                                                      dx, dy, crseAMRdx, crseAMRdy, &
+        !                                                      bclox, bcloy, bchix, bchiy, 1)
+        !         do j = 1, ny
+        !             do i = 1, nx
+        !                 lphi = dxScale * (phi(i+1,j) + phi(i-1,j)) &
+        !                      + dyScale * (phi(i,j+1) + phi(i,j-1))
+        !                 newPhi = (rhs(i,j) - lphi) * invDiags(i,j)
+        !                 phi(i,j) = (1.0d0-omega)*phi(i,j) + omega*newPhi
+        !             enddo
+        !         enddo
+        !     else
+        !         ! Update phi via Red-Black Gauss-Seidel
+        !         do redBlack = 0,1
+        !             call MGPoissonSolverSerial2D_fillGhostsHomog(phi, nx, ny, ngx, ngy, &
+        !                                                          dx, dy, crseAMRdx, crseAMRdy, &
+        !                                                          bclox, bcloy, bchix, bchiy, 1)
+        !             do j = 1, ny
+        !                 imin = 1 + mod(redBlack+j+1, 2)
+        !                 do i = imin, nx, 2
+        !                     lphi = dxScale * (phi(i+1,j) + phi(i-1,j)) &
+        !                          + dyScale * (phi(i,j+1) + phi(i,j-1))
+        !                     newPhi = (rhs(i,j) - lphi) * invDiags(i,j)
+        !                     phi(i,j) = (1.0d0-omega)*phi(i,j) + omega*newPhi
+        !                 enddo
+        !             enddo
+        !         enddo
+        !     endif
+
+        !     ! Compute new residual
+        !     if (tol .gt. 0.0d0) then
+        !         call MGPoissonSolverSerial2D_Residual(r, rhs, phi, nx, ny, ngx, ngy, dx, dy, &
+        !                                               bclox, bcloy, bchix, bchiy)
+        !         call MGPoissonSolverSerial2D_InnerProd(relres(iter), r, r, nx, ny)
+        !         relres(iter) = relres(iter) / resScale
+        !         print*, 'iter ', iter, ': sq res = ', relres(iter)
+
+        !         ! Did we converge?
+        !         if (relres(iter) .le. tol) then
+        !             print*, "Converged."
+        !             exit
+        !         endif
+        !     endif
+        ! enddo
+
+        ! ! Free memory
+        ! if (allocated( r)) deallocate( r)
+
+    end subroutine relax_gsrb
 
 end module MGPoisson2D
 
