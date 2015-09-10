@@ -196,6 +196,64 @@ module arrayutils
 contains
 
     ! --------------------------------------------------------------------------
+    ! Sends a box_data to gnuplot
+    ! --------------------------------------------------------------------------
+    subroutine plot (x, y, data)
+        type(box_data), intent(in) :: x, y, data
+
+        ! integer :: plot_type                                 ! 1 for linear plot, 2 for log plot, 3 for log-log plot
+        ! character(len=*) :: xlabel,ylabel,title1,title2      ! plot axis labels and title
+        ! !---------------
+        ! integer :: i
+        ! integer :: ret
+        ! !---------------
+
+        ! ! write data on two separate files
+        ! open (10, access='SEQUENTIAL', file='xydata1.dat')
+        ! do i = 1,n1
+        !    write(10,*) xydata1(i,1),xydata1(i,2)
+        ! enddo
+        ! CLOSE(10,STATUS='KEEP')
+
+        ! OPEN(10,ACCESS='SEQUENTIAL',FILE='xydata2.dat')
+        ! do i=1,n2
+        !    write(10,*) xydata2(i,1),xydata2(i,2)
+        ! enddo
+        ! CLOSE(10,STATUS='KEEP')
+
+        ! ! create gnuplot command file
+        ! OPEN(10,ACCESS='SEQUENTIAL',FILE='gp.txt')
+        ! write(10,*) 'set terminal postscript'
+        ! write(10,*) 'set output "plot.ps"'
+        ! write(10,*) 'set xlabel '//'"'//TRIM(xlabel)//'"'
+        ! write(10,*) 'set ylabel '//'"'//TRIM(ylabel)//'"'
+        ! if (plot_type==2) write(10,*) 'set log y'
+        ! if (plot_type==3) then
+        !    write(10,*) 'set log x'
+        !    write(10,*) 'set log y'
+        ! endif
+
+        ! if(n1>0.AND.n2>0) then
+        !     write(10,*) 'plot "xydata1.dat" using 1:2 with lines title "'//TRIM(title1)//&
+        !                 &'", "xydata2.dat" using 1:2 with lines title "'//TRIM(title2)//'"'
+        ! endif
+
+        ! if(n1>0.AND.n2==0) write(10,*) 'plot "xydata1.dat" using 1:2 with lines title "'//TRIM(title1)//'"'
+
+        ! if(n2>0.AND.n1==0) write(10,*) 'plot "xydata2.dat" using 1:2 with lines title "'//TRIM(title2)//'"'
+
+        ! CLOSE(10,STATUS='KEEP')
+
+        ! ! plot curve with gnuplot and cleanup files
+        ! ret=SYSTEM('gnuplot gp.txt')
+        ! ret=SYSTEM('rm gp.txt')
+        ! ret=SYSTEM('rm xydata1.dat')
+        ! ret=SYSTEM('rm xydata2.dat')
+
+    end subroutine plot
+
+
+    ! --------------------------------------------------------------------------
     ! This makes setting up a box object a one line operation.
     ! --------------------------------------------------------------------------
     pure subroutine define_box (bx, ilo, ihi, jlo, jhi, dx, dy)
@@ -804,12 +862,13 @@ contains
 
                 case (BCTYPE_DIRI)
                     if (homog) then
-                        phi%data(ilo-1, jlo:jhi) = -phi%data(ilo, jlo:jhi)
+                        ! phi%data(ilo-1, jlo:jhi) = -phi%data(ilo, jlo:jhi)
+                        phi%data(ilo-1,jlo:jhi) = third * (-six*phi%data(ilo,jlo:jhi) + phi%data(ilo+1,jlo:jhi))
                     else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
                         bcval = two * bcd%data_xlo(1)
-                        phi%data(ilo-1, jlo:jhi) = bcval - phi%data(ilo, jlo:jhi)
+                        phi%data(ilo-1,jlo:jhi) = third * (eight*bcval - six*phi%data(ilo,jlo:jhi) + phi%data(ilo+1,jlo:jhi))
                     else
-                        phi%data(ilo-1, jlo:jhi) = two * bcd%data_xlo(jlo:jhi) - phi%data(ilo, jlo:jhi)
+                        phi%data(ilo-1,jlo:jhi) = third * (eight*bcd%data_xlo(jlo:jhi) - six*phi%data(ilo,jlo:jhi) + phi%data(ilo+1,jlo:jhi))
                     endif
 
                 case (BCTYPE_PERIODIC)
@@ -843,12 +902,15 @@ contains
 
                 case (BCTYPE_DIRI)
                     if (homog) then
-                        phi%data(ihi+1, jlo:jhi) = -phi%data(ihi, jlo:jhi)
+                        ! phi%data(ihi+1, jlo:jhi) = -phi%data(ihi, jlo:jhi)
+                        phi%data(ihi+1,jlo:jhi) = third * (-six*phi%data(ihi,jlo:jhi) + phi%data(ihi-1,jlo:jhi))
                     else if (bcd%mode_xhi .eq. BCMODE_UNIFORM) then
                         bcval = two * bcd%data_xhi(1)
-                        phi%data(ihi+1, jlo:jhi) = bcval - phi%data(ihi, jlo:jhi)
+                        phi%data(ihi+1,jlo:jhi) = third * (eight*bcval - six*phi%data(ihi,jlo:jhi) + phi%data(ihi-1,jlo:jhi))
                     else
-                        phi%data(ihi+1, jlo:jhi) = two * bcd%data_xhi(jlo:jhi) - phi%data(ihi, jlo:jhi)
+                        ! phi%data(ihi+1, jlo:jhi) = two * bcd%data_xhi(jlo:jhi) - phi%data(ihi, jlo:jhi)     ! CAUSES AN ERROR
+                        phi%data(ihi+1,jlo:jhi) = third * (eight*bcd%data_xhi(jlo:jhi) - six*phi%data(ihi,jlo:jhi) + phi%data(ihi-1,jlo:jhi))
+                        ! phi%data(ihi+1, j) = (128.0d0*bcd%data_xhi(j) - 140.0d0*phi%data(ihi, j) + 70.0d0*phi%data(ihi-1, j) - 28.0d0*phi%data(ihi-2, j) + five*phi%data(ihi-3, j)) / (35.0d0)
                     endif
 
                 case (BCTYPE_PERIODIC)
@@ -904,12 +966,14 @@ contains
 
                 case (BCTYPE_DIRI)
                     if (homog) then
-                        phi%data(ilo:ihi, jlo-1) = -phi%data(ilo:ihi, jlo)
+                        ! phi%data(ilo:ihi, jlo-1) = -phi%data(ilo:ihi, jlo)
+                        phi%data(ilo:ihi,jlo-1) = third * (-six*phi%data(ilo:ihi,jlo) + phi%data(ilo:ihi,jlo+1))
                     else if (bcd%mode_ylo .eq. BCMODE_UNIFORM) then
                         bcval = two * bcd%data_ylo(1)
-                        phi%data(ilo:ihi, jlo-1) = bcval - phi%data(ilo:ihi, jlo)
+                        phi%data(ilo:ihi,jlo-1) = third * (eight*bcval - six*phi%data(ilo:ihi,jlo) + phi%data(ilo:ihi,jlo+1))
                     else
-                        phi%data(ilo:ihi, jlo-1) = two * bcd%data_ylo(ilo:ihi) - phi%data(ilo:ihi, jlo)
+                        ! phi%data(ilo:ihi, jlo-1) = two * bcd%data_ylo(ilo:ihi) - phi%data(ilo:ihi, jlo)
+                        phi%data(ilo:ihi,jlo-1) = third * (eight*bcd%data_ylo(ilo:ihi) - six*phi%data(ilo:ihi,jlo) + phi%data(ilo:ihi,jlo+1))
                     endif
 
                 case (BCTYPE_PERIODIC)
@@ -943,12 +1007,14 @@ contains
 
                 case (BCTYPE_DIRI)
                     if (homog) then
-                        phi%data(ilo:ihi, jhi+1) = -phi%data(ilo:ihi, jhi)
+                        ! phi%data(ilo:ihi, jhi+1) = -phi%data(ilo:ihi, jhi)
+                        phi%data(ilo:ihi,jhi+1) = third * (-six*phi%data(ilo:ihi,jhi) + phi%data(ilo:ihi,jhi-1))
                     else if (bcd%mode_yhi .eq. BCMODE_UNIFORM) then
                         bcval = two * bcd%data_yhi(1)
-                        phi%data(ilo:ihi, jhi+1) = bcval - phi%data(ilo:ihi, jhi)
+                        phi%data(ilo:ihi,jhi+1) = third * (eight*bcval - six*phi%data(ilo:ihi,jhi) + phi%data(ilo:ihi,jhi-1))
                     else
-                        phi%data(ilo:ihi, jhi+1) = two * bcd%data_yhi(ilo:ihi) - phi%data(ilo:ihi, jhi)
+                        ! phi%data(ilo:ihi, jhi+1) = two * bcd%data_yhi(ilo:ihi) - phi%data(ilo:ihi, jhi)
+                        phi%data(ilo:ihi,jhi+1) = third * (eight*bcd%data_yhi(ilo:ihi) - six*phi%data(ilo:ihi,jhi) + phi%data(ilo:ihi,jhi-1))
                     endif
 
                 case (BCTYPE_PERIODIC)
@@ -972,6 +1038,205 @@ contains
         phi%data(ihi+1,jhi+1) = bogus_val
 
     end subroutine fill_ghosts
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    subroutine fill_neum_ghosts_withextrap (phi, extrap, bcd, geo, homog)
+        type(box_data), intent(inout) :: phi
+        type(box_data), intent(in)    :: extrap
+        type(bdry_data), intent(in)   :: bcd
+        type(geo_data), intent(in)    :: geo
+        logical, intent(in)           :: homog
+
+        integer  :: xlo, xhi, ylo, yhi
+        integer  :: ilo, ihi, jlo, jhi
+        integer  :: i, j
+        real(dp) :: dx, dy, bcval
+        real(dp) :: xscale, yscale, cross, dpn, dpf
+
+        real(dp) :: xp, yp, H, L ! TEMP!!!
+
+        if ((phi%offi .ne. BD_CELL) .or. (phi%offj .ne. BD_CELL)) then
+            print*, 'fill_ghosts: Only works with cell-centered data for now.'
+            stop
+        endif
+
+        xlo = bcd%type_xlo
+        xhi = bcd%type_xhi
+        ylo = bcd%type_ylo
+        yhi = bcd%type_yhi
+
+        ilo = phi%valid%ilo
+        ihi = phi%valid%ihi
+        jlo = phi%valid%jlo
+        jhi = phi%valid%jhi
+
+        dx = phi%valid%dx
+        dy = phi%valid%dy
+
+        ! Right now, we can only handle 1 ghost layer.
+        if ((phi%ngx .gt. 1) .or. (phi%ngy .gt. 1)) then
+            print*, 'fill_ghosts: Can only handle 1 ghost layer max.'
+            stop
+        endif
+
+        if (phi%ngx .gt. 0) then
+            ! Lower x ghosts
+            if (xlo .eq. BCTYPE_NEUM) then
+                print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                stop
+                ! if (homog) then
+                !     phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi)
+                ! else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                !     bcval = dx * bcd%data_xlo(1)
+                !     phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi) - bcval
+                ! else
+                !     phi%data(ilo-1, jlo:jhi) = phi%data(ilo, jlo:jhi) - dx * bcd%data_xlo(jlo:jhi)
+                ! endif
+            endif
+
+            ! Upper x ghosts
+            if (xhi .eq. BCTYPE_NEUM) then
+                print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                stop
+                ! if (homog) then
+                !     phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi)
+                ! else if (bcd%mode_xhi .eq. BCMODE_UNIFORM) then
+                !     bcval = dx * bcd%data_xhi(1)
+                !     phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi) + bcval
+                ! else
+                !     phi%data(ihi+1, jlo:jhi) = phi%data(ihi, jlo:jhi) + dx * bcd%data_xhi(jlo:jhi)
+                ! endif
+            endif
+        endif
+
+        if (phi%ngy .gt. 0) then
+            ! Lower y ghosts
+            if (ylo .eq. BCTYPE_NEUM) then
+                j = jlo
+                do i = ilo, ihi
+                    ! Compute cross derivative
+                    ! TODO
+                enddo
+
+                ! if (homog) then
+                !     phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo)
+                ! else if (bcd%mode_ylo .eq. BCMODE_UNIFORM) then
+                !     bcval = dx * bcd%data_ylo(1)
+                !     phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - bcval
+                ! else
+                !     ! phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jlo) - dy * bcd%data_ylo(ilo:ihi)
+
+                !     j = jlo
+                !     i = ilo
+                !     dpn = -(three*phi%data(i,j  ) - four*phi%data(i+1,j  ) + phi%data(i+2,j  )) * half/dx
+                !     dpf = -(three*phi%data(i,j+1) - four*phi%data(i+1,j+1) + phi%data(i+2,j+1)) * half/dx
+                !     cross = half*(three*dpn - dpf) * geo%Jgup_yx%data(i,j)
+                !     phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
+
+                !     do i = ilo+1, ihi-1
+                !         dpn = (phi%data(i+1,j  ) - phi%data(i-1,j  )) * half/dx
+                !         dpf = (phi%data(i+1,j+1) - phi%data(i-1,j+1)) * half/dx
+                !         cross = (threehalves*dpn - half*dpf) * geo%Jgup_yx%data(i,j)
+                !         phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
+                !     enddo
+
+                !     i = ihi
+                !     dpn = (three*phi%data(i,j  ) - four*phi%data(i-1,j  ) + phi%data(i-2,j  )) * half/dx
+                !     dpf = (three*phi%data(i,j+1) - four*phi%data(i-1,j+1) + phi%data(i-2,j+1)) * half/dx
+                !     cross = half*(three*dpn - dpf) * geo%Jgup_yx%data(i,j)
+                !     phi%data(i,j-1) = phi%data(i,j) - (bcd%data_ylo(i)-cross)*dy/geo%Jgup_yy%data(i,j)
+                ! endif
+            endif
+
+            ! Upper y ghosts
+            if (yhi .eq. BCTYPE_NEUM) then
+                print*, 'do_neum = true does not work yet. Besides, you should just set your flux BCs directly.'
+                stop
+                ! if (homog) then
+                !     phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi)
+                ! else if (bcd%mode_yhi .eq. BCMODE_UNIFORM) then
+                !     bcval = dx * bcd%data_yhi(1)
+                !     phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + bcval
+                ! else
+                !     phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jhi) + dy * bcd%data_yhi(ilo:ihi)
+                ! endif
+            endif
+        endif
+
+        ! Put nans in the corner ghosts
+        phi%data(ilo-1,jlo-1) = bogus_val
+        phi%data(ilo-1,jhi+1) = bogus_val
+        phi%data(ihi+1,jlo-1) = bogus_val
+        phi%data(ihi+1,jhi+1) = bogus_val
+
+    end subroutine fill_neum_ghosts_withextrap
+
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    subroutine extrapolate_ghosts (phi, order)
+        type(box_data), intent(inout) :: phi
+        integer, intent(in)           :: order
+
+        integer  :: ilo, ihi, jlo, jhi
+
+        ! Only works with CC data.
+        if ((phi%offi .ne. BD_CELL) .or. (phi%offj .ne. BD_CELL)) then
+            print*, 'extrapolate_ghosts: Only works with cell-centered data.'
+            stop
+        endif
+
+        ! Right now, we can only handle 1 ghost layer at most.
+        if ((phi%ngx .gt. 1) .or. (phi%ngy .gt. 1)) then
+            print*, 'fill_ghosts: Can only handle 1 ghost layer max.'
+            stop
+        endif
+
+        ilo = phi%valid%ilo
+        ihi = phi%valid%ihi
+        jlo = phi%valid%jlo
+        jhi = phi%valid%jhi
+
+        select case (order)
+            case (0)
+                if (phi%ngx .gt. 0) then
+                    phi%data(ilo-1,:) = phi%data(ilo,:)
+                    phi%data(ihi+1,:) = phi%data(ihi,:)
+                endif
+
+                if (phi%ngy .gt. 0) then
+                    phi%data(:,jlo-1) = phi%data(:,jlo)
+                    phi%data(:,jhi+1) = phi%data(:,jhi)
+                endif
+            case (1)
+                if (phi%ngx .gt. 0) then
+                    phi%data(ilo-1,:) = two*phi%data(ilo,:) - phi%data(ilo+1,:)
+                    phi%data(ihi+1,:) = two*phi%data(ihi,:) - phi%data(ihi-1,:)
+                endif
+
+                if (phi%ngy .gt. 0) then
+                    phi%data(:,jlo-1) = two*phi%data(:,jlo) - phi%data(:,jlo+1)
+                    phi%data(:,jhi+1) = two*phi%data(:,jhi) - phi%data(:,jhi-1)
+                endif
+            case (2)
+                if (phi%ngx .gt. 0) then
+                    phi%data(ilo-1,:) = three*(phi%data(ilo,:) - phi%data(ilo+1,:)) + phi%data(ilo+2,:)
+                    phi%data(ihi+1,:) = three*(phi%data(ihi,:) - phi%data(ihi-1,:)) + phi%data(ihi-2,:)
+                endif
+
+                if (phi%ngy .gt. 0) then
+                    phi%data(:,jlo-1) = three*(phi%data(:,jlo) - phi%data(:,jlo+1)) + phi%data(:,jlo+2)
+                    phi%data(:,jhi+1) = three*(phi%data(:,jhi) - phi%data(:,jhi-1)) + phi%data(:,jhi-2)
+                endif
+            case default
+                print*, 'extrapolate_ghosts: order = ', order, ' is not supported.'
+                stop
+        end select
+
+    end subroutine extrapolate_ghosts
 
 
     ! ------------------------------------------------------------------------------
@@ -1073,7 +1338,6 @@ contains
                 scale = fourth / phi%valid%dx
 
                 ! Away from y boundaries...
-
                 ! Interior
                 pd%data(ilo+1:ihi-1,jlo+1:jhi) = scale * (  phi%data(ilo+2:ihi,jlo+1:jhi) - phi%data(ilo:ihi-2,jlo+1:jhi) &
                                                           + phi%data(ilo+2:ihi,jlo:jhi-1) - phi%data(ilo:ihi-2,jlo:jhi-1)  )
@@ -1085,6 +1349,7 @@ contains
                 pd%data(ilo,jlo+1:jhi) = -scale * (  three*phi%data(ilo,jlo+1:jhi) - four*phi%data(ilo+1,jlo+1:jhi) + phi%data(ilo+2,jlo+1:jhi) &
                                                    + three*phi%data(ilo,jlo:jhi-1) - four*phi%data(ilo+1,jlo:jhi-1) + phi%data(ilo+2,jlo:jhi-1)  )
 
+                ! At y boundaries...
                 ! Lower y boundary
                 pd%data(ilo:ihi,jlo) = two*pd%data(ilo:ihi,jlo+1) - pd%data(ilo:ihi,jlo+2)
 
@@ -1100,7 +1365,6 @@ contains
                 scale = fourth / phi%valid%dy
 
                 ! Away from x boundaries...
-
                 ! Interior
                 pd%data(ilo+1:ihi,jlo+1:jhi-1) = scale * (  phi%data(ilo+1:ihi,jlo+2:jhi) - phi%data(ilo+1:ihi,jlo:jhi-2) &
                                                           + phi%data(ilo:ihi-1,jlo+2:jhi) - phi%data(ilo:ihi-1,jlo:jhi-2)  )
@@ -1112,6 +1376,7 @@ contains
                 pd%data(ilo+1:ihi,jlo) = -scale * (  three*phi%data(ilo+1:ihi,jlo) - four*phi%data(ilo+1:ihi,jlo+1) + phi%data(ilo+1:ihi,jlo+2) &
                                                    + three*phi%data(ilo:ihi-1,jlo) - four*phi%data(ilo:ihi-1,jlo+1) + phi%data(ilo:ihi-1,jlo+2)  )
 
+                ! At x boundaries...
                 ! Lower x boundary
                 pd%data(ilo,jlo:jhi) = two*pd%data(ilo+1,jlo:jhi) - pd%data(ilo+2,jlo:jhi)
 
@@ -1139,11 +1404,7 @@ contains
         logical, intent(in)           :: homog
         type(box_data), intent(inout) :: xwk, ywk
 
-        real(dp)                      :: invdx, invdy
         integer                       :: ilo, ihi, jlo, jhi
-
-        invdx = one / phi%valid%dx
-        invdy = one / phi%valid%dy
 
         ilo = phi%valid%ilo
         ihi = phi%valid%ihi
@@ -1157,12 +1418,12 @@ contains
         call compute_pd (xflux, phi, 1)
         call compute_pd (xwk, phi, 2)
         xflux%data(ilo:ihi+1,jlo:jhi) = geo%Jgup_xx%data(ilo:ihi+1,jlo:jhi) * xflux%data(ilo:ihi+1,jlo:jhi) &
-                                      + geo%Jgup_xy%data(ilo:ihi+1,jlo:jhi) * xwk%data(ilo:ihi+1,jlo:jhi)
+                                      + geo%Jgup_xy%data(ilo:ihi+1,jlo:jhi) *   xwk%data(ilo:ihi+1,jlo:jhi)
 
         ! Compute yflux...
         call compute_pd (ywk, phi, 1)
         call compute_pd (yflux, phi, 2)
-        yflux%data(ilo:ihi,jlo:jhi+1) = geo%Jgup_yx%data(ilo:ihi,jlo:jhi+1) * ywk%data(ilo:ihi,jlo:jhi+1) &
+        yflux%data(ilo:ihi,jlo:jhi+1) = geo%Jgup_yx%data(ilo:ihi,jlo:jhi+1) *   ywk%data(ilo:ihi,jlo:jhi+1) &
                                       + geo%Jgup_yy%data(ilo:ihi,jlo:jhi+1) * yflux%data(ilo:ihi,jlo:jhi+1)
 
         ! Set boundary fluxes
@@ -1249,105 +1510,235 @@ contains
 
     ! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
-    subroutine relax_gsrb (phi, rhs, geo, bc, homog, &
-                           invdiags, omega, tol, maxiters, rbgs, zerophi)
-        type(box_data), intent(inout) :: phi
-        type(box_data), intent(in)    :: rhs
-        type(geo_data), intent(in)    :: geo
-        type(bdry_data), intent(in)   :: bc
-        logical, intent(in)           :: homog
-        type(box_data), intent(in)    :: invdiags
-        real(dp), intent(in)          :: omega
-        real(dp), intent(in)          :: tol
-        integer, intent(in)           :: maxiters
-        integer, intent(in)           :: rbgs
-        integer, intent(in)           :: zerophi
+    subroutine relax_jacobi (phi, rhs, geo, bc, homog, &
+                             invdiags, omega, tol, maxiters, zerophi)
+        type(box_data), intent(inout)   :: phi
+        type(box_data), intent(in)      :: rhs
+        type(geo_data), intent(in)      :: geo
+        type(bdry_data), intent(in)     :: bc
+        logical, intent(in)             :: homog
+        type(box_data), intent(in)      :: invdiags
+        real(dp), intent(in)            :: omega
+        real(dp), intent(in)            :: tol
+        integer, intent(in)             :: maxiters
+        logical, intent(in)             :: zerophi
 
-        ! ! Do we even need to be here?
-        ! if (maxIters .eq. 0) then
-        !     return
-        ! endif
+        type(box_data)                  :: r
+        real(dp)                        :: rscale
+        real(dp), dimension(0:maxiters) :: relres
+        real(dp)                        :: newphi
+        integer                         :: iter
+        integer                         :: ilo, ihi, i
+        integer                         :: jlo, jhi, j
 
-        ! dxScale = 1.0d0 / (dx**2)
-        ! dyScale = 1.0d0 / (dy**2)
+        ilo = rhs%valid%ilo
+        ihi = rhs%valid%ihi
+        jlo = rhs%valid%jlo
+        jhi = rhs%valid%jhi
 
-        ! if (tol .gt. 0.0d0) then
-        !     ! Allocate workspace
-        !     allocate (r(1:nx, 1:ny), stat=ierr)
-        !     if (ierr .ne. 0) then
-        !         print*, 'Out of memory'
-        !         call MAYDAYERROR()
-        !     endif
-        ! endif
+        ! Do we even need to be here?
+        if (maxIters .eq. 0) then
+            return
+        endif
 
-        ! ! Initialize phi to zero if necessary
-        ! if (zeroPhi .ne. 0) then
-        !     phi = 0.0d0
-        ! endif
+        ! Allocate workspace
+        call define_box_data (r, rhs)
 
-        ! ! Compute initial residual
-        ! if (tol .gt. 0.0d0) then
-        !     call MGPoissonSolverSerial2D_Residual(r, rhs, phi, nx, ny, ngx, ngy, dx, dy, &
-        !                                           bclox, bcloy, bchix, bchiy)
-        !     call MGPoissonSolverSerial2D_InnerProd(resScale, r, r, nx, ny)
-        !     relres(0) = 1.0d0
-        !     print*, 'scale sq res = ', resScale
-        !     print*, 'iter ', 0, ': sq res = ', relres(0)
-        ! endif
+        ! Initialize phi to zero if necessary
+        if (zerophi) then
+            phi%data = zero
+        endif
 
-        ! ! Iterate
-        ! do iter = 1, maxIters
-        !     if (doRB .eq. 0) then
-        !         ! Update phi via standard Gauss-Seidel
-        !         call MGPoissonSolverSerial2D_fillGhostsHomog(phi, nx, ny, ngx, ngy, &
-        !                                                      dx, dy, crseAMRdx, crseAMRdy, &
-        !                                                      bclox, bcloy, bchix, bchiy, 1)
-        !         do j = 1, ny
-        !             do i = 1, nx
-        !                 lphi = dxScale * (phi(i+1,j) + phi(i-1,j)) &
-        !                      + dyScale * (phi(i,j+1) + phi(i,j-1))
-        !                 newPhi = (rhs(i,j) - lphi) * invDiags(i,j)
-        !                 phi(i,j) = (1.0d0-omega)*phi(i,j) + omega*newPhi
-        !             enddo
-        !         enddo
-        !     else
-        !         ! Update phi via Red-Black Gauss-Seidel
-        !         do redBlack = 0,1
-        !             call MGPoissonSolverSerial2D_fillGhostsHomog(phi, nx, ny, ngx, ngy, &
-        !                                                          dx, dy, crseAMRdx, crseAMRdy, &
-        !                                                          bclox, bcloy, bchix, bchiy, 1)
-        !             do j = 1, ny
-        !                 imin = 1 + mod(redBlack+j+1, 2)
-        !                 do i = imin, nx, 2
-        !                     lphi = dxScale * (phi(i+1,j) + phi(i-1,j)) &
-        !                          + dyScale * (phi(i,j+1) + phi(i,j-1))
-        !                     newPhi = (rhs(i,j) - lphi) * invDiags(i,j)
-        !                     phi(i,j) = (1.0d0-omega)*phi(i,j) + omega*newPhi
-        !                 enddo
-        !             enddo
-        !         enddo
-        !     endif
+        ! Compute initial residual
+        call compute_residual (r, rhs, phi, geo, bc, homog)
+        rscale = inner_prod (r, r)
+        relres(0) = one
+        print*, 'scale sq res = ', rscale
+        print*, 'iter ', 0, ': sq res = ', relres(0)
 
-        !     ! Compute new residual
-        !     if (tol .gt. 0.0d0) then
-        !         call MGPoissonSolverSerial2D_Residual(r, rhs, phi, nx, ny, ngx, ngy, dx, dy, &
-        !                                               bclox, bcloy, bchix, bchiy)
-        !         call MGPoissonSolverSerial2D_InnerProd(relres(iter), r, r, nx, ny)
-        !         relres(iter) = relres(iter) / resScale
-        !         print*, 'iter ', iter, ': sq res = ', relres(iter)
+        ! Iterate
+        do iter = 1, maxIters
+            ! Update phi
+            do j = jlo, jhi
+                do i = ilo, ihi
+                    newphi = phi%data(i,j) + r%data(i,j)*invdiags%data(i,j)
+                    phi%data(i,j) = omega*newphi + (1.0d0-omega)*phi%data(i,j)
+                enddo
+            enddo
 
-        !         ! Did we converge?
-        !         if (relres(iter) .le. tol) then
-        !             print*, "Converged."
-        !             exit
-        !         endif
-        !     endif
-        ! enddo
+            ! Compute new residual
+            call compute_residual (r, rhs, phi, geo, bc, homog)
+            relres(iter) = inner_prod(r, r) / rscale
+            print*, 'iter ', iter, ': sq res = ', relres(iter)
 
-        ! ! Free memory
-        ! if (allocated( r)) deallocate( r)
+            ! Did we converge?
+            if (relres(iter) .le. tol) then
+                print*, "Converged."
+                exit
+            endif
+        enddo
 
-    end subroutine relax_gsrb
+    end subroutine relax_jacobi
+
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    subroutine relax_gs (phi, rhs, geo, bc, &
+                         invdiags, omega, tol, maxiters, redblack, zerophi)
+        type(box_data), intent(inout)   :: phi
+        type(box_data), intent(in)      :: rhs
+        type(geo_data), intent(in)      :: geo
+        type(bdry_data), intent(in)     :: bc
+        type(box_data), intent(in)      :: invdiags
+        real(dp), intent(in)            :: omega
+        real(dp), intent(in)            :: tol
+        integer, intent(in)             :: maxiters
+        logical, intent(in)             :: redblack
+        logical, intent(in)             :: zerophi
+
+        type(box_data)                  :: r
+        real(dp)                        :: rscale
+        real(dp), dimension(0:maxiters) :: relres
+        integer                         :: iter, color
+        integer                         :: ilo, ihi, i, imin
+        integer                         :: jlo, jhi, j
+
+        type(box_data)                  :: phiws
+        real(dp)                        :: xxscale, yyscale, xyscale
+        real(dp)                        :: lphi, newphi, jdxx, jdyy, jdxy, jdyx
+
+        real(dp), parameter             :: beta = one
+
+        ilo = rhs%valid%ilo
+        ihi = rhs%valid%ihi
+        jlo = rhs%valid%jlo
+        jhi = rhs%valid%jhi
+
+        xxscale = one / (phi%valid%dx**2)
+        yyscale = one / (phi%valid%dy**2)
+        xyscale = fourth / (phi%valid%dx * phi%valid%dy)
+
+        ! Do we even need to be here?
+        if (maxiters .eq. 0) then
+            return
+        endif
+
+        ! Allocate workspace
+        call define_box_data (r, rhs)
+        call define_box_data (phiws, phi)
+
+        ! Initialize phi to zero
+        if (zerophi .ne. 0) then
+            phi%data = zero
+        endif
+
+        ! Compute initial residual
+        call compute_residual (r, rhs, phi, geo, bc, .true.)
+        rscale = inner_prod (r, r)
+        relres(0) = one
+        print*, 'scale sq res = ', rscale
+        print*, 'iter ', 0, ': sq res = ', relres(0)
+
+        ! Iterate
+        do iter = 1, maxiters
+            if (redblack) then
+                ! Update phi via Red-Black Gauss-Seidel
+                do color = 0,1
+                    ! Set up extrapolated phi
+                    phiws%data = phi%data
+                    call extrapolate_ghosts (phiws, 1)
+
+                    ! Fill phi's ghosts
+                    call fill_ghosts (phi, bc, geo, .true., .false.)
+
+                    do j = jlo, jhi
+                        imin = ilo + mod(color+j+1, 2)
+                        do i = imin, ihi, 2
+                            ! jdxx = geo%Jgup_xx%data(i+1,j) * phi%data(i+1,j) &
+                            !      + geo%Jgup_xx%data(i  ,j) * phi%data(i-1,j)
+
+                            ! jdxy = geo%Jgup_xy%data(i+1,j) * (  phiws%data(i+1,j+1) - phiws%data(i+1,j-1)    &
+                            !                                   + phiws%data(i  ,j+1) - phiws%data(i  ,j-1)  ) &
+                            !      + geo%Jgup_xy%data(i  ,j) * (  phiws%data(i  ,j+1) - phiws%data(i  ,j-1)    &
+                            !                                   + phiws%data(i-1,j+1) - phiws%data(i-1,j-1)  )
+
+                            ! jdyx = geo%Jgup_yx%data(i,j+1) * (  phiws%data(i+1,j+1) - phiws%data(i-1,j+1)    &
+                            !                                   + phiws%data(i+1,j  ) - phiws%data(i-1,j  )  ) &
+                            !      + geo%Jgup_yx%data(i,j  ) * (  phiws%data(i+1,j  ) - phiws%data(i-1,j  )    &
+                            !                                   + phiws%data(i+1,j-1) - phiws%data(i-1,j-1)  )
+
+                            ! jdyy = geo%Jgup_yy%data(i,j+1) * phi%data(i,j+1) &
+                            !      + geo%Jgup_yy%data(i,j  ) * phi%data(i,j-1)
+
+                            ! lphi = (jdxx*xxscale + jdyy*yyscale + (jdxy+jdyx)*xyscale) / geo%J%data(i,j)
+                            ! newphi = (rhs%data(i,j) - beta*lphi) * invdiags%data(i,j)
+
+                            ! phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+
+                            lphi = (phi%data(i+1,j) + phi%data(i-1,j)) * xxscale &
+                                 + (phi%data(i,j+1) + phi%data(i,j-1)) * yyscale
+                            phi%data(i,j) = (rhs%data(i,j) - lphi) / (-two*phi%data(i,j)*(xxscale+yyscale))
+
+                        enddo
+                    enddo
+                enddo
+            else
+                ! Update phi via standard Gauss-Seidel
+
+                ! Set up extrapolated phi
+                phiws%data = phi%data
+                call extrapolate_ghosts (phiws, 1)
+
+                ! Fill phi's ghosts
+                call fill_ghosts (phi, bc, geo, .true., .false.)
+
+                do j = jlo, jhi
+                    do i = ilo, ihi
+                        ! jdxx = geo%Jgup_xx%data(i+1,j) * phi%data(i+1,j) &
+                        !      + geo%Jgup_xx%data(i  ,j) * phi%data(i-1,j)
+
+                        ! jdxy = geo%Jgup_xy%data(i+1,j) * (  phiws%data(i+1,j+1) - phiws%data(i+1,j-1)    &
+                        !                                   + phiws%data(i  ,j+1) - phiws%data(i  ,j-1)  ) &
+                        !      + geo%Jgup_xy%data(i  ,j) * (  phiws%data(i  ,j+1) - phiws%data(i  ,j-1)    &
+                        !                                   + phiws%data(i-1,j+1) - phiws%data(i-1,j-1)  )
+
+                        ! jdyx = geo%Jgup_yx%data(i,j+1) * (  phiws%data(i+1,j+1) - phiws%data(i-1,j+1)    &
+                        !                                   + phiws%data(i+1,j  ) - phiws%data(i-1,j  )  ) &
+                        !      + geo%Jgup_yx%data(i,j  ) * (  phiws%data(i+1,j  ) - phiws%data(i-1,j  )    &
+                        !                                   + phiws%data(i+1,j-1) - phiws%data(i-1,j-1)  )
+
+                        ! jdyy = geo%Jgup_yy%data(i,j+1) * phi%data(i,j+1) &
+                        !      + geo%Jgup_yy%data(i,j  ) * phi%data(i,j-1)
+
+                        ! lphi = (jdxx*xxscale + jdyy*yyscale + (jdxy+jdyx)*xyscale) / geo%J%data(i,j)
+                        ! newphi = (rhs%data(i,j) - beta*lphi) * invdiags%data(i,j)
+                        ! phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+
+                        lphi = (phi%data(i+1,j) + phi%data(i-1,j)) * xxscale &
+                             + (phi%data(i,j+1) + phi%data(i,j-1)) * yyscale
+                        phi%data(i,j) = (rhs%data(i,j) - lphi) / (-two*phi%data(i,j)*(xxscale+yyscale))
+
+                    enddo
+                enddo
+            endif
+
+            ! Compute new residual
+            call compute_residual (r, rhs, phi, geo, bc, .true.)
+            relres(iter) = inner_prod (r, r) / rscale
+            print*, 'iter ', iter, ': sq res = ', relres(iter)
+
+            ! Did we converge?
+            if (relres(iter) .le. tol) then
+                print*, "Converged."
+                exit
+            endif
+        enddo
+
+        ! Free memory
+        call undefine_box_data (r)
+        call undefine_box_data (phiws)
+
+    end subroutine relax_gs
 
 end module MGPoisson2D
 

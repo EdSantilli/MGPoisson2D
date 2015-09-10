@@ -101,22 +101,33 @@ program test
     !     print*, errnorm(r), rate(r-1)
     ! enddo
 
-    ! Test 4: Staggered partial derivatives
+    ! ! Test 4: Staggered partial derivatives
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_derivatives (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 4: Staggered partial derivatives'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
+    ! print*
+
+    ! Test 5: Solver test
     errnorm = bogus_val
     do r = 1, maxr
-        errnorm(r) = test_derivatives (geo(r))
+        errnorm(r) = test_solver (geo(r))
     enddo
     call compute_conv_rate (rate, errnorm)
-    print*, 'Test 4: Staggered partial derivatives'
+    print*, 'Test 5: Solver test'
     print*, 'Error norm                rate'
     print*, errnorm(1)
     do r = 2, maxr
         print*, errnorm(r), rate(r-1)
     enddo
     print*
-
-
-
 
     ! Prints x and y coordinates to the terminal.
     ! call define_domain (valid, 1)
@@ -399,7 +410,7 @@ contains
 
             ! el(i) = zero ! Temporary, flat bottom.
             ! el(i) = half * xx ! Sloped bottom
-            el(i) = Hz*half*(one-xx/Lx) ! Sloped bottom
+            el(i) = Hz*half*(one-xx/Lx) ! Sloped bottom (Use this one)
             ! el(i) = fourth * sin(pi*xx/Lx)   ! Temporary, sinusoidal bottom.
 
             ! if (xx .le. C1) then
@@ -1167,25 +1178,6 @@ contains
         call fill_y (bdy_ylo)
         call fill_y (bdy_yhi)
 
-        ! ! BEGIN TEMPORARY!!!
-        ! call define_box_data (soln, bdx)
-        ! ! soln%data = sin((half + four*bdy%data/H)*pi*bdx%data/L)
-        ! soln%data = bdx%data**3
-
-        ! call define_box_data (state, bdx)
-        ! state%data(ilo:ihi,:) = (soln%data(ilo+1:ihi+1,:) - soln%data(ilo-1:ihi-1,:)) * half / dx
-        ! ! do i = ilo, ihi-1
-        ! !     state%data(i,:) = -(three*soln%data(i,:) - four*soln%data(i+1,:) + soln%data(i+2,:)) * half/dx
-        ! ! enddo
-        ! ! state%data(ihi,:) = (soln%data(ihi+1,:) - soln%data(ihi-1,:)) * half / dx
-
-        ! ! soln%data = (half + four*bdy%data/H) * (pi/L) * cos((half + four*bdy%data/H)*pi*bdx%data/L)
-        ! soln%data = three*bdx%data**2
-        ! state%data = state%data - soln%data
-        ! res = pnorm (state, state%valid, norm_type)
-        ! ! END TEMPORARY!!!
-
-
         ! Set up soln
         call define_box_data (soln, bdx)
         soln%data = (bdx%data**3) * (bdy%data**3)
@@ -1238,20 +1230,6 @@ contains
         ! state%data(ilo:ihi, jlo-1) = soln%data(ilo:ihi, jlo-1)
         state%data(ilo:ihi, jhi+1) = soln%data(ilo:ihi, jhi+1)
 
-        ! ! Test valid cells
-        ! do j = jlo, jhi
-        !     do i = ilo, ihi
-        !         val = soln%data(i,j)
-        !         if (state%data(i,j) .ne. val) then
-        !             print*, 'i = ', i
-        !             print*, 'j = ', j
-        !             print*, 'state%data(i,j) = ', state%data(i,j)
-        !             print*, 'state%data(i,j) = ', val
-        !             stop
-        !         endif
-        !     enddo
-        ! enddo
-
         ! Compute norm over ghosts
         state%data = state%data - soln%data
         res = gpnorm (state, norm_type)
@@ -1274,6 +1252,7 @@ contains
         call undefine_box_data (bdy_yhi)
 
     end function test_nonuniform_neum_bcs
+
 
     ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
@@ -1354,5 +1333,231 @@ contains
         call undefine_box_data (bdy)
 
     end function test_derivatives
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    function test_solver (geo) result (res)
+        use MGPoisson2D
+        implicit none
+
+        real(dp)                   :: res
+        type(geo_data), intent(in) :: geo
+
+        type(box)                  :: valid
+        integer                    :: ilo, ihi, jlo, jhi, i, j
+        real(dp)                   :: dx, dy
+
+        type(box_data)             :: soln, phi, lphi, invdiags, r
+        type(box_data)             :: bdx, bdy
+        type(box_data), target     :: bdx_xlo, bdx_xhi, bdx_ylo, bdx_yhi
+        type(box_data), target     :: bdy_xlo, bdy_xhi, bdy_ylo, bdy_yhi
+        real(dp), dimension(:), pointer :: xp, yp
+        type(bdry_data)            :: bc
+
+        type(box_data)             :: f1, f2, t1, t2, xx, yy
+        real(dp)                   :: x, y
+
+        valid = geo%J%valid
+
+        ilo = valid%ilo
+        ihi = valid%ihi
+        jlo = valid%jlo
+        jhi = valid%jhi
+
+        dx = valid%dx
+        dy = valid%dy
+
+        ! Compute cell-centered Cartesian locations
+        call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
+        call define_box_data_bdry (bdx_xlo, bdx, 1, SIDE_LO)
+        call define_box_data_bdry (bdx_xhi, bdx, 1, SIDE_HI)
+        call define_box_data_bdry (bdx_ylo, bdx, 2, SIDE_LO)
+        call define_box_data_bdry (bdx_yhi, bdx, 2, SIDE_HI)
+
+        call define_box_data (bdy, bdx)
+        call define_box_data_bdry (bdy_xlo, bdy, 1, SIDE_LO)
+        call define_box_data_bdry (bdy_xhi, bdy, 1, SIDE_HI)
+        call define_box_data_bdry (bdy_ylo, bdy, 2, SIDE_LO)
+        call define_box_data_bdry (bdy_yhi, bdy, 2, SIDE_HI)
+
+        call fill_x (bdx)
+        call fill_x (bdx_xlo)
+        call fill_x (bdx_xhi)
+        call fill_x (bdx_ylo)
+        call fill_x (bdx_yhi)
+
+        call fill_y (bdy)
+        call fill_y (bdy_xlo)
+        call fill_y (bdy_xhi)
+        call fill_y (bdy_ylo)
+        call fill_y (bdy_yhi)
+
+        ! Set BCs
+        call define_bdry_data (bc, valid, &
+                               BCTYPE_DIRI, &   ! xlo
+                               BCTYPE_DIRI, &   ! xhi
+                               BCTYPE_DIRI, &   ! ylo
+                               BCTYPE_DIRI, &   ! yhi
+                               BCMODE_NONUNIFORM, &    ! xlo
+                               BCMODE_NONUNIFORM, &    ! xhi
+                               BCMODE_NONUNIFORM, &    ! ylo
+                               BCMODE_NONUNIFORM)      ! yhi
+
+        xp => bdx_xlo%data(ilo,:)
+        yp => bdy_xlo%data(ilo,:)
+        bc%data_xlo = xp**3 * yp**3
+
+        xp => bdx_xhi%data(ihi+1,:)
+        yp => bdy_xhi%data(ihi+1,:)
+        bc%data_xhi = xp**3 * yp**3
+
+        xp => bdx_ylo%data(:,jlo)
+        yp => bdy_ylo%data(:,jlo)
+        bc%data_ylo = xp**3 * yp**3
+
+        xp => bdx_yhi%data(:,jhi+1)
+        yp => bdy_yhi%data(:,jhi+1)
+        bc%data_yhi = xp**3 * yp**3
+
+        nullify(xp)
+        nullify(yp)
+
+        ! ! Set BCs
+        ! call define_bdry_data (bc, valid, &
+        !                        BCTYPE_NEUM, &   ! xlo
+        !                        BCTYPE_NEUM, &   ! xhi
+        !                        BCTYPE_NEUM, &   ! ylo
+        !                        BCTYPE_NEUM, &   ! yhi
+        !                        BCMODE_NONUNIFORM, &    ! xlo
+        !                        BCMODE_NONUNIFORM, &    ! xhi
+        !                        BCMODE_NONUNIFORM, &    ! ylo
+        !                        BCMODE_NONUNIFORM)      ! yhi
+
+        ! xp => bdx_xlo%data(ilo,:)
+        ! yp => bdy_xlo%data(ilo,:)
+        ! bc%data_xlo = (three*xp**2*yp**3) * geo%Jgup_xx%data(ilo,:) &
+        !             + (xp**3*three*yp**2) * geo%Jgup_xy%data(ilo,:)
+
+        ! xp => bdx_xhi%data(ihi+1,:)
+        ! yp => bdy_xhi%data(ihi+1,:)
+        ! bc%data_xhi = (three*xp**2*yp**3) * geo%Jgup_xx%data(ihi+1,:) &
+        !             + (xp**3*three*yp**2) * geo%Jgup_xy%data(ihi+1,:)
+
+        ! xp => bdx_ylo%data(:,jlo)
+        ! yp => bdy_ylo%data(:,jlo)
+        ! bc%data_ylo = ((three*xp**2)*(yp**3)) * geo%Jgup_yx%data(:,jlo) &
+        !             + ((xp**3)*(three*yp**2)) * geo%Jgup_yy%data(:,jlo)
+
+        ! xp => bdx_yhi%data(:,jhi+1)
+        ! yp => bdy_yhi%data(:,jhi+1)
+        ! bc%data_yhi = (three*xp**2*yp**3) * geo%Jgup_yx%data(:,jhi+1) &
+        !             + (xp**3*three*yp**2) * geo%Jgup_yy%data(:,jhi+1)
+
+        ! nullify(xp)
+        ! nullify(yp)
+
+        ! Set up solution
+        call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
+        soln%data = (bdx%data**3) * (bdy%data**3)
+
+        ! Set up RHS
+        call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
+        call compute_laplacian (lphi, soln, geo, bc, .false.)
+
+        ! Set up invdiags
+        call define_box_data (invdiags, lphi)
+        call compute_inverse_diags (invdiags, geo)
+
+        ! Solve
+        call define_box_data (phi, soln)
+        phi%data = zero
+
+        call define_box_data (r, lphi)
+        ! call compute_residual (r, lphi, phi, geo, bc, .false.)
+
+        call relax_jacobi (phi, lphi, geo, bc, .false., invdiags, &
+                           1.0d0,   & ! omega
+                           1.0d-6,  & ! tol
+                           1,     & ! maxiters
+                           .true.)    ! zerophi
+
+        ! call relax_gs (phi, r, geo, bc, invdiags, &
+        !                1.0d0,   & ! omega
+        !                1.0d-6,  & ! tol
+        !                5,     & ! maxiters
+        !                .false., & ! redblack
+        !                .true.)    ! zerophi
+
+        ! Compute norm
+        phi%data = phi%data - soln%data
+        res = pnorm (phi, phi%valid, norm_type)
+
+
+        ! call define_box_data (f1, valid, 0, 0, BD_NODE, BD_CELL)
+        ! call define_box_data (f2, valid, 0, 0, BD_CELL, BD_NODE)
+        ! call define_box_data (t1, f1)
+        ! call define_box_data (t2, f2)
+        ! call compute_grad (f1, f2, soln, geo, bc, .false., t1, t2)
+        ! call fill_J (t1)
+        ! call fill_J (t2)
+        ! f1%data = f1%data / t1%data
+        ! f2%data = f2%data / t2%data
+        ! ! call compute_pd (f1, soln, 1)
+        ! ! call compute_pd (f2, soln, 2)
+
+        ! call define_box_data (xx, f1)
+        ! call define_box_data (yy, f1)
+        ! call fill_x (xx)
+        ! call fill_y (yy)
+        ! t1%data = three*(xx%data**2) * (yy%data**3)
+        ! call undefine_box_data (xx)
+        ! call undefine_box_data (yy)
+
+        ! call define_box_data (xx, f2)
+        ! call define_box_data (yy, f2)
+        ! call fill_x (xx)
+        ! call fill_y (yy)
+        ! t2%data = three*(xx%data**3) * (yy%data**2)
+        ! call undefine_box_data (xx)
+        ! call undefine_box_data (yy)
+
+        ! f1%data = f1%data - t1%data
+        ! res = pnorm (f1, f1%valid, norm_type)
+        ! f2%data = f2%data - t2%data
+        ! res = pnorm (f2, f2%valid, norm_type)
+
+        ! lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) / geo%J%data(ilo:ihi,jlo:jhi)
+        ! soln%data = (six*bdx%data) * (bdy%data**3) + (bdx%data**3) * (six*bdy%data)
+        ! do j = jlo, jhi
+        !     do i = ilo, ihi
+        !         if (abs(lphi%data(i,j)-soln%data(i,j)) .gt. one/ten**2) then
+        !             print*, i, ',', j, '->', lphi%data(i,j), ',', soln%data(i,j)
+        !         endif
+        !     enddo
+        ! enddo
+        ! lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) - soln%data(ilo:ihi,jlo:jhi)
+        ! res = pnorm (lphi, lphi%valid, norm_type)
+
+        ! Free memory
+        call undefine_bdry_data (bc)
+        call undefine_box_data (soln)
+        call undefine_box_data (phi)
+        call undefine_box_data (lphi)
+        call undefine_box_data (r)
+
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdx_xlo)
+        call undefine_box_data (bdx_xhi)
+        call undefine_box_data (bdx_ylo)
+        call undefine_box_data (bdx_yhi)
+
+        call undefine_box_data (bdy)
+        call undefine_box_data (bdy_xlo)
+        call undefine_box_data (bdy_xhi)
+        call undefine_box_data (bdy_ylo)
+        call undefine_box_data (bdy_yhi)
+
+    end function test_solver
 
 end program test
