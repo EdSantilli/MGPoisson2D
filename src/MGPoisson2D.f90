@@ -1384,7 +1384,7 @@ end module ArrayUtils
 
 ! ------------------------------------------------------------------------------
 ! ------------------------------------------------------------------------------
-module MGPoisson2D
+module Poisson2D
     use ArrayUtils
     implicit none
 
@@ -2059,5 +2059,469 @@ contains
 
     end subroutine solve_bicgstab
 
+end module Poisson2D
+
+
+! ------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------
+module MGPoisson2D
+    use Poisson2D
+    implicit none
+
+    save
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    interface restrict
+        module procedure restrict_array
+        module procedure restrict_bd
+    end interface
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    interface prolong
+        module procedure prolong_array
+        module procedure prolong_bd
+    end interface
+
+contains
+
+    ! --------------------------------------------------------------------------
+    ! This will overshoot the true maxDepth.
+    ! --------------------------------------------------------------------------
+    subroutine estimate_maxdepth (maxdepth, valid)
+        integer, intent(inout) :: maxdepth
+        type(box), intent(in)  :: valid
+
+        integer                :: mgnx, mgny, d
+
+        ! Prepare for first iter
+        d = 0
+        mgnx = valid%nx
+        mgny = valid%ny
+
+        do d = 0, maxdepth-1
+            ! Can we coarsen this grid in any direction?
+            if (mod(mgnx,2) .eq. 0) then
+                mgnx = mgnx / 2
+            else if (mod(mgny,2) .eq. 0) then
+                mgny = mgny / 2
+            else
+                exit
+            endif
+        enddo
+
+        maxdepth = min(maxdepth, d+1)
+
+    end subroutine estimate_maxdepth
+
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    subroutine create_mgschedule (refx, refy, maxdepth, valid)
+        integer, intent(inout)                        :: maxdepth
+        integer, intent(out), dimension(0:maxdepth-1) :: refx, refy
+        type(box), intent(in)                         :: valid
+
+        integer                                       :: mgnx, mgny, d
+        real(dp)                                      :: mgdx, mgdy, max_dx
+        integer, parameter                            :: min_nx = 4
+        integer, parameter                            :: min_ny = 4
+
+        ! Initialize to bogus values
+        refx = 0
+        refy = 0
+
+        ! Prepare for first iter
+        d = 0
+        mgnx = valid%nx
+        mgny = valid%ny
+        mgdx = valid%dx
+        mgdy = valid%dy
+
+        do d = 0, maxdepth-1
+            ! Compute coarsening factors
+            if ((mod(mgnx,2) .ne. 0) .or. (mod(mgny,2) .ne. 0)) then
+                exit
+            else
+                ! Which directions should we coarsen to promote isotropy?
+                max_dx = max(mgdx, mgdy)
+
+                if (mgdx .le. max_dx / 2) then
+                    refx(d) = 2
+                else
+                    refx(d) = 1
+                endif
+
+                if (mgdy .le. max_dx / 2) then
+                    refy(d) = 2
+                else
+                    refy(d) = 1
+                endif
+
+                ! Is anisotropic coarsening worth it?
+                if (refx(d)*refy(d) .eq. 1) then
+                    refx(d) = 2
+                    refy(d) = 2
+                endif
+
+                ! Is this amount of coarsening allowed?
+                mgnx = mgnx / refx(d)
+                mgny = mgny / refy(d)
+                if ((mgnx .lt. min_nx) .or. (mgny .lt. min_ny)) then
+                    exit
+                endif
+
+                ! We have chosen our coarsening factors. Move on to the next depth.
+                mgdx = mgdx * real(refx(d),8)
+                mgdy = mgdy * real(refy(d),8)
+            endif
+        enddo
+
+        maxdepth = d
+
+    end subroutine create_mgschedule
+
+
+    ! ------------------------------------------------------------------------------
+    ! fine and crse can have NO ghosts!
+    ! ------------------------------------------------------------------------------
+    subroutine restrict_array (fine, crse, fnx, fny, cnx, cny)
+        integer, intent(in)                              :: fnx, fny
+        integer, intent(in)                              :: cnx, cny
+        real(8), intent(in), dimension(0:fnx-1,0:fny-1)  :: fine
+        real(8), intent(out), dimension(0:cnx-1,0:cny-1) :: crse
+
+        integer                                          :: refx, refy
+        integer                                          :: fi, fj, ci, cj
+
+        refx = fnx / cnx
+        refy = fny / cny
+
+        if ((refx .eq. 2) .and. (refy .eq. 2)) then
+            do cj = 0, cny-1
+                fj = 2*cj
+                do ci = 0, cnx-1
+                    fi = 2*ci
+                    crse(ci,cj) = 0.25d0 * (fine(fi,fj) + fine(fi+1,fj) + fine(fi,fj+1) + fine(fi+1,fj+1))
+                enddo
+            enddo
+
+        else if ((refx .eq. 2) .and. (refy .eq. 1)) then
+            do cj = 0, cny-1
+                do ci = 0, cnx-1
+                    fi = 2*ci
+                    crse(ci,cj) = 0.50d0 * (fine(fi,cj) + fine(fi+1,cj))
+                enddo
+            enddo
+
+        else if ((refx .eq. 1) .and. (refy .eq. 2)) then
+            do cj = 0, cny-1
+                fj = 2*cj
+                do ci = 0, cnx-1
+                    crse(ci,cj) = 0.50d0 * (fine(ci,fj) + fine(ci,fj+1))
+                enddo
+            enddo
+
+        else
+            print*, 'Bad fine and crse sizes'
+            stop
+        endif
+
+    end subroutine restrict_array
+
+
+    ! ------------------------------------------------------------------------------
+    ! fine and crse can have NO ghosts!
+    ! ------------------------------------------------------------------------------
+    subroutine restrict_bd (fine, crse)
+        type(box_data), intent(in)    :: fine
+        type(box_data), intent(inout) :: crse
+
+        call restrict_array (fine%data, crse%data,         &
+                             fine%valid%nx, fine%valid%ny, &
+                             crse%valid%nx, crse%valid%ny)
+    end subroutine restrict_bd
+
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    subroutine prolong_array (fine, crse, fnx, fny, cnx, cny, ngx, ngy)
+        integer, intent(in)                                              :: fnx, fny
+        integer, intent(in)                                              :: cnx, cny
+        integer, intent(in)                                              :: ngx, ngy
+        real(8), intent(inout), dimension(-ngx:fnx-1+ngx,-ngy:fny-1+ngy) :: fine
+        real(8), intent(in), dimension(-ngx:cnx-1+ngx,-ngy:cny-1+ngy)    :: crse
+
+        integer                                                          :: refx, refy
+        integer                                                          :: fi, fj, ci, cj
+
+        refx = fnx / cnx
+        refy = fny / cny
+
+        do fj = 0, fny-1
+            cj = fj / refy
+            do fi = 0, fnx-1
+                ci = fi / refx
+                fine(fi,fj) = fine(fi,fj) + crse(ci,cj)
+            enddo
+        enddo
+    end subroutine prolong_array
+
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    subroutine prolong_bd (fine, crse)
+        type(box_data), intent(inout) :: fine
+        type(box_data), intent(in)    :: crse
+
+        call prolong_array (fine%data, crse%data, &
+                            fine%valid%nx, fine%valid%ny, &
+                            crse%valid%nx, crse%valid%ny, &
+                            fine%ngx, fine%ngy)
+    end subroutine prolong_bd
+
+
+    ! ------------------------------------------------------------------------------
+    ! Upon entry, maxdepth should hold the maximum allowable V-Cycle depth. If
+    ! equals -1, the V-Cycle will find the maximum possible depth automatically.
+    ! Upon exit, maxdepth will contain the maximum depth acheived.
+    ! ------------------------------------------------------------------------------
+    subroutine vcycle (phi, rhs, geo, bc, amrrefx, amrrefy, &
+                       tol, maxiters, maxdepth, numcycles, &
+                       smooth_down, smooth_up, smooth_bottom, &
+                       zerophi, verbosity)
+        type(box_data), intent(inout) :: phi
+        type(box_data), intent(in)    :: rhs
+        type(geo_data), intent(in)    :: geo
+        type(bdry_data), intent(in)   :: bc
+        integer, intent(in)           :: amrrefx, amrrefy
+        real(dp), intent(in)          :: tol
+        integer, intent(in)           :: maxiters
+        integer, intent(inout)        :: maxdepth
+        integer, intent(in)           :: numcycles
+        integer, intent(in)           :: smooth_down, smooth_up, smooth_bottom
+        logical, intent(in)           :: zerophi
+        integer, intent(in)           :: verbosity
+
+        type(box)                                 :: valid
+        integer, dimension(:), allocatable        :: refx, refy
+        integer                                   :: ierr, d, iter
+        real(8)                                   :: mgdx, mgdy
+        type(geo_data), dimension(:), allocatable :: mggeo
+        ! type(MGVar), dimension(:), allocatable                        :: e, r, invDiags, work1
+        ! integer                                                       :: mgnx, mgny
+        ! real(8)                                                       :: resScale
+        ! real(8), dimension(:), allocatable                            :: relres
+
+
+        ! Estimate size of scheduling vectors
+        valid = rhs%valid
+        if (maxdepth .lt. 0) then
+            maxdepth = 1000
+        endif
+        call estimate_maxdepth(maxdepth, valid)
+
+        ! Allocate schedule vectors
+        allocate (refx(0:maxdepth-1), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'vcycle: Out of memory'
+            stop
+        endif
+
+        allocate (refy(0:maxdepth-1), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'vcycle: Out of memory'
+            stop
+        endif
+
+        ! Create coarsening schedule
+        call create_mgschedule(refx, refy, maxdepth, valid)
+        if (verbosity .ge. 1) then
+            print*, 'max MG depth = ', maxdepth
+        endif
+        if (verbosity .ge. 2) then
+            mgdx = valid%dx
+            mgdy = valid%dy
+            do d = 0, maxdepth-1
+                ! print*, 'ref(', d, ') = ', refx(d), ', ', refy(d)
+                print*, d, ': dx = ', mgdx, ', dy = ', mgdy
+                mgdx = mgdx * real(refx(d),8)
+                mgdy = mgdy * real(refy(d),8)
+            enddo
+        endif
+
+        ! Allocate and set up workspace
+        allocate (relres(0:maxiters), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        allocate (e(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        allocate (r(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        allocate (invdiags(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        allocate (mggeo(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        ! allocate (work1(0:maxDepth), stat=ierr)
+        ! if (ierr .ne. 0) then
+        !     print*, 'Out of memory'
+        !     call MAYDAYERROR()
+        ! endif
+
+        mgnx = valid%nx
+        mgny = valid%ny
+        mgdx = valid%dx
+        mgdy = valid%dy
+
+        do d = 0, maxdepth
+            call define_box_data (e, valid, 1, 1, BD_CELL, BD_CELL)
+            call define_box_data (r, valid, 0, 0, BD_CELL, BD_CELL)
+            call define_box_data (invdiags, valid, 0, 0, BD_CELL, BD_CELL)
+            call define_box_data (r, valid, 0, 0, BD_CELL, BD_CELL)
+
+            ! TODO: Construct mggeo(d)
+
+            call compute_inverse_diags (invdiags(d), mggeo(d))
+
+        !     ! work1...
+        !     work1(d)%imin = 1
+        !     work1(d)%imax = mgnx
+
+        !     work1(d)%jmin = 1
+        !     work1(d)%jmax = mgny
+
+        !     work1(d)%nx = mgnx
+        !     work1(d)%ny = mgny
+
+        !     work1(d)%ngx = 0
+        !     work1(d)%ngy = 0
+
+        !     allocate (work1(d)%data (1:mgnx, 1:mgny), stat=ierr)
+        !     if (ierr .ne. 0) then
+        !         print*, 'Out of memory'
+        !         call MAYDAYERROR()
+        !     endif
+
+        !     ! Move on to next depth
+        !     if (d .lt. maxDepth) then
+        !         mgnx = mgnx / refx(d)
+        !         mgny = mgny / refy(d)
+        !         mgdx = mgdx * real(refx(d),8)
+        !         mgdy = mgdy * real(refy(d),8)
+        !     endif
+        enddo
+
+
+        ! ! Initialize phi to zero if necessary
+        ! if (zeroPhi .ne. 0) then
+        !     phi = 0.0d0
+        ! endif
+
+
+        ! ! Set up residual equation
+        ! call MGPoissonSolverSerial2D_Residual(r(0)%data, rhs, phi, nx, ny, ngx, ngy, dx, dy, &
+        !                                       bclox, bcloy, bchix, bchiy)
+
+        ! relres = 0.0d0
+        ! relres(0) = 1.0d0
+        ! call MGPoissonSolverSerial2D_InnerProd(resScale, r(0)%data, r(0)%data, nx, ny)
+
+        ! if (verbosity .ge. 1) then
+        !     print*, 'scale sq res = ', resScale
+        !     print*, 'iter ', 0, ': sq res = ', relres(0)
+        ! endif
+
+        ! do iter = 1, maxIters
+        !     ! Solve for phi's correction.
+        !     e(0)%data = 0.0d0
+        !     call MGPoissonSolverSerial2D_VCycleNoInit (e, r, invDiags, work1, &
+        !                                                refx, refy, &
+        !                                                nx, ny, &
+        !                                                dx, dy, crseAMRdx, crseAMRdy, &
+        !                                                bclox, bcloy, bchix, bchiy, &
+        !                                                tol, maxDepth, 0, &
+        !                                                numCycles, &
+        !                                                smoothDown, smoothUp, smoothBottom, &
+        !                                                verbosity)
+
+
+        !     ! Apply correction
+        !     phi(1:nx,1:ny) = phi(1:nx,1:ny) + e(0)%data(1:nx,1:ny)
+
+
+        !     ! Compute residual
+        !     call MGPoissonSolverSerial2D_Residual(r(0)%data, rhs, phi, nx, ny, ngx, ngy, dx, dy, &
+        !                                           bclox, bcloy, bchix, bchiy)
+        !     call MGPoissonSolverSerial2D_InnerProd(relres(iter), r(0)%data, r(0)%data, nx, ny)
+        !     relres(iter) = relres(iter) / resScale
+        !     if (verbosity .ge. 1) then
+        !         print*, 'iter ', iter, ': sq res = ', relres(iter)
+        !     endif
+
+
+        !     ! Did we converge?
+        !     if (relres(iter) .le. tol) then
+        !         if (verbosity .ge. 1) then
+        !             print*, "Converged."
+        !         endif
+        !         exit
+        !     endif
+
+        !     ! Are we diverging?
+        !     if (relres(iter) .gt. relres(iter-1)) then
+        !         if (verbosity .ge. 1) then
+        !             print*, 'Diverging.'
+        !         endif
+
+        !         ! Undo last correction
+        !         phi(1:nx,1:ny) = phi(1:nx,1:ny) - e(0)%data(1:nx,1:ny)
+
+        !         exit
+        !     endif
+        ! enddo
+
+
+        ! ! Free memory
+        ! do d = 0, maxDepth
+        !     if (allocated(e(d)%data)) deallocate(e(d)%data)
+        !     if (allocated(r(d)%data)) deallocate(r(d)%data)
+        !     if (allocated(invDiags(d)%data)) deallocate(invDiags(d)%data)
+        !     if (allocated(work1(d)%data)) deallocate(work1(d)%data)
+        ! enddo
+        ! if (allocated(work1)) deallocate(work1)
+        if (allocated(mggeo)) deallocate(mggeo)
+        if (allocated(invDiags)) deallocate(invDiags)
+        if (allocated(r)) deallocate(r)
+        if (allocated(e)) deallocate(e)
+        if (allocated(relres)) deallocate(relres)
+        if (allocated(refx)) deallocate(refx)
+        if (allocated(refy)) deallocate(refy)
+
+    end subroutine vcycle
+
 end module MGPoisson2D
 
+
+! NOTES ............................
+! 1. inner_prod should scale by J
+! 2. check if restrict or prolong need J scaling too.
