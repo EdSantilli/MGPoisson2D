@@ -1567,11 +1567,16 @@ contains
         !                    1.0d-6,  & ! tol
         !                    20,      & ! maxiters
         !                    .true.)    ! zerophi
-        call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
-                       one,     & ! omega
+        ! call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
+        !                one,     & ! omega
+        !                1.0d-6,  & ! tol
+        !                25,      & ! maxiters
+        !                .true., & ! redblack
+        !                .true.)    ! zerophi
+        call solve_bicgstab (phi, lphi, geo, bc, homog, &
                        1.0d-6,  & ! tol
-                       25,      & ! maxiters
-                       .true., & ! redblack
+                       80,      & ! max iters
+                       5,       & ! max restarts
                        .true.)    ! zerophi
 
         ! Compute norm

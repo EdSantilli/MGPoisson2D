@@ -707,14 +707,23 @@ contains
         type(box_data), intent(in) :: bd1, bd2
         real(dp)                   :: ip
 
+        integer                    :: ilo, ihi, jlo, jhi, j
+
+        ilo = max(bd1%valid%ilo, bd2%valid%ilo)
+        ihi = min(bd1%valid%ihi, bd2%valid%ihi)
+        jlo = max(bd1%valid%jlo, bd2%valid%jlo)
+        jhi = min(bd1%valid%jhi, bd2%valid%jhi)
+
         ! Bounds checks
-        if (.not.compatible_boxes(bd1%valid, bd2%valid)) then
-            print*, 'ERROR: inner_prod_box_data: given box_data are incompatible.'
+        if ((ilo .gt. ihi) .or. (jlo .gt. jhi)) then
+            print*, 'ERROR: inner_prod_box_data: given box_data do not overlap.'
             stop
         endif
 
-        ! Compute over entire region (not just valid region).
-        ip = inner_prod_array(bd1%data, bd2%data, bd1%bx%nx, bd1%bx%ny)
+        ip = zero
+        do j = jlo, jhi
+            ip = ip + dot_product (bd1%data(ilo:ihi,j), bd2%data(ilo:ihi,j))
+        enddo
     end function inner_prod_box_data
 
 
@@ -1820,6 +1829,178 @@ contains
         call undefine_box_data (r)
 
     end subroutine relax_gs
+
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    subroutine solve_bicgstab (phi, rhs, geo, bc, homog, tol, max_iters, max_restarts, zerophi)
+        type(box_data), intent(inout)                 :: phi
+        type(box_data), intent(in)                    :: rhs
+        type(geo_data), intent(in)                    :: geo
+        type(bdry_data), intent(in)                   :: bc
+        logical, intent(in)                           :: homog
+        real(dp), intent(in)                          :: tol
+        integer, intent(in)                           :: max_iters, max_restarts
+        logical, intent(in)                           :: zerophi
+
+        integer                                       :: ilo, ihi
+        integer                                       :: jlo, jhi
+        type(box_data)                                :: r, r0, nu, p, t
+        real(dp)                                      :: rscale
+        real(dp), dimension(0:max_iters+max_restarts) :: rho, omega, relres
+        real(dp)                                      :: alpha, beta, lastres
+        integer                                       :: iter, i, num_restarts
+        logical                                       :: is_restart
+
+        real(dp), parameter                           :: hang = 1.0E-7_dp
+
+        ! Do we even need to be here?
+        if (max_iters .eq. 0) then
+            return
+        endif
+
+        ilo = rhs%valid%ilo
+        ihi = rhs%valid%ihi
+        jlo = rhs%valid%jlo
+        jhi = rhs%valid%jhi
+
+        ! Allocate workspace
+        call define_box_data (r, rhs)
+        call define_box_data (r0, rhs)
+        call define_box_data (nu, phi)
+        call define_box_data (p, rhs)
+        call define_box_data (t, rhs)
+
+        ! Initialize phi to zero
+        if (zerophi .ne. 0) then
+            phi%data = zero
+        endif
+
+        is_restart = .false.
+        i = 0
+        relres = zero
+
+        ! Compute initial residual
+        call compute_residual (r, rhs, phi, geo, bc, homog)
+        r0%data = r%data
+        rscale = inner_prod (r0, r0)
+        relres(0) = one
+        print*, 'scale sq res = ', rscale
+        print*, 'iter ', 0, ': sq res = ', relres(0)
+
+        ! Initialize all other workspace variables
+        alpha = one
+        rho(i) = one
+        omega(i) = one
+        nu%data = zero
+        p%data = zero
+        num_restarts = 0
+
+        ! Iterate...
+        do iter = 1, max_iters
+            ! Increment index for bookkeeping vars.
+            i = i + 1
+
+            rho(i) = inner_prod (r0, r)
+            beta = (rho(i) / rho(i-1)) * (alpha / omega(i-1))
+            p%data = beta*p%data
+            p%data(ilo:ihi,jlo:jhi) = p%data(ilo:ihi,jlo:jhi)                  &
+                                    - beta*omega(i-1)*nu%data(ilo:ihi,jlo:jhi) &
+                                    + r%data(ilo:ihi,jlo:jhi)
+
+            ! A preconditioner would go here
+            call compute_laplacian (nu, p, geo, bc, homog)
+            ! alpha = inner_prod (r0, nu)
+            ! alpha = rho(i) / alpha
+            ! r%data(ilo:ihi,jlo:jhi) = r%data(ilo:ihi,jlo:jhi) - alpha*nu%data(ilo:ihi,jlo:jhi)
+
+        !     ! A preconditioner would go here
+        !     call compute_laplacian (t, r, geo, bc, homog)
+        !     omega(i) = inner_prod (t, r) / inner_prod (t, t)
+
+        !     ! This would also change with a preconditioner
+        !     phi%data(ilo:ihi,jlo:jhi) = phi%data(ilo:ihi,jlo:jhi)         &
+        !                               + alpha * p%data(ilo:ihi,jlo:jhi)   &
+        !                               + omega(i) * r%data(ilo:ihi,jlo:jhi)
+
+        !     ! Compute new residual
+        !     r%data = r%data - omega(i)*t%data
+
+        !     ! If this is a restart, we expect the residual to rise.
+        !     ! Don't let this stop the solver from proceeding.
+        !     if (is_restart .eq. .false.) then
+        !         lastres = relres(i-1)
+        !     else
+        !         lastres = 1.0E200_dp
+        !     endif
+
+        !     ! Check if we are at tol
+        !     relres(i) = inner_prod (r, r) / rscale
+        !     print*, 'iter ', iter, ': sq res = ', relres(i)
+
+        !     ! Did we converge?
+        !     if (relres(i) .le. tol) then
+        !         print*, "Converged."
+        !         exit
+        !     endif
+
+        !     ! Are we hanging?
+        !     if (abs(relres(i) - lastres) .lt. hang) then
+        !         if (num_restarts .lt. max_restarts) then
+        !             ! The act of restarting will produce a new residual which we
+        !             ! would like to include in our bookkeeping, so we increase i,
+        !             ! recompute the residual, and reset all other bookkeeping vars.
+
+        !             ! Increment
+        !             num_restarts = num_restarts + 1
+        !             i = i + 1
+
+        !             ! Compute new residual
+        !             call compute_residual (r, rhs, phi, geo, bc, homog)
+        !             r0%data = r%data
+        !             relres(i) = inner_prod (r0, r0) / rscale
+        !             print*, "Hanging, restart number ", num_restarts, ', current sq res = ', relres(i)
+
+        !             ! Reset bookkeeping variables
+        !             alpha = one
+        !             rho(i) = one
+        !             omega(i) = one
+        !             nu%data = zero
+        !             p%data = zero
+
+        !             ! Start new iteration
+        !             is_restart = .true.
+        !             cycle
+        !         else
+        !             print*, "Hanging, max restarts reached."
+        !             exit
+        !         endif
+        !     endif
+
+        !     ! Are we diverging?
+        !     if (relres(i) .gt. lastres) then
+        !         print*, 'Diverging.'
+
+        !         ! Undo last correction
+        !         ! TODO: It would be better to remember the best solution
+        !         r%data = r%data + omega(i)*t%data
+        !         phi%data(ilo:ihi,jlo:jhi) = phi%data(ilo:ihi,jlo:jhi)         &
+        !                                   - alpha * p%data(ilo:ihi,jlo:jhi)   &
+        !                                   - omega(i) * r%data(ilo:ihi,jlo:jhi)
+        !         exit
+        !     endif
+
+            is_restart = .false.
+        enddo
+
+        ! Free memory
+        call undefine_box_data (r)
+        call undefine_box_data (r0)
+        call undefine_box_data (nu)
+        call undefine_box_data (p)
+        call undefine_box_data (t)
+
+    end subroutine solve_bicgstab
 
 end module MGPoisson2D
 
