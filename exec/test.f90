@@ -1335,6 +1335,106 @@ contains
     end function test_derivatives
 
 
+    ! ! --------------------------------------------------------------------------
+    ! ! --------------------------------------------------------------------------
+    ! function test_solver (geo) result (res)
+    !     use MGPoisson2D
+    !     implicit none
+
+    !     real(dp)                   :: res
+    !     type(geo_data), intent(in) :: geo
+
+    !     type(box)                  :: valid
+    !     integer                    :: ilo, ihi, jlo, jhi, i, j
+    !     real(dp)                   :: dx, dy
+    !     real(dp)                   :: kx, ky
+    !     logical, parameter         :: homog = .true.
+
+    !     type(box_data)             :: bdx, bdy
+    !     type(box_data)             :: soln
+    !     type(bdry_data)            :: bc
+    !     type(box_data)             :: lphi
+    !     type(box_data)             :: invdiags
+    !     type(box_data)             :: phi
+
+    !     valid = geo%J%valid
+
+    !     ilo = valid%ilo
+    !     ihi = valid%ihi
+    !     jlo = valid%jlo
+    !     jhi = valid%jhi
+
+    !     dx = valid%dx
+    !     dy = valid%dy
+
+    !     ! Compute cell-centered Cartesian locations
+    !     call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
+    !     call define_box_data (bdy, bdx)
+    !     call fill_x (bdx)
+    !     call fill_y (bdy)
+
+    !     ! Set BCs
+    !     call define_bdry_data (bc, valid, &
+    !                            BCTYPE_NEUM, &   ! xlo
+    !                            BCTYPE_NEUM, &   ! xhi
+    !                            BCTYPE_NEUM, &   ! ylo
+    !                            BCTYPE_NEUM, &   ! yhi
+    !                            BCMODE_UNIFORM, &    ! xlo
+    !                            BCMODE_UNIFORM, &    ! xhi
+    !                            BCMODE_UNIFORM, &    ! ylo
+    !                            BCMODE_UNIFORM)      ! yhi
+    !     bc%data_xlo = zero
+    !     bc%data_xhi = zero
+    !     bc%data_ylo = zero
+    !     bc%data_yhi = zero
+
+    !     ! Set up solution
+    !     kx = (valid%nx/2-2) * pi / L
+    !     ky = (valid%ny/2-2) * pi / L
+    !     call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
+    !     soln%data = cos(kx*bdx%data) * cos(ky*bdy%data)
+
+    !     ! Set up RHS
+    !     call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
+    !     call compute_laplacian (lphi, soln, geo, bc, homog)
+    !     ! lphi%data = -(kx**2 + ky**2) * soln%data(ilo:ihi,jlo:jhi)
+
+    !     ! Set up invdiags
+    !     call define_box_data (invdiags, lphi)
+    !     call compute_inverse_diags (invdiags, geo)
+
+    !     ! Solve
+    !     call define_box_data (phi, soln)
+    !     ! call relax_jacobi (phi, lphi, geo, bc, homog, invdiags, &
+    !     !                    one,     & ! omega
+    !     !                    1.0d-6,  & ! tol
+    !     !                    100,     & ! maxiters
+    !     !                    .true.)    ! zerophi
+
+    !     call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
+    !                    one,     & ! omega
+    !                    1.0d-6,  & ! tol
+    !                    25,       & ! maxiters
+    !                    .false., & ! redblack
+    !                    .true.)    ! zerophi
+
+    !     ! Compute norm
+    !     phi%data = phi%data - soln%data
+    !     res = pnorm (phi, phi%valid, norm_type)
+
+    !     ! Free memory
+    !     ! call undefine_box_data (r)
+    !     call undefine_box_data (phi)
+    !     call undefine_box_data (invdiags)
+    !     call undefine_box_data (lphi)
+    !     call undefine_box_data (soln)
+    !     call undefine_box_data (bdx)
+    !     call undefine_box_data (bdy)
+    !     call undefine_bdry_data (bc)
+
+    ! end function test_solver
+
+
     ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
     function test_solver (geo) result (res)
@@ -1350,13 +1450,14 @@ contains
         real(dp)                   :: kx, ky
         logical, parameter         :: homog = .true.
 
-        type(box_data)             :: bdx, bdy
+        real(dp), dimension(:), pointer :: xp, yp
+        type(box_data),target      :: bdx, bdx_x, bdx_y
+        type(box_data),target      :: bdy, bdy_x, bdy_y
         type(box_data)             :: soln
         type(bdry_data)            :: bc
         type(box_data)             :: lphi
         type(box_data)             :: invdiags
         type(box_data)             :: phi
-        type(box_data)             :: r
 
         valid = geo%J%valid
 
@@ -1369,10 +1470,49 @@ contains
         dy = valid%dy
 
         ! Compute cell-centered Cartesian locations
-        call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
-        call define_box_data (bdy, bdx)
+        call define_box_data (bdx  , valid, 1, 1, BD_CELL, BD_CELL)
+        call define_box_data (bdx_x, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (bdx_y, valid, 0, 0, BD_CELL, BD_NODE)
         call fill_x (bdx)
+        call fill_x (bdx_x)
+        call fill_x (bdx_y)
+
+        call define_box_data (bdy  , valid, 1, 1, BD_CELL, BD_CELL)
+        call define_box_data (bdy_x, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (bdy_y, valid, 0, 0, BD_CELL, BD_NODE)
         call fill_y (bdy)
+        call fill_y (bdy_x)
+        call fill_y (bdy_y)
+
+        ! ! Set BCs
+        ! call define_bdry_data (bc, valid, &
+        !                        BCTYPE_DIRI, &   ! xlo
+        !                        BCTYPE_DIRI, &   ! xhi
+        !                        BCTYPE_DIRI, &   ! ylo
+        !                        BCTYPE_DIRI, &   ! yhi
+        !                        BCMODE_NONUNIFORM, &    ! xlo
+        !                        BCMODE_NONUNIFORM, &    ! xhi
+        !                        BCMODE_NONUNIFORM, &    ! ylo
+        !                        BCMODE_NONUNIFORM)      ! yhi
+
+        ! kx = (valid%nx/2-2) * pi / L
+        ! ky = (valid%ny/2-2) * pi / L
+
+        ! xp => bdx_x%data(ilo,:)
+        ! yp => bdy_x%data(ilo,:)
+        ! bc%data_xlo = cos(kx*xp) * cos(ky*yp)
+
+        ! xp => bdx_x%data(ihi+1,:)
+        ! yp => bdy_x%data(ihi+1,:)
+        ! bc%data_xhi = cos(kx*xp) * cos(ky*yp)
+
+        ! xp => bdx_y%data(:,jlo)
+        ! yp => bdy_y%data(:,jlo)
+        ! bc%data_ylo = cos(kx*xp) * cos(ky*yp)
+
+        ! xp => bdx_y%data(:,jhi+1)
+        ! yp => bdy_y%data(:,jhi+1)
+        ! bc%data_yhi = cos(kx*xp) * cos(ky*yp)
 
         ! Set BCs
         call define_bdry_data (bc, valid, &
@@ -1380,18 +1520,34 @@ contains
                                BCTYPE_NEUM, &   ! xhi
                                BCTYPE_NEUM, &   ! ylo
                                BCTYPE_NEUM, &   ! yhi
-                               BCMODE_UNIFORM, &    ! xlo
-                               BCMODE_UNIFORM, &    ! xhi
-                               BCMODE_UNIFORM, &    ! ylo
-                               BCMODE_UNIFORM)      ! yhi
-        bc%data_xlo = zero
-        bc%data_xhi = zero
-        bc%data_ylo = zero
-        bc%data_yhi = zero
+                               BCMODE_NONUNIFORM, &    ! xlo
+                               BCMODE_NONUNIFORM, &    ! xhi
+                               BCMODE_NONUNIFORM, &    ! ylo
+                               BCMODE_NONUNIFORM)      ! yhi
+
+        kx = (valid%nx/2-2) * pi / L
+        ky = (valid%ny/2-2) * pi / L
+
+        xp => bdx_x%data(ilo,:)
+        yp => bdy_x%data(ilo,:)
+        bc%data_xlo = -kx * sin(kx*xp) * cos(ky*yp)
+
+        xp => bdx_x%data(ihi+1,:)
+        yp => bdy_x%data(ihi+1,:)
+        bc%data_xhi = -kx * sin(kx*xp) * cos(ky*yp)
+
+        xp => bdx_y%data(:,jlo)
+        yp => bdy_y%data(:,jlo)
+        bc%data_ylo = -ky * cos(kx*xp) * sin(ky*yp)
+
+        xp => bdx_y%data(:,jhi+1)
+        yp => bdy_y%data(:,jhi+1)
+        bc%data_yhi = -ky * cos(kx*xp) * sin(ky*yp)
+
+        nullify(xp)
+        nullify(yp)
 
         ! Set up solution
-        kx = eight * pi / L
-        ky = eight * pi / L
         call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
         soln%data = cos(kx*bdx%data) * cos(ky*bdy%data)
 
@@ -1404,337 +1560,37 @@ contains
         call define_box_data (invdiags, lphi)
         call compute_inverse_diags (invdiags, geo)
 
-        ! ! Test inverse diags
-        ! call define_box_data (r, lphi)
-        ! r%data = -(two/dx**2 + two/dy**2)
-        ! r%data = r%data - invdiags%data
-        ! res = pnorm (r, r%valid, norm_type)
-
-        ! ! Test Laplacian
-        ! call define_box_data (r, lphi)
-        ! call compute_laplacian (r, soln, geo, bc, homog)
-        ! r%data = r%data - lphi%data
-        ! res = pnorm (r, r%valid, norm_type)
-
-
         ! Solve
         call define_box_data (phi, soln)
         ! call relax_jacobi (phi, lphi, geo, bc, homog, invdiags, &
         !                    one,     & ! omega
         !                    1.0d-6,  & ! tol
-        !                    100,     & ! maxiters
+        !                    20,      & ! maxiters
         !                    .true.)    ! zerophi
-
         call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
                        one,     & ! omega
                        1.0d-6,  & ! tol
-                       5,       & ! maxiters
-                       .false., & ! redblack
+                       25,      & ! maxiters
+                       .true., & ! redblack
                        .true.)    ! zerophi
 
         ! Compute norm
         phi%data = phi%data - soln%data
         res = pnorm (phi, phi%valid, norm_type)
 
-
-        ! ! call define_box_data (f1, valid, 0, 0, BD_NODE, BD_CELL)
-        ! ! call define_box_data (f2, valid, 0, 0, BD_CELL, BD_NODE)
-        ! ! call define_box_data (t1, f1)
-        ! ! call define_box_data (t2, f2)
-        ! ! call compute_grad (f1, f2, soln, geo, bc, .false., t1, t2)
-        ! ! call fill_J (t1)
-        ! ! call fill_J (t2)
-        ! ! f1%data = f1%data / t1%data
-        ! ! f2%data = f2%data / t2%data
-        ! ! ! call compute_pd (f1, soln, 1)
-        ! ! ! call compute_pd (f2, soln, 2)
-
-        ! ! call define_box_data (xx, f1)
-        ! ! call define_box_data (yy, f1)
-        ! ! call fill_x (xx)
-        ! ! call fill_y (yy)
-        ! ! t1%data = three*(xx%data**2) * (yy%data**3)
-        ! ! call undefine_box_data (xx)
-        ! ! call undefine_box_data (yy)
-
-        ! ! call define_box_data (xx, f2)
-        ! ! call define_box_data (yy, f2)
-        ! ! call fill_x (xx)
-        ! ! call fill_y (yy)
-        ! ! t2%data = three*(xx%data**3) * (yy%data**2)
-        ! ! call undefine_box_data (xx)
-        ! ! call undefine_box_data (yy)
-
-        ! ! f1%data = f1%data - t1%data
-        ! ! res = pnorm (f1, f1%valid, norm_type)
-        ! ! f2%data = f2%data - t2%data
-        ! ! res = pnorm (f2, f2%valid, norm_type)
-
-        ! ! lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) / geo%J%data(ilo:ihi,jlo:jhi)
-        ! ! soln%data = (six*bdx%data) * (bdy%data**3) + (bdx%data**3) * (six*bdy%data)
-        ! ! do j = jlo, jhi
-        ! !     do i = ilo, ihi
-        ! !         if (abs(lphi%data(i,j)-soln%data(i,j)) .gt. one/ten**2) then
-        ! !             print*, i, ',', j, '->', lphi%data(i,j), ',', soln%data(i,j)
-        ! !         endif
-        ! !     enddo
-        ! ! enddo
-        ! ! lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) - soln%data(ilo:ihi,jlo:jhi)
-        ! ! res = pnorm (lphi, lphi%valid, norm_type)
-
         ! Free memory
-        ! call undefine_box_data (r)
         call undefine_box_data (phi)
         call undefine_box_data (invdiags)
         call undefine_box_data (lphi)
         call undefine_box_data (soln)
         call undefine_box_data (bdx)
+        call undefine_box_data (bdx_x)
+        call undefine_box_data (bdx_y)
         call undefine_box_data (bdy)
+        call undefine_box_data (bdy_x)
+        call undefine_box_data (bdy_y)
         call undefine_bdry_data (bc)
 
     end function test_solver
-
-
-    ! ! --------------------------------------------------------------------------
-    ! ! --------------------------------------------------------------------------
-    ! function test_solver (geo) result (res)
-    !     use MGPoisson2D
-    !     implicit none
-
-    !     real(dp)                   :: res
-    !     type(geo_data), intent(in) :: geo
-
-    !     type(box)                  :: valid
-    !     integer                    :: ilo, ihi, jlo, jhi, i, j
-    !     real(dp)                   :: dx, dy
-
-    !     type(box_data)             :: soln, phi, lphi, invdiags, r
-    !     type(box_data)             :: bdx, bdy
-    !     type(box_data), target     :: bdx_xlo, bdx_xhi, bdx_ylo, bdx_yhi
-    !     type(box_data), target     :: bdy_xlo, bdy_xhi, bdy_ylo, bdy_yhi
-    !     real(dp), dimension(:), pointer :: xp, yp
-    !     type(bdry_data)            :: bc
-
-    !     type(box_data)             :: f1, f2, t1, t2, xx, yy
-    !     real(dp)                   :: x, y
-
-    !     logical, parameter         :: homog = .true.
-
-    !     valid = geo%J%valid
-
-    !     ilo = valid%ilo
-    !     ihi = valid%ihi
-    !     jlo = valid%jlo
-    !     jhi = valid%jhi
-
-    !     dx = valid%dx
-    !     dy = valid%dy
-
-    !     ! Compute cell-centered Cartesian locations
-    !     call define_box_data (bdx, valid, 1, 1, BD_CELL, BD_CELL)
-    !     call define_box_data_bdry (bdx_xlo, bdx, 1, SIDE_LO)
-    !     call define_box_data_bdry (bdx_xhi, bdx, 1, SIDE_HI)
-    !     call define_box_data_bdry (bdx_ylo, bdx, 2, SIDE_LO)
-    !     call define_box_data_bdry (bdx_yhi, bdx, 2, SIDE_HI)
-
-    !     call define_box_data (bdy, bdx)
-    !     call define_box_data_bdry (bdy_xlo, bdy, 1, SIDE_LO)
-    !     call define_box_data_bdry (bdy_xhi, bdy, 1, SIDE_HI)
-    !     call define_box_data_bdry (bdy_ylo, bdy, 2, SIDE_LO)
-    !     call define_box_data_bdry (bdy_yhi, bdy, 2, SIDE_HI)
-
-    !     call fill_x (bdx)
-    !     call fill_x (bdx_xlo)
-    !     call fill_x (bdx_xhi)
-    !     call fill_x (bdx_ylo)
-    !     call fill_x (bdx_yhi)
-
-    !     call fill_y (bdy)
-    !     call fill_y (bdy_xlo)
-    !     call fill_y (bdy_xhi)
-    !     call fill_y (bdy_ylo)
-    !     call fill_y (bdy_yhi)
-    !     ! Set BCs
-    !     call define_bdry_data (bc, valid, &
-    !                            BCTYPE_DIRI, &   ! xlo
-    !                            BCTYPE_DIRI, &   ! xhi
-    !                            BCTYPE_DIRI, &   ! ylo
-    !                            BCTYPE_DIRI, &   ! yhi
-    !                            BCMODE_UNIFORM, &    ! xlo
-    !                            BCMODE_UNIFORM, &    ! xhi
-    !                            BCMODE_UNIFORM, &    ! ylo
-    !                            BCMODE_UNIFORM)      ! yhi
-
-    !     bc%data_xlo = zero
-    !     bc%data_xhi = zero
-    !     bc%data_ylo = zero
-    !     bc%data_yhi = zero
-
-    !     ! ! Set BCs
-    !     ! call define_bdry_data (bc, valid, &
-    !     !                        BCTYPE_DIRI, &   ! xlo
-    !     !                        BCTYPE_DIRI, &   ! xhi
-    !     !                        BCTYPE_DIRI, &   ! ylo
-    !     !                        BCTYPE_DIRI, &   ! yhi
-    !     !                        BCMODE_NONUNIFORM, &    ! xlo
-    !     !                        BCMODE_NONUNIFORM, &    ! xhi
-    !     !                        BCMODE_NONUNIFORM, &    ! ylo
-    !     !                        BCMODE_NONUNIFORM)      ! yhi
-
-    !     ! xp => bdx_xlo%data(ilo,:)
-    !     ! yp => bdy_xlo%data(ilo,:)
-    !     ! bc%data_xlo = xp**3 * yp**3
-
-    !     ! xp => bdx_xhi%data(ihi+1,:)
-    !     ! yp => bdy_xhi%data(ihi+1,:)
-    !     ! bc%data_xhi = xp**3 * yp**3
-
-    !     ! xp => bdx_ylo%data(:,jlo)
-    !     ! yp => bdy_ylo%data(:,jlo)
-    !     ! bc%data_ylo = xp**3 * yp**3
-
-    !     ! xp => bdx_yhi%data(:,jhi+1)
-    !     ! yp => bdy_yhi%data(:,jhi+1)
-    !     ! bc%data_yhi = xp**3 * yp**3
-
-    !     ! nullify(xp)
-    !     ! nullify(yp)
-
-    !     ! ! Set BCs
-    !     ! call define_bdry_data (bc, valid, &
-    !     !                        BCTYPE_NEUM, &   ! xlo
-    !     !                        BCTYPE_NEUM, &   ! xhi
-    !     !                        BCTYPE_NEUM, &   ! ylo
-    !     !                        BCTYPE_NEUM, &   ! yhi
-    !     !                        BCMODE_NONUNIFORM, &    ! xlo
-    !     !                        BCMODE_NONUNIFORM, &    ! xhi
-    !     !                        BCMODE_NONUNIFORM, &    ! ylo
-    !     !                        BCMODE_NONUNIFORM)      ! yhi
-
-    !     ! xp => bdx_xlo%data(ilo,:)
-    !     ! yp => bdy_xlo%data(ilo,:)
-    !     ! bc%data_xlo = (three*xp**2*yp**3) * geo%Jgup_xx%data(ilo,:) &
-    !     !             + (xp**3*three*yp**2) * geo%Jgup_xy%data(ilo,:)
-
-    !     ! xp => bdx_xhi%data(ihi+1,:)
-    !     ! yp => bdy_xhi%data(ihi+1,:)
-    !     ! bc%data_xhi = (three*xp**2*yp**3) * geo%Jgup_xx%data(ihi+1,:) &
-    !     !             + (xp**3*three*yp**2) * geo%Jgup_xy%data(ihi+1,:)
-
-    !     ! xp => bdx_ylo%data(:,jlo)
-    !     ! yp => bdy_ylo%data(:,jlo)
-    !     ! bc%data_ylo = ((three*xp**2)*(yp**3)) * geo%Jgup_yx%data(:,jlo) &
-    !     !             + ((xp**3)*(three*yp**2)) * geo%Jgup_yy%data(:,jlo)
-
-    !     ! xp => bdx_yhi%data(:,jhi+1)
-    !     ! yp => bdy_yhi%data(:,jhi+1)
-    !     ! bc%data_yhi = (three*xp**2*yp**3) * geo%Jgup_yx%data(:,jhi+1) &
-    !     !             + (xp**3*three*yp**2) * geo%Jgup_yy%data(:,jhi+1)
-
-    !     ! nullify(xp)
-    !     ! nullify(yp)
-
-    !     ! Set up solution
-    !     call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
-    !     soln%data = sin(8*pi*bdx%data/L)
-
-    !     ! Set up RHS
-    !     call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
-    !     call compute_laplacian (lphi, soln, geo, bc, homog)
-
-    !     ! Set up invdiags
-    !     call define_box_data (invdiags, lphi)
-    !     call compute_inverse_diags (invdiags, geo)
-
-    !     ! Solve
-    !     call define_box_data (phi, soln)
-    !     phi%data = zero
-
-    !     call define_box_data (r, lphi)
-    !     ! call compute_residual (r, lphi, phi, geo, bc, .false.)
-
-    !     call relax_jacobi (phi, lphi, geo, bc, homog, invdiags, &
-    !                        1.0d0,   & ! omega
-    !                        1.0d-6,  & ! tol
-    !                        1,     & ! maxiters
-    !                        .true.)    ! zerophi
-
-    !     ! call relax_gs (phi, r, geo, bc, invdiags, &
-    !     !                1.0d0,   & ! omega
-    !     !                1.0d-6,  & ! tol
-    !     !                5,     & ! maxiters
-    !     !                .false., & ! redblack
-    !     !                .true.)    ! zerophi
-
-    !     ! Compute norm
-    !     phi%data = phi%data - soln%data
-    !     res = pnorm (phi, phi%valid, norm_type)
-
-
-    !     ! call define_box_data (f1, valid, 0, 0, BD_NODE, BD_CELL)
-    !     ! call define_box_data (f2, valid, 0, 0, BD_CELL, BD_NODE)
-    !     ! call define_box_data (t1, f1)
-    !     ! call define_box_data (t2, f2)
-    !     ! call compute_grad (f1, f2, soln, geo, bc, .false., t1, t2)
-    !     ! call fill_J (t1)
-    !     ! call fill_J (t2)
-    !     ! f1%data = f1%data / t1%data
-    !     ! f2%data = f2%data / t2%data
-    !     ! ! call compute_pd (f1, soln, 1)
-    !     ! ! call compute_pd (f2, soln, 2)
-
-    !     ! call define_box_data (xx, f1)
-    !     ! call define_box_data (yy, f1)
-    !     ! call fill_x (xx)
-    !     ! call fill_y (yy)
-    !     ! t1%data = three*(xx%data**2) * (yy%data**3)
-    !     ! call undefine_box_data (xx)
-    !     ! call undefine_box_data (yy)
-
-    !     ! call define_box_data (xx, f2)
-    !     ! call define_box_data (yy, f2)
-    !     ! call fill_x (xx)
-    !     ! call fill_y (yy)
-    !     ! t2%data = three*(xx%data**3) * (yy%data**2)
-    !     ! call undefine_box_data (xx)
-    !     ! call undefine_box_data (yy)
-
-    !     ! f1%data = f1%data - t1%data
-    !     ! res = pnorm (f1, f1%valid, norm_type)
-    !     ! f2%data = f2%data - t2%data
-    !     ! res = pnorm (f2, f2%valid, norm_type)
-
-    !     ! lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) / geo%J%data(ilo:ihi,jlo:jhi)
-    !     ! soln%data = (six*bdx%data) * (bdy%data**3) + (bdx%data**3) * (six*bdy%data)
-    !     ! do j = jlo, jhi
-    !     !     do i = ilo, ihi
-    !     !         if (abs(lphi%data(i,j)-soln%data(i,j)) .gt. one/ten**2) then
-    !     !             print*, i, ',', j, '->', lphi%data(i,j), ',', soln%data(i,j)
-    !     !         endif
-    !     !     enddo
-    !     ! enddo
-    !     ! lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) - soln%data(ilo:ihi,jlo:jhi)
-    !     ! res = pnorm (lphi, lphi%valid, norm_type)
-
-    !     ! Free memory
-    !     call undefine_bdry_data (bc)
-    !     call undefine_box_data (soln)
-    !     call undefine_box_data (phi)
-    !     call undefine_box_data (lphi)
-    !     call undefine_box_data (r)
-
-    !     call undefine_box_data (bdx)
-    !     call undefine_box_data (bdx_xlo)
-    !     call undefine_box_data (bdx_xhi)
-    !     call undefine_box_data (bdx_ylo)
-    !     call undefine_box_data (bdx_yhi)
-
-    !     call undefine_box_data (bdy)
-    !     call undefine_box_data (bdy_xlo)
-    !     call undefine_box_data (bdy_xhi)
-    !     call undefine_box_data (bdy_ylo)
-    !     call undefine_box_data (bdy_yhi)
-
-    ! end function test_solver
 
 end program test
