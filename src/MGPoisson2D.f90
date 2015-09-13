@@ -1865,11 +1865,11 @@ contains
         jhi = rhs%valid%jhi
 
         ! Allocate workspace
-        call define_box_data (r, rhs)
-        call define_box_data (r0, rhs)
+        call define_box_data (r, phi)
+        call define_box_data (r0, phi)
         call define_box_data (nu, phi)
-        call define_box_data (p, rhs)
-        call define_box_data (t, rhs)
+        call define_box_data (p, phi)
+        call define_box_data (t, phi)
 
         ! Initialize phi to zero
         if (zerophi .ne. 0) then
@@ -1904,91 +1904,91 @@ contains
             rho(i) = inner_prod (r0, r)
             beta = (rho(i) / rho(i-1)) * (alpha / omega(i-1))
             p%data = beta*p%data
-            p%data(ilo:ihi,jlo:jhi) = p%data(ilo:ihi,jlo:jhi)                  &
-                                    - beta*omega(i-1)*nu%data(ilo:ihi,jlo:jhi) &
-                                    + r%data(ilo:ihi,jlo:jhi)
+            p%data = p%data                  &
+                   - beta*omega(i-1)*nu%data &
+                   + r%data
 
             ! A preconditioner would go here
             call compute_laplacian (nu, p, geo, bc, homog)
-            ! alpha = inner_prod (r0, nu)
-            ! alpha = rho(i) / alpha
-            ! r%data(ilo:ihi,jlo:jhi) = r%data(ilo:ihi,jlo:jhi) - alpha*nu%data(ilo:ihi,jlo:jhi)
+            alpha = inner_prod (r0, nu)
+            alpha = rho(i) / alpha
+            r%data = r%data - alpha*nu%data
 
-        !     ! A preconditioner would go here
-        !     call compute_laplacian (t, r, geo, bc, homog)
-        !     omega(i) = inner_prod (t, r) / inner_prod (t, t)
+            ! A preconditioner would go here
+            call compute_laplacian (t, r, geo, bc, homog)
+            omega(i) = inner_prod (t, r) / inner_prod (t, t)
 
-        !     ! This would also change with a preconditioner
-        !     phi%data(ilo:ihi,jlo:jhi) = phi%data(ilo:ihi,jlo:jhi)         &
-        !                               + alpha * p%data(ilo:ihi,jlo:jhi)   &
-        !                               + omega(i) * r%data(ilo:ihi,jlo:jhi)
+            ! This would also change with a preconditioner
+            phi%data = phi%data         &
+                     + alpha * p%data   &
+                     + omega(i) * r%data
 
-        !     ! Compute new residual
-        !     r%data = r%data - omega(i)*t%data
+            ! Compute new residual
+            r%data = r%data - omega(i)*t%data
 
-        !     ! If this is a restart, we expect the residual to rise.
-        !     ! Don't let this stop the solver from proceeding.
-        !     if (is_restart .eq. .false.) then
-        !         lastres = relres(i-1)
-        !     else
-        !         lastres = 1.0E200_dp
-        !     endif
+            ! If this is a restart, we expect the residual to rise.
+            ! Don't let this stop the solver from proceeding.
+            if (is_restart .eq. .false.) then
+                lastres = relres(i-1)
+            else
+                lastres = 1.0E200_dp
+            endif
 
-        !     ! Check if we are at tol
-        !     relres(i) = inner_prod (r, r) / rscale
-        !     print*, 'iter ', iter, ': sq res = ', relres(i)
+            ! Check if we are at tol
+            relres(i) = inner_prod (r, r) / rscale
+            print*, 'iter ', iter, ': sq res = ', relres(i)
 
-        !     ! Did we converge?
-        !     if (relres(i) .le. tol) then
-        !         print*, "Converged."
-        !         exit
-        !     endif
+            ! Did we converge?
+            if (relres(i) .le. tol) then
+                print*, "Converged."
+                exit
+            endif
 
-        !     ! Are we hanging?
-        !     if (abs(relres(i) - lastres) .lt. hang) then
-        !         if (num_restarts .lt. max_restarts) then
-        !             ! The act of restarting will produce a new residual which we
-        !             ! would like to include in our bookkeeping, so we increase i,
-        !             ! recompute the residual, and reset all other bookkeeping vars.
+            ! Are we hanging?
+            if (abs(relres(i) - lastres) .lt. hang) then
+                if (num_restarts .lt. max_restarts) then
+                    ! The act of restarting will produce a new residual which we
+                    ! would like to include in our bookkeeping, so we increase i,
+                    ! recompute the residual, and reset all other bookkeeping vars.
 
-        !             ! Increment
-        !             num_restarts = num_restarts + 1
-        !             i = i + 1
+                    ! Increment
+                    num_restarts = num_restarts + 1
+                    i = i + 1
 
-        !             ! Compute new residual
-        !             call compute_residual (r, rhs, phi, geo, bc, homog)
-        !             r0%data = r%data
-        !             relres(i) = inner_prod (r0, r0) / rscale
-        !             print*, "Hanging, restart number ", num_restarts, ', current sq res = ', relres(i)
+                    ! Compute new residual
+                    call compute_residual (r, rhs, phi, geo, bc, homog)
+                    r0%data = r%data
+                    relres(i) = inner_prod (r0, r0) / rscale
+                    print*, "Hanging, restart number ", num_restarts, ', current sq res = ', relres(i)
 
-        !             ! Reset bookkeeping variables
-        !             alpha = one
-        !             rho(i) = one
-        !             omega(i) = one
-        !             nu%data = zero
-        !             p%data = zero
+                    ! Reset bookkeeping variables
+                    alpha = one
+                    rho(i) = one
+                    omega(i) = one
+                    nu%data = zero
+                    p%data = zero
 
-        !             ! Start new iteration
-        !             is_restart = .true.
-        !             cycle
-        !         else
-        !             print*, "Hanging, max restarts reached."
-        !             exit
-        !         endif
-        !     endif
+                    ! Start new iteration
+                    is_restart = .true.
+                    cycle
+                else
+                    print*, "Hanging, max restarts reached."
+                    exit
+                endif
+            endif
 
-        !     ! Are we diverging?
-        !     if (relres(i) .gt. lastres) then
-        !         print*, 'Diverging.'
+            ! Are we diverging?
+            if (relres(i) .gt. lastres) then
+                print*, 'Diverging.'
 
-        !         ! Undo last correction
-        !         ! TODO: It would be better to remember the best solution
-        !         r%data = r%data + omega(i)*t%data
-        !         phi%data(ilo:ihi,jlo:jhi) = phi%data(ilo:ihi,jlo:jhi)         &
-        !                                   - alpha * p%data(ilo:ihi,jlo:jhi)   &
-        !                                   - omega(i) * r%data(ilo:ihi,jlo:jhi)
-        !         exit
-        !     endif
+                ! Undo last correction
+                ! TODO: It would be better to remember the best solution
+                r%data = r%data + omega(i)*t%data
+                phi%data = phi%data         &
+                         - alpha * p%data   &
+                         - omega(i) * r%data
+                exit
+            endif
 
             is_restart = .false.
         enddo
