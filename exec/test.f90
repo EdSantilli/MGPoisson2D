@@ -1449,6 +1449,7 @@ contains
         real(dp)                   :: dx, dy
         real(dp)                   :: kx, ky
         logical, parameter         :: homog = .true.
+        integer, parameter         :: verbosity = 3
 
         real(dp), dimension(:), pointer :: xp, yp
         type(box_data),target      :: bdx, bdx_x, bdx_y
@@ -1553,8 +1554,8 @@ contains
 
         ! Set up RHS
         call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
-        call compute_laplacian (lphi, soln, geo, bc, homog)
-        ! lphi%data = -(kx**2 + ky**2) * soln%data(ilo:ihi,jlo:jhi)
+        ! call compute_laplacian (lphi, soln, geo, bc, homog)
+        lphi%data = -(kx**2 + ky**2) * soln%data(ilo:ihi,jlo:jhi)
 
         ! Set up invdiags
         call define_box_data (invdiags, lphi)
@@ -1566,18 +1567,21 @@ contains
         !                    one,     & ! omega
         !                    1.0d-6,  & ! tol
         !                    20,      & ! maxiters
-        !                    .true.)    ! zerophi
+        !                    .true.,  & ! zerophi
+        !                    verbosity)
         ! call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
         !                one,     & ! omega
         !                1.0d-6,  & ! tol
         !                25,      & ! maxiters
-        !                .true., & ! redblack
-        !                .true.)    ! zerophi
+        !                .true.,  & ! redblack
+        !                .true.,  & ! zerophi
+        !                verbosity)
         call solve_bicgstab (phi, lphi, geo, bc, homog, &
                        1.0d-6,  & ! tol
                        80,      & ! max iters
                        5,       & ! max restarts
-                       .true.)    ! zerophi
+                       .true.,  & ! zerophi
+                       verbosity)
 
         ! Compute norm
         phi%data = phi%data - soln%data

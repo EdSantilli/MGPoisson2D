@@ -1639,8 +1639,8 @@ contains
 
     ! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
-    subroutine relax_jacobi (phi, rhs, geo, bc, homog, &
-                             invdiags, omega, tol, maxiters, zerophi)
+    subroutine relax_jacobi (phi, rhs, geo, bc, homog, invdiags, &
+                             omega, tol, maxiters, zerophi, verbosity)
         type(box_data), intent(inout)   :: phi
         type(box_data), intent(in)      :: rhs
         type(geo_data), intent(in)      :: geo
@@ -1651,6 +1651,7 @@ contains
         real(dp), intent(in)            :: tol
         integer, intent(in)             :: maxiters
         logical, intent(in)             :: zerophi
+        integer, intent(in)             :: verbosity
 
         type(box_data)                  :: r
         real(dp)                        :: rscale
@@ -1682,8 +1683,10 @@ contains
         call compute_residual (r, rhs, phi, geo, bc, homog)
         rscale = inner_prod (r, r)
         relres(0) = one
-        print*, 'scale sq res = ', rscale
-        print*, 'iter ', 0, ': sq res = ', relres(0)
+        if (verbosity .ge. 3) then
+            print*, 'scale sq res = ', rscale
+            print*, 'iter ', 0, ': sq res = ', relres(0)
+        endif
 
         ! Iterate
         do iter = 1, maxIters
@@ -1698,11 +1701,15 @@ contains
             ! Compute new residual
             call compute_residual (r, rhs, phi, geo, bc, homog)
             relres(iter) = inner_prod(r, r) / rscale
-            print*, 'iter ', iter, ': sq res = ', relres(iter)
+            if (verbosity .ge. 3) then
+                print*, 'iter ', iter, ': sq res = ', relres(iter)
+            endif
 
             ! Did we converge?
             if (relres(iter) .le. tol) then
-                print*, "Converged."
+                if (verbosity .ge. 3) then
+                    print*, "Converged."
+                endif
                 exit
             endif
         enddo
@@ -1712,8 +1719,8 @@ contains
 
     ! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
-    subroutine relax_gs (phi, rhs, geo, bc, homog, &
-                         invdiags, omega, tol, maxiters, redblack, zerophi)
+    subroutine relax_gs (phi, rhs, geo, bc, homog, invdiags, &
+                         omega, tol, maxiters, redblack, zerophi, verbosity)
         type(box_data), intent(inout)   :: phi
         type(box_data), intent(in)      :: rhs
         type(geo_data), intent(in)      :: geo
@@ -1725,6 +1732,7 @@ contains
         integer, intent(in)             :: maxiters
         logical, intent(in)             :: redblack
         logical, intent(in)             :: zerophi
+        integer, intent(in)             :: verbosity
 
         type(box_data)                  :: r
         real(dp)                        :: rscale
@@ -1756,8 +1764,10 @@ contains
         call compute_residual (r, rhs, phi, geo, bc, homog)
         rscale = inner_prod (r, r)
         relres(0) = one
-        print*, 'scale sq res = ', rscale
-        print*, 'iter ', 0, ': sq res = ', relres(0)
+        if (verbosity .ge. 3) then
+            print*, 'scale sq res = ', rscale
+            print*, 'iter ', 0, ': sq res = ', relres(0)
+        endif
 
         ! Iterate
         do iter = 1, maxiters
@@ -1816,11 +1826,15 @@ contains
             ! Compute new residual
             call compute_residual (r, rhs, phi, geo, bc, .true.)
             relres(iter) = inner_prod (r, r) / rscale
-            print*, 'iter ', iter, ': sq res = ', relres(iter)
+            if (verbosity .ge. 3) then
+                print*, 'iter ', iter, ': sq res = ', relres(iter)
+            endif
 
             ! Did we converge?
             if (relres(iter) .le. tol) then
-                print*, "Converged."
+                if (verbosity .ge. 3) then
+                    print*, "Converged."
+                endif
                 exit
             endif
         enddo
@@ -1833,7 +1847,8 @@ contains
 
     ! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
-    subroutine solve_bicgstab (phi, rhs, geo, bc, homog, tol, max_iters, max_restarts, zerophi)
+    subroutine solve_bicgstab (phi, rhs, geo, bc, homog, &
+                               tol, max_iters, max_restarts, zerophi, verbosity)
         type(box_data), intent(inout)                 :: phi
         type(box_data), intent(in)                    :: rhs
         type(geo_data), intent(in)                    :: geo
@@ -1842,6 +1857,7 @@ contains
         real(dp), intent(in)                          :: tol
         integer, intent(in)                           :: max_iters, max_restarts
         logical, intent(in)                           :: zerophi
+        integer, intent(in)                           :: verbosity
 
         integer                                       :: ilo, ihi
         integer                                       :: jlo, jhi
@@ -1885,8 +1901,10 @@ contains
         r0%data = r%data
         rscale = inner_prod (r0, r0)
         relres(0) = one
-        print*, 'scale sq res = ', rscale
-        print*, 'iter ', 0, ': sq res = ', relres(0)
+        if (verbosity .ge. 3) then
+            print*, 'scale sq res = ', rscale
+            print*, 'iter ', 0, ': sq res = ', relres(0)
+        endif
 
         ! Initialize all other workspace variables
         alpha = one
@@ -1936,11 +1954,15 @@ contains
 
             ! Check if we are at tol
             relres(i) = inner_prod (r, r) / rscale
-            print*, 'iter ', iter, ': sq res = ', relres(i)
+            if (verbosity .ge. 3) then
+                print*, 'iter ', iter, ': sq res = ', relres(i)
+            endif
 
             ! Did we converge?
             if (relres(i) .le. tol) then
-                print*, "Converged."
+                if (verbosity .ge. 3) then
+                    print*, "Converged."
+                endif
                 exit
             endif
 
@@ -1959,7 +1981,9 @@ contains
                     call compute_residual (r, rhs, phi, geo, bc, homog)
                     r0%data = r%data
                     relres(i) = inner_prod (r0, r0) / rscale
-                    print*, "Hanging, restart number ", num_restarts, ', current sq res = ', relres(i)
+                    if (verbosity .ge. 3) then
+                        print*, "Hanging, restart number ", num_restarts, ', current sq res = ', relres(i)
+                    endif
 
                     ! Reset bookkeeping variables
                     alpha = one
@@ -1972,22 +1996,55 @@ contains
                     is_restart = .true.
                     cycle
                 else
-                    print*, "Hanging, max restarts reached."
+                    if (verbosity .ge. 3) then
+                        print*, "Hanging, max restarts reached."
+                    endif
                     exit
                 endif
             endif
 
             ! Are we diverging?
             if (relres(i) .gt. lastres) then
-                print*, 'Diverging.'
+                if (num_restarts .lt. max_restarts) then
+                    ! The act of restarting will produce a new residual which we
+                    ! would like to include in our bookkeeping, so we increase i,
+                    ! recompute the residual, and reset all other bookkeeping vars.
 
-                ! Undo last correction
-                ! TODO: It would be better to remember the best solution
-                r%data = r%data + omega(i)*t%data
-                phi%data = phi%data         &
-                         - alpha * p%data   &
-                         - omega(i) * r%data
-                exit
+                    ! Increment
+                    num_restarts = num_restarts + 1
+                    i = i + 1
+
+                    ! Compute new residual
+                    call compute_residual (r, rhs, phi, geo, bc, homog)
+                    r0%data = r%data
+                    relres(i) = inner_prod (r0, r0) / rscale
+                    if (verbosity .ge. 3) then
+                        print*, "Hanging, restart number ", num_restarts, ', current sq res = ', relres(i)
+                    endif
+
+                    ! Reset bookkeeping variables
+                    alpha = one
+                    rho(i) = one
+                    omega(i) = one
+                    nu%data = zero
+                    p%data = zero
+
+                    ! Start new iteration
+                    is_restart = .true.
+                    cycle
+                else
+                    if (verbosity .ge. 3) then
+                        print*, 'Diverging.'
+                    endif
+
+                    ! Undo last correction
+                    ! TODO: It would be better to remember the best solution
+                    r%data = r%data + omega(i)*t%data
+                    phi%data = phi%data         &
+                             - alpha * p%data   &
+                             - omega(i) * r%data
+                    exit
+                endif
             endif
 
             is_restart = .false.
