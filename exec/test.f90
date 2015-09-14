@@ -35,7 +35,7 @@ program test
     real(8), parameter          :: H = one
 
     integer                     :: r             ! Current refinement level
-    integer, parameter          :: maxr = 5      ! Max refinement level
+    integer, parameter          :: maxr = 8      ! Max refinement level
     real(dp), dimension(maxr)   :: errnorm       ! Error norm at each level
     real(dp), dimension(maxr-1) :: rate          ! Convergence rates
 
@@ -128,8 +128,8 @@ program test
     !     print*, errnorm(r), rate(r-1)
     ! enddo
     ! print*
+    print*, 'Test 5: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
     errnorm(maxr) = test_solver (geo(maxr))
-    print*, 'Test 5: Solver test'
     print*, 'Error norm = ', errnorm(maxr)
     print*
 
@@ -1591,13 +1591,13 @@ contains
         call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
                      1.0d-6,  & ! tol
                      5,       & ! max iters
-                     1,      & ! max depth
+                     -1,      & ! max depth
                      1,       & ! num cycles
                      4,       & ! smooth down
                      4,       & ! smooth up
                      2,       & ! smooth bottom
                      .true.,  & ! zerophi
-                     10)
+                     verbosity)
 
         ! Compute norm
         phi%data = phi%data - soln%data

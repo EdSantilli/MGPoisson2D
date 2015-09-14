@@ -196,64 +196,6 @@ module arrayutils
 contains
 
     ! --------------------------------------------------------------------------
-    ! Sends a box_data to gnuplot
-    ! --------------------------------------------------------------------------
-    subroutine plot (x, y, data)
-        type(box_data), intent(in) :: x, y, data
-
-        ! integer :: plot_type                                 ! 1 for linear plot, 2 for log plot, 3 for log-log plot
-        ! character(len=*) :: xlabel,ylabel,title1,title2      ! plot axis labels and title
-        ! !---------------
-        ! integer :: i
-        ! integer :: ret
-        ! !---------------
-
-        ! ! write data on two separate files
-        ! open (10, access='SEQUENTIAL', file='xydata1.dat')
-        ! do i = 1,n1
-        !    write(10,*) xydata1(i,1),xydata1(i,2)
-        ! enddo
-        ! CLOSE(10,STATUS='KEEP')
-
-        ! OPEN(10,ACCESS='SEQUENTIAL',FILE='xydata2.dat')
-        ! do i=1,n2
-        !    write(10,*) xydata2(i,1),xydata2(i,2)
-        ! enddo
-        ! CLOSE(10,STATUS='KEEP')
-
-        ! ! create gnuplot command file
-        ! OPEN(10,ACCESS='SEQUENTIAL',FILE='gp.txt')
-        ! write(10,*) 'set terminal postscript'
-        ! write(10,*) 'set output "plot.ps"'
-        ! write(10,*) 'set xlabel '//'"'//TRIM(xlabel)//'"'
-        ! write(10,*) 'set ylabel '//'"'//TRIM(ylabel)//'"'
-        ! if (plot_type==2) write(10,*) 'set log y'
-        ! if (plot_type==3) then
-        !    write(10,*) 'set log x'
-        !    write(10,*) 'set log y'
-        ! endif
-
-        ! if(n1>0.AND.n2>0) then
-        !     write(10,*) 'plot "xydata1.dat" using 1:2 with lines title "'//TRIM(title1)//&
-        !                 &'", "xydata2.dat" using 1:2 with lines title "'//TRIM(title2)//'"'
-        ! endif
-
-        ! if(n1>0.AND.n2==0) write(10,*) 'plot "xydata1.dat" using 1:2 with lines title "'//TRIM(title1)//'"'
-
-        ! if(n2>0.AND.n1==0) write(10,*) 'plot "xydata2.dat" using 1:2 with lines title "'//TRIM(title2)//'"'
-
-        ! CLOSE(10,STATUS='KEEP')
-
-        ! ! plot curve with gnuplot and cleanup files
-        ! ret=SYSTEM('gnuplot gp.txt')
-        ! ret=SYSTEM('rm gp.txt')
-        ! ret=SYSTEM('rm xydata1.dat')
-        ! ret=SYSTEM('rm xydata2.dat')
-
-    end subroutine plot
-
-
-    ! --------------------------------------------------------------------------
     ! This makes setting up a box object a one line operation.
     ! --------------------------------------------------------------------------
     pure subroutine define_box (bx, ilo, ihi, jlo, jhi, dx, dy)
@@ -2135,20 +2077,6 @@ module MGPoisson2D
 
     save
 
-    ! --------------------------------------------------------------------------
-    ! --------------------------------------------------------------------------
-    interface restrict
-        module procedure restrict_array
-        module procedure restrict_bd
-    end interface
-
-    ! --------------------------------------------------------------------------
-    ! --------------------------------------------------------------------------
-    interface prolong
-        module procedure prolong_array
-        module procedure prolong_bd
-    end interface
-
 contains
 
     ! --------------------------------------------------------------------------
@@ -2251,65 +2179,13 @@ contains
     ! ------------------------------------------------------------------------------
     ! fine and crse can have NO ghosts!
     ! ------------------------------------------------------------------------------
-    subroutine restrict_array (fine, crse, fnx, fny, cnx, cny)
-        integer, intent(in)                              :: fnx, fny
-        integer, intent(in)                              :: cnx, cny
-        real(8), intent(in), dimension(0:fnx-1,0:fny-1)  :: fine
-        real(8), intent(out), dimension(0:cnx-1,0:cny-1) :: crse
-
-        integer                                          :: refx, refy
-        integer                                          :: fi, fj, ci, cj
-
-        refx = fnx / cnx
-        refy = fny / cny
-
-        if ((refx .eq. 2) .and. (refy .eq. 2)) then
-            do cj = 0, cny-1
-                fj = 2*cj
-                do ci = 0, cnx-1
-                    fi = 2*ci
-                    crse(ci,cj) = fourth * (fine(fi,fj) + fine(fi+1,fj) + fine(fi,fj+1) + fine(fi+1,fj+1))
-                enddo
-            enddo
-
-        else if ((refx .eq. 2) .and. (refy .eq. 1)) then
-            do cj = 0, cny-1
-                do ci = 0, cnx-1
-                    fi = 2*ci
-                    crse(ci,cj) = half * (fine(fi,cj) + fine(fi+1,cj))
-                enddo
-            enddo
-
-        else if ((refx .eq. 1) .and. (refy .eq. 2)) then
-            do cj = 0, cny-1
-                fj = 2*cj
-                do ci = 0, cnx-1
-                    crse(ci,cj) = half * (fine(ci,fj) + fine(ci,fj+1))
-                enddo
-            enddo
-
-        else
-            print*, 'Bad fine and crse sizes'
-            stop
-        endif
-
-    end subroutine restrict_array
-
-
-    ! ------------------------------------------------------------------------------
-    ! fine and crse can have NO ghosts!
-    ! ------------------------------------------------------------------------------
-    subroutine restrict_bd (fine, crse)
+    subroutine restrict (fine, crse)
         type(box_data), intent(in)    :: fine
         type(box_data), intent(inout) :: crse
 
-        ! call restrict_array (fine%data, crse%data,         &
-        !                      fine%valid%nx, fine%valid%ny, &
-        !                      crse%valid%nx, crse%valid%ny)
-
-        integer  :: refx, refy
-        real(dp) :: scale
-        integer  :: fi, fj, ci, cj
+        integer                       :: refx, refy
+        integer                       :: fi, fj, ci, cj
+        real(dp)                      :: scale
 
         refx = fine%valid%nx / crse%valid%nx
         refy = fine%valid%ny / crse%valid%ny
@@ -2361,47 +2237,37 @@ contains
             enddo
         endif
 
-
-
-    end subroutine restrict_bd
-
-
-    ! ------------------------------------------------------------------------------
-    ! ------------------------------------------------------------------------------
-    subroutine prolong_array (fine, crse, fnx, fny, cnx, cny, ngx, ngy)
-        integer, intent(in)                                              :: fnx, fny
-        integer, intent(in)                                              :: cnx, cny
-        integer, intent(in)                                              :: ngx, ngy
-        real(8), intent(inout), dimension(-ngx:fnx-1+ngx,-ngy:fny-1+ngy) :: fine
-        real(8), intent(in), dimension(-ngx:cnx-1+ngx,-ngy:cny-1+ngy)    :: crse
-
-        integer                                                          :: refx, refy
-        integer                                                          :: fi, fj, ci, cj
-
-        refx = fnx / cnx
-        refy = fny / cny
-
-        do fj = 0, fny-1
-            cj = fj / refy
-            do fi = 0, fnx-1
-                ci = fi / refx
-                fine(fi,fj) = fine(fi,fj) + crse(ci,cj)
-            enddo
-        enddo
-    end subroutine prolong_array
+    end subroutine restrict
 
 
     ! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
-    subroutine prolong_bd (fine, crse)
+    subroutine prolong (fine, crse)
         type(box_data), intent(inout) :: fine
         type(box_data), intent(in)    :: crse
 
-        call prolong_array (fine%data, crse%data, &
-                            fine%valid%nx, fine%valid%ny, &
-                            crse%valid%nx, crse%valid%ny, &
-                            fine%ngx, fine%ngy)
-    end subroutine prolong_bd
+        integer                       :: refx, refy
+        integer                       :: fi, fj, ci, cj
+
+        refx = fine%valid%nx / crse%valid%nx
+        refy = fine%valid%ny / crse%valid%ny
+
+        if ((fine%offi .eq. BD_CELL) .and. (fine%offj .eq. BD_CELL)) then
+            ! Cell-centered in all directions.
+            do fj = fine%valid%jlo, fine%valid%jhi
+                cj = fj/refy
+                do fi = fine%valid%ilo, fine%valid%ihi
+                    ci = fi/refx
+                    fine%data(fi,fj) = fine%data(fi,fj) + crse%data(ci,cj)
+                enddo
+            enddo
+        else
+            print*, 'prolong: Cannot handle nodal data yet.'
+            stop
+        endif
+
+
+    end subroutine prolong
 
 
     ! ------------------------------------------------------------------------------
@@ -2677,13 +2543,13 @@ contains
         real(dp), parameter                                  :: relax_tol = 1.0E-12_dp !-one
         real(dp), parameter                                  :: relax_omega = one ! Was 1.33
         logical, parameter                                   :: relax_redblack = .false.
-        integer, parameter                                   :: relax_verbosity = 3
+        integer, parameter                                   :: relax_verbosity = 0
 
         ! Bottom solver params
         real(dp), parameter                                  :: bottom_tol = 1.0E-6_dp
         integer, parameter                                   :: bottom_maxiters = 80
         integer, parameter                                   :: bottom_maxrestarts = 5
-        integer, parameter                                   :: bottom_verbosity = 3
+        integer, parameter                                   :: bottom_verbosity = 0
 
 
         if (depth .eq. maxdepth) then
@@ -2692,13 +2558,13 @@ contains
             if (verbosity .ge. 7) then
                 print*, 'MG depth ', depth, ': Bottom relax'
             endif
-            ! call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
-            !                invdiags(depth), relax_omega, relax_tol, &
-            !                smooth_bottom, relax_redblack, &
-            !                .false., & ! zero phi?
-            !                relax_verbosity)
+            call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
+                           invdiags(depth), relax_omega, relax_tol, &
+                           smooth_bottom, relax_redblack, &
+                           .false., & ! zero phi?
+                           relax_verbosity)
 
-            if (verbosity .ge. 3) then
+            if (verbosity .ge. 7) then
                 print*, 'MG depth ', depth, ': Bottom solver:'
             endif
             call solve_bicgstab (e(depth), r(depth), geo(depth), bc(depth), homog, &
