@@ -278,6 +278,26 @@ contains
 
     ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
+    pure subroutine coarsen_box (bx, refx, refy)
+        type(box), intent(inout) :: bx
+        integer, intent(in)      :: refx, refy
+
+        bx%ilo = bx%ilo / refx
+        bx%ihi = bx%ihi / refx
+
+        bx%jlo = bx%jlo / refy
+        bx%jhi = bx%jhi / refy
+
+        bx%nx = bx%ihi - bx%ilo + 1
+        bx%ny = bx%jhi - bx%jlo + 1
+
+        bx%dx = bx%dx * refx
+        bx%dy = bx%dy * refy
+    end subroutine coarsen_box
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
     pure subroutine grow_box (bx, growx, growy)
         type(box), intent(inout) :: bx
         integer, intent(in)      :: growx, growy
@@ -552,7 +572,7 @@ contains
             cc_valid%ny = cc_valid%ny - 1
         endif
 
-        call define_box_data (dest, cc_valid, src%ngx, src%ngy, src%offi, src%offj)
+        call define_box_data_itemize (dest, cc_valid, src%ngx, src%ngy, src%offi, src%offj)
     end subroutine define_box_data_dup
 
 
@@ -602,6 +622,25 @@ contains
             stop
         endif
     end subroutine define_box_data_bdry
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    subroutine define_box_data_coarsened (crse, fine, refx, refy)
+        type(box_data), intent(out) :: crse
+        type(box_data), intent(in)  :: fine
+        integer, intent(in)         :: refx, refy
+
+        type(box)                   :: crse_valid
+
+        crse_valid%ilo = fine%valid%ilo / refx
+        crse_valid%ihi = fine%valid%ihi / refx
+        crse_valid%jlo = fine%valid%jlo / refy
+        crse_valid%jhi = fine%valid%jhi / refy
+
+        call define_box_data_itemize (crse, crse_valid, fine%ngx, fine%ngy, fine%offi, fine%offj)
+
+    end subroutine define_box_data_coarsened
 
 
     ! --------------------------------------------------------------------------
@@ -1756,7 +1795,7 @@ contains
         call define_box_data (r, rhs)
 
         ! Initialize phi to zero
-        if (zerophi .ne. 0) then
+        if (zerophi) then
             phi%data = zero
         endif
 
@@ -1888,7 +1927,7 @@ contains
         call define_box_data (t, phi)
 
         ! Initialize phi to zero
-        if (zerophi .ne. 0) then
+        if (zerophi) then
             phi%data = zero
         endif
 
@@ -2283,44 +2322,46 @@ contains
 
 
     ! ------------------------------------------------------------------------------
-    ! Upon entry, maxdepth should hold the maximum allowable V-Cycle depth. If
-    ! equals -1, the V-Cycle will find the maximum possible depth automatically.
-    ! Upon exit, maxdepth will contain the maximum depth acheived.
     ! ------------------------------------------------------------------------------
-    subroutine vcycle (phi, rhs, geo, bc, amrrefx, amrrefy, &
-                       tol, maxiters, maxdepth, numcycles, &
+    subroutine vcycle (phi, rhs, geo, bc, homog, amrrefx, amrrefy, &
+                       tol, maxiters, maxdepth_user, numcycles, &
                        smooth_down, smooth_up, smooth_bottom, &
                        zerophi, verbosity)
         type(box_data), intent(inout) :: phi
         type(box_data), intent(in)    :: rhs
         type(geo_data), intent(in)    :: geo
         type(bdry_data), intent(in)   :: bc
+        logical, intent(in)           :: homog
         integer, intent(in)           :: amrrefx, amrrefy
         real(dp), intent(in)          :: tol
         integer, intent(in)           :: maxiters
-        integer, intent(inout)        :: maxdepth
+        integer, intent(in)           :: maxdepth_user
         integer, intent(in)           :: numcycles
         integer, intent(in)           :: smooth_down, smooth_up, smooth_bottom
         logical, intent(in)           :: zerophi
         integer, intent(in)           :: verbosity
 
-        type(box)                                 :: valid
-        integer, dimension(:), allocatable        :: refx, refy
-        integer                                   :: ierr, d, iter
-        real(8)                                   :: mgdx, mgdy
-        type(geo_data), dimension(:), allocatable :: mggeo
-        ! type(MGVar), dimension(:), allocatable                        :: e, r, invDiags, work1
-        ! integer                                                       :: mgnx, mgny
-        ! real(8)                                                       :: resScale
-        ! real(8), dimension(:), allocatable                            :: relres
+        type(box)                                  :: valid
+        integer, dimension(:), allocatable         :: refx, refy
+        integer                                    :: ierr, d, iter, i
+        type(geo_data), dimension(:), allocatable  :: mggeo
+        type(bdry_data), dimension(:), allocatable :: mgbc
+        real(dp), dimension(:), allocatable        :: relres
+        real(dp)                                   :: rscale
+        type(box_data), dimension(:), allocatable  :: e, r, invdiags, work1
+        real(dp)                                   :: mgdx, mgdy
+        integer                                    :: maxdepth
+        integer                                    :: ilo, ihi, jlo, jhi, i, j
 
 
         ! Estimate size of scheduling vectors
         valid = rhs%valid
-        if (maxdepth .lt. 0) then
+        if (maxdepth_user .lt. 0) then
             maxdepth = 1000
+        else
+            maxdepth = maxdepth_user
         endif
-        call estimate_maxdepth(maxdepth, valid)
+        call estimate_maxdepth (maxdepth, valid)
 
         ! Allocate schedule vectors
         allocate (refx(0:maxdepth-1), stat=ierr)
@@ -2382,78 +2423,104 @@ contains
             stop
         endif
 
-        ! allocate (work1(0:maxDepth), stat=ierr)
-        ! if (ierr .ne. 0) then
-        !     print*, 'Out of memory'
-        !     call MAYDAYERROR()
-        ! endif
-
-        mgnx = valid%nx
-        mgny = valid%ny
-        mgdx = valid%dx
-        mgdy = valid%dy
+        allocate (work1(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
 
         do d = 0, maxdepth
-            call define_box_data (e, valid, 1, 1, BD_CELL, BD_CELL)
-            call define_box_data (r, valid, 0, 0, BD_CELL, BD_CELL)
-            call define_box_data (invdiags, valid, 0, 0, BD_CELL, BD_CELL)
-            call define_box_data (r, valid, 0, 0, BD_CELL, BD_CELL)
+            call define_box_data (e(d), valid, 1, 1, BD_CELL, BD_CELL)
+            call define_box_data (r(d), valid, 0, 0, BD_CELL, BD_CELL)
+            call define_box_data (work1(d), valid, 0, 0, BD_CELL, BD_CELL)
 
-            ! TODO: Construct mggeo(d)
+            call define_box_data (mggeo(d)%J, valid, geo%J%ngx, geo%J%ngy, BD_CELL, BD_CELL)
+            call define_box_data (mggeo(d)%Jgup_xx, valid, geo%Jgup_xx%ngx, geo%Jgup_xx%ngy, BD_NODE, BD_CELL)
+            call define_box_data (mggeo(d)%Jgup_xy, valid, geo%Jgup_xy%ngx, geo%Jgup_xy%ngy, BD_NODE, BD_CELL)
+            call define_box_data (mggeo(d)%Jgup_yx, valid, geo%Jgup_yx%ngx, geo%Jgup_yx%ngy, BD_CELL, BD_NODE)
+            call define_box_data (mggeo(d)%Jgup_yy, valid, geo%Jgup_yy%ngx, geo%Jgup_yy%ngy, BD_CELL, BD_NODE)
+            call define_box_data (invdiags(d), valid, 0, 0, BD_CELL, BD_CELL)
 
-            call compute_inverse_diags (invdiags(d), mggeo(d))
+            call define_bdry_data (mgbc, valid, &
+                                   bc%type_xlo, bc%type_xhi, bc%type_ylo, bc%type_yhi, &
+                                   bc%mode_xlo, bc%mode_xhi, bc%mode_ylo, bc%mode_yhi)
 
-        !     ! work1...
-        !     work1(d)%imin = 1
-        !     work1(d)%imax = mgnx
+            if (d .eq. 0) then
+                ! For now, just copy the data. It would be more economical to
+                ! point to the data that already exists.
+                mggeo(d)%J%data = geo%J%data
+                mggeo(d)%Jgup_xx%data = geo%Jgup_xx%data
+                mggeo(d)%Jgup_xy%data = geo%Jgup_xy%data
+                mggeo(d)%Jgup_yx%data = geo%Jgup_yx%data
+                mggeo(d)%Jgup_yy%data = geo%Jgup_yy%data
+                call compute_inverse_diags(invdiags(d), mggeo(d))
 
-        !     work1(d)%jmin = 1
-        !     work1(d)%jmax = mgny
+                mgbc(d)%data_xlo = bc%data_xlo
+                mgbc(d)%data_xhi = bc%data_xhi
+                mgbc(d)%data_ylo = bc%data_ylo
+                mgbc(d)%data_yhi = bc%data_yhi
 
-        !     work1(d)%nx = mgnx
-        !     work1(d)%ny = mgny
+            else
+                call restrict (mggeo(d-1)%J, mggeo(d)%J)
+                call restrict (mggeo(d-1)%Jgup_xx, mggeo(d)%Jgup_xx)
+                call restrict (mggeo(d-1)%Jgup_xy, mggeo(d)%Jgup_xy)
+                call restrict (mggeo(d-1)%Jgup_yx, mggeo(d)%Jgup_yx)
+                call restrict (mggeo(d-1)%Jgup_yy, mggeo(d)%Jgup_yy)
+                call restrict (invdiags(d-1), invdiags(d))
 
-        !     work1(d)%ngx = 0
-        !     work1(d)%ngy = 0
+                ! Coarsen the boundary data.
+                ! TODO: This should be its own function.
+                if (bc%mode_xlo .eq. BCMODE_UNIFORM) then
+                    mgbc(d)%data_xlo = mgbc(d-1)%data_xlo
+                else
+                    if (refy(d-1) .eq. 1) then
+                        mgbc(d)%data_xlo = mgbc(d-1)%data_xlo
+                    else
+                        do j = r(d)%valid%jlo, r(d)%valid%jhi
+                            mgbc(d)%data_xlo(j) = half * (mgbc(d-1)%data_xlo(2*j) + mgbc(d-1)%data_xlo(2*j+1))
+                        enddo
+                    endif
+                endif
 
-        !     allocate (work1(d)%data (1:mgnx, 1:mgny), stat=ierr)
-        !     if (ierr .ne. 0) then
-        !         print*, 'Out of memory'
-        !         call MAYDAYERROR()
-        !     endif
+                if (bc%mode_xhi .eq. BCMODE_UNIFORM) then
+                    mgbc(d)%data_xhi = mgbc(d-1)%data_xhi
+                else
+                    if (refy(d-1) .eq. 1) then
+                        mgbc(d)%data_xhi = mgbc(d-1)%data_xhi
+                    else
+                        do j = r(d)%valid%jlo, r(d)%valid%jhi
+                            mgbc(d)%data_xhi(j) = half * (mgbc(d-1)%data_xhi(2*j) + mgbc(d-1)%data_xhi(2*j+1))
+                        enddo
+                    endif
+                endif
+            endif
 
-        !     ! Move on to next depth
-        !     if (d .lt. maxDepth) then
-        !         mgnx = mgnx / refx(d)
-        !         mgny = mgny / refy(d)
-        !         mgdx = mgdx * real(refx(d),8)
-        !         mgdy = mgdy * real(refy(d),8)
-        !     endif
+            ! Move on to next depth
+            if (d .lt. maxDepth) then
+                call coarsen_box (valid, refx(d), refy(d))
+            endif
         enddo
 
+        ! Initialize phi to zero if necessary
+        if (zerophi) then
+            phi%data = zero
+        endif
 
-        ! ! Initialize phi to zero if necessary
-        ! if (zeroPhi .ne. 0) then
-        !     phi = 0.0d0
-        ! endif
+        ! Set up residual equation
+        call compute_residual (r(0), rhs, phi, geo, bc, homog)
 
+        relres = zero
+        relres(0) = one
+        rscale = inner_prod (r(0), r(0))
 
-        ! ! Set up residual equation
-        ! call MGPoissonSolverSerial2D_Residual(r(0)%data, rhs, phi, nx, ny, ngx, ngy, dx, dy, &
-        !                                       bclox, bcloy, bchix, bchiy)
+        if (verbosity .ge. 1) then
+            print*, 'scale sq res = ', rscale
+            print*, 'iter ', 0, ': sq res = ', relres(0)
+        endif
 
-        ! relres = 0.0d0
-        ! relres(0) = 1.0d0
-        ! call MGPoissonSolverSerial2D_InnerProd(resScale, r(0)%data, r(0)%data, nx, ny)
-
-        ! if (verbosity .ge. 1) then
-        !     print*, 'scale sq res = ', resScale
-        !     print*, 'iter ', 0, ': sq res = ', relres(0)
-        ! endif
-
-        ! do iter = 1, maxIters
-        !     ! Solve for phi's correction.
-        !     e(0)%data = 0.0d0
+        do iter = 1, maxiters
+            ! Solve for phi's correction.
+            e(0)%data = zero
         !     call MGPoissonSolverSerial2D_VCycleNoInit (e, r, invDiags, work1, &
         !                                                refx, refy, &
         !                                                nx, ny, &
@@ -2464,60 +2531,213 @@ contains
         !                                                smoothDown, smoothUp, smoothBottom, &
         !                                                verbosity)
 
+            ! Apply correction
+            phi%data = phi%data + e(0)%data
 
-        !     ! Apply correction
-        !     phi(1:nx,1:ny) = phi(1:nx,1:ny) + e(0)%data(1:nx,1:ny)
+            ! Compute residual
+            call compute_residual (r(0), rhs, phi, mggeo(0), bc, homog)
+            relres(iter) = inner_prod (r(0), r(0)) / rscale
+            if (verbosity .ge. 1) then
+                print*, 'iter ', iter, ': sq res = ', relres(iter)
+            endif
 
+            ! Did we converge?
+            if (relres(iter) .le. tol) then
+                if (verbosity .ge. 1) then
+                    print*, "Converged."
+                endif
+                exit
+            endif
 
-        !     ! Compute residual
-        !     call MGPoissonSolverSerial2D_Residual(r(0)%data, rhs, phi, nx, ny, ngx, ngy, dx, dy, &
-        !                                           bclox, bcloy, bchix, bchiy)
-        !     call MGPoissonSolverSerial2D_InnerProd(relres(iter), r(0)%data, r(0)%data, nx, ny)
-        !     relres(iter) = relres(iter) / resScale
-        !     if (verbosity .ge. 1) then
-        !         print*, 'iter ', iter, ': sq res = ', relres(iter)
-        !     endif
+            ! Are we diverging?
+            if (relres(iter) .gt. relres(iter-1)) then
+                if (verbosity .ge. 1) then
+                    print*, 'Diverging.'
+                endif
 
+                ! Undo last correction
+                phi%data = phi%data - e(0)%data
 
-        !     ! Did we converge?
-        !     if (relres(iter) .le. tol) then
-        !         if (verbosity .ge. 1) then
-        !             print*, "Converged."
-        !         endif
-        !         exit
-        !     endif
-
-        !     ! Are we diverging?
-        !     if (relres(iter) .gt. relres(iter-1)) then
-        !         if (verbosity .ge. 1) then
-        !             print*, 'Diverging.'
-        !         endif
-
-        !         ! Undo last correction
-        !         phi(1:nx,1:ny) = phi(1:nx,1:ny) - e(0)%data(1:nx,1:ny)
-
-        !         exit
-        !     endif
-        ! enddo
+                exit
+            endif
+        enddo
 
 
-        ! ! Free memory
-        ! do d = 0, maxDepth
-        !     if (allocated(e(d)%data)) deallocate(e(d)%data)
-        !     if (allocated(r(d)%data)) deallocate(r(d)%data)
-        !     if (allocated(invDiags(d)%data)) deallocate(invDiags(d)%data)
-        !     if (allocated(work1(d)%data)) deallocate(work1(d)%data)
-        ! enddo
-        ! if (allocated(work1)) deallocate(work1)
-        if (allocated(mggeo)) deallocate(mggeo)
+        ! Free memory
+        do d = 0, maxDepth
+            call undefine_box_data (mggeo(d)%J)
+            call undefine_box_data (mggeo(d)%Jgup_xx)
+            call undefine_box_data (mggeo(d)%Jgup_xy)
+            call undefine_box_data (mggeo(d)%Jgup_yx)
+            call undefine_box_data (mggeo(d)%Jgup_yy)
+
+            call undefine_box_data (work1(d))
+            call undefine_box_data (invdiags(d))
+            call undefine_box_data (r(d))
+            call undefine_box_data (e(d))
+        enddo
+
         if (allocated(invDiags)) deallocate(invDiags)
+        if (allocated(mggeo)) deallocate(mggeo)
+        if (allocated(work1)) deallocate(work1)
         if (allocated(r)) deallocate(r)
         if (allocated(e)) deallocate(e)
+
         if (allocated(relres)) deallocate(relres)
         if (allocated(refx)) deallocate(refx)
         if (allocated(refy)) deallocate(refy)
 
     end subroutine vcycle
+
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    recursive subroutine vcycle_noinit (e, r, invdiags, work1, geo, bc, &
+                                        refx, refy, &
+                                        tol, maxdepth, depth, &
+                                        numcycles, &
+                                        smooth_down, smooth_up, smooth_bottom, &
+                                        verbosity)
+        integer, intent(in)                                  :: maxdepth
+        type(box_data), intent(inout), dimension(0:maxdepth) :: e, r, work1
+        type(box_data), intent(in), dimension(0:maxdepth)    :: invdiags
+        type(geo_data), intent(in), dimension(0:maxdepth)    :: geo
+        type(bdry_data), intent(in), dimension(0:maxdepth)   :: bc
+        integer, intent(in), dimension(0:maxdepth-1)         :: refx, refy
+        real(8), intent(in)                                  :: tol
+        integer, intent(in)                                  :: depth
+        integer, intent(in)                                  :: smooth_down, smooth_up, smooth_bottom
+        integer, intent(in)                                  :: numcycles
+        integer, intent(in)                                  :: verbosity
+
+        ! integer                                              :: cnx, cny, curCycle, numCyclesNoTop
+        ! real(8)                                              :: cdx, cdy
+
+        ! ! Relaxation params
+        ! real(8), parameter                                   :: relax_tol = -1.0d0
+        ! real(8), parameter                                   :: relax_omega = 1.33
+        ! integer, parameter                                   :: relax_doRB = 0
+
+        ! ! Bottom solver params
+        ! real(8), parameter                                   :: bottom_tol = 1.0e-6
+        ! integer, parameter                                   :: bottom_maxIters = 80
+        ! integer, parameter                                   :: bottom_maxRestarts = 5
+        ! integer, parameter                                   :: bottom_verbosity = 0
+
+
+        ! if (depth .eq. maxDepth) then
+        !     ! Use bottom solver
+        !     if (verbosity .ge. 7) then
+        !         print*, 'MG depth ', depth, ': Bottom relax'
+        !     endif
+        !     call MGPoissonSolverSerial2D_RelaxGS (e(depth)%data, &
+        !                                           r(depth)%data, &
+        !                                           invDiags(depth)%data, &
+        !                                           mgnx, mgny, &
+        !                                           e(depth)%ngx, e(depth)%ngy, &
+        !                                           mgdx, mgdy, crseAMRdx, crseAMRdy, &
+        !                                           bclox, bcloy, bchix, bchiy, &
+        !                                           relax_omega, relax_tol, &
+        !                                           smoothBottom, relax_doRB, 0)
+
+        !     if (verbosity .ge. 3) then
+        !         print*, 'MG depth ', depth, ': Bottom solver:'
+        !     else if (verbosity .ge. 7) then
+        !         print*, 'MG depth ', depth, ': Relax'
+        !     endif
+        !     call MGPoissonSolverSerial2D_BiCGStab (e(depth)%data, &
+        !                                            r(depth)%data, &
+        !                                            mgnx, mgny, &
+        !                                            e(depth)%ngx, e(depth)%ngy, &
+        !                                            mgdx, mgdy, &
+        !                                            bclox, bcloy, bchix, bchiy, &
+        !                                            bottom_tol, bottom_maxIters, bottom_maxRestarts, 0, &
+        !                                            bottom_verbosity)
+        ! else
+        !     ! V-Cycle...
+
+        !     cnx = mgnx / refx(depth)
+        !     cny = mgny / refy(depth)
+        !     cdx = mgdx * real(refx(depth),8)
+        !     cdy = mgdy * real(refy(depth),8)
+
+        !     if (depth .gt. 0) then
+        !         numCyclesNoTop = numCycles
+        !     else
+        !         numCyclesNoTop = 1
+        !     endif
+
+        !     do curCycle = 1, numCyclesNoTop
+        !         ! Relax
+        !         if (verbosity .ge. 7) then
+        !             print*, 'MG depth ', depth, ': smooth down'
+        !         endif
+        !         call MGPoissonSolverSerial2D_RelaxGS (e(depth)%data, &
+        !                                               r(depth)%data, &
+        !                                               invDiags(depth)%data, &
+        !                                               mgnx, mgny, &
+        !                                               e(depth)%ngx, e(depth)%ngy, &
+        !                                               mgdx, mgdy, crseAMRdx, crseAMRdy, &
+        !                                               bclox, bcloy, bchix, bchiy, &
+        !                                               relax_omega, relax_tol, &
+        !                                               smoothDown, relax_doRB, 0)
+
+        !         ! Restrict residual
+        !         if (verbosity .ge. 7) then
+        !             print*, 'MG depth ', depth, ': Restrict resudual'
+        !         endif
+        !         call MGPoissonSolverSerial2D_Residual(work1(depth)%data, &
+        !                                               r(depth)%data, &
+        !                                               e(depth)%data, &
+        !                                               mgnx, mgny, &
+        !                                               e(depth)%ngx, e(depth)%ngy, &
+        !                                               mgdx, mgdy, &
+        !                                               bclox, bcloy, bchix, bchiy)
+
+        !         call MGPoissonSolverSerial2D_restrict (work1(depth)%data, &
+        !                                                r(depth+1)%data, &
+        !                                                mgnx, mgny, &
+        !                                                cnx, cny)
+
+        !         ! Coarse level solve
+        !         e(depth+1)%data = 0.0d0
+        !         call MGPoissonSolverSerial2D_VCycleNoInit (e, r, invDiags, work1, &
+        !                                                    refx, refy, &
+        !                                                    cnx, cny, &
+        !                                                    cdx, cdy, crseAMRdx, crseAMRdy, &
+        !                                                    bclox, bcloy, bchix, bchiy, &
+        !                                                    tol, maxDepth, depth+1, &
+        !                                                    numCycles, &
+        !                                                    smoothDown, smoothUp, smoothBottom, &
+        !                                                    verbosity)
+
+        !         ! Prolong correction
+        !         if (verbosity .ge. 7) then
+        !             print*, 'MG depth ', depth, ': Add correction'
+        !         endif
+        !         call MGPoissonSolverSerial2D_prolong (e(depth)%data, &
+        !                                               e(depth+1)%data, &
+        !                                               mgnx, mgny, &
+        !                                               cnx, cny, &
+        !                                               e(depth)%ngx, e(depth)%ngy)
+
+        !         ! Relax
+        !         if (verbosity .ge. 7) then
+        !             print*, 'MG depth ', depth, ': Smooth up'
+        !         endif
+        !         call MGPoissonSolverSerial2D_RelaxGS (e(depth)%data, &
+        !                                               r(depth)%data, &
+        !                                               invDiags(depth)%data, &
+        !                                               mgnx, mgny, &
+        !                                               e(depth)%ngx, e(depth)%ngy, &
+        !                                               mgdx, mgdy, crseAMRdx, crseAMRdy, &
+        !                                               bclox, bcloy, bchix, bchiy, &
+        !                                               relax_omega, relax_tol, &
+        !                                               smoothUp, relax_doRB, 0)
+        !     enddo
+        ! endif
+
+    end subroutine vcycle_noinit
 
 end module MGPoisson2D
 

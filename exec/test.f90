@@ -1576,12 +1576,22 @@ contains
         !                .true.,  & ! redblack
         !                .true.,  & ! zerophi
         !                verbosity)
-        call solve_bicgstab (phi, lphi, geo, bc, homog, &
-                       1.0d-6,  & ! tol
-                       80,      & ! max iters
-                       5,       & ! max restarts
-                       .true.,  & ! zerophi
-                       verbosity)
+        ! call solve_bicgstab (phi, lphi, geo, bc, homog, &
+        !                1.0d-6,  & ! tol
+        !                80,      & ! max iters
+        !                5,       & ! max restarts
+        !                .true.,  & ! zerophi
+        !                verbosity)
+        call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
+                     1.0d-6,  & ! tol
+                     5,       & ! max iters
+                     -1,      & ! max depth
+                     1,       & ! num cycles
+                     2,       & ! smooth down
+                     2,       & ! smooth up
+                     2,       & ! smooth bottom
+                     .true.,  & ! zerophi
+                     verbosity)
 
         ! Compute norm
         phi%data = phi%data - soln%data
