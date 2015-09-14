@@ -116,18 +116,24 @@ program test
     ! print*
 
     ! Test 5: Solver test
-    errnorm = bogus_val
-    do r = 1, maxr
-        errnorm(r) = test_solver (geo(r))
-    enddo
-    call compute_conv_rate (rate, errnorm)
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_solver (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 5: Solver test'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
+    ! print*
+    errnorm(maxr) = test_solver (geo(maxr))
     print*, 'Test 5: Solver test'
-    print*, 'Error norm                rate'
-    print*, errnorm(1)
-    do r = 2, maxr
-        print*, errnorm(r), rate(r-1)
-    enddo
+    print*, 'Error norm = ', errnorm(maxr)
     print*
+
+
 
     ! Prints x and y coordinates to the terminal.
     ! call define_domain (valid, 1)
@@ -1554,8 +1560,8 @@ contains
 
         ! Set up RHS
         call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
-        ! call compute_laplacian (lphi, soln, geo, bc, homog)
-        lphi%data = -(kx**2 + ky**2) * soln%data(ilo:ihi,jlo:jhi)
+        call compute_laplacian (lphi, soln, geo, bc, homog)
+        ! lphi%data = -(kx**2 + ky**2) * soln%data(ilo:ihi,jlo:jhi)
 
         ! Set up invdiags
         call define_box_data (invdiags, lphi)
@@ -1585,13 +1591,13 @@ contains
         call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
                      1.0d-6,  & ! tol
                      5,       & ! max iters
-                     -1,      & ! max depth
+                     1,      & ! max depth
                      1,       & ! num cycles
-                     2,       & ! smooth down
-                     2,       & ! smooth up
+                     4,       & ! smooth down
+                     4,       & ! smooth up
                      2,       & ! smooth bottom
                      .true.,  & ! zerophi
-                     verbosity)
+                     10)
 
         ! Compute norm
         phi%data = phi%data - soln%data

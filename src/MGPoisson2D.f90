@@ -1493,55 +1493,81 @@ contains
             if (nodedir .eq. dir) then
                 ! TODO: Need to fill ghosts.
                 scale = one / phi%valid%dx
-                pd%data(ilo:ihi+1,jlo:jhi) = scale * (phi%data(ilo:ihi+1,jlo:jhi) - phi%data(ilo-1:ihi,jlo:jhi))
+                pd%data(ilo:ihi+1,jlo:jhi) = scale * (  phi%data(ilo:ihi+1,jlo:jhi) &
+                                                      - phi%data(ilo-1:ihi,jlo:jhi))
             else
                 scale = fourth / phi%valid%dx
 
                 ! Away from y boundaries...
                 ! Interior
-                pd%data(ilo+1:ihi-1,jlo+1:jhi) = scale * (  phi%data(ilo+2:ihi,jlo+1:jhi) - phi%data(ilo:ihi-2,jlo+1:jhi) &
-                                                          + phi%data(ilo+2:ihi,jlo:jhi-1) - phi%data(ilo:ihi-2,jlo:jhi-1)  )
+                pd%data(ilo+1:ihi-1,jlo+1:jhi) = scale * (  phi%data(ilo+2:ihi,jlo+1:jhi) &
+                                                          - phi%data(ilo:ihi-2,jlo+1:jhi) &
+                                                          + phi%data(ilo+2:ihi,jlo:jhi-1) &
+                                                          - phi%data(ilo:ihi-2,jlo:jhi-1)  )
                 ! Upper x boundary
-                pd%data(ihi,jlo+1:jhi) = scale * (  three*phi%data(ihi,jlo+1:jhi) - four*phi%data(ihi-1,jlo+1:jhi) + phi%data(ihi-2,jlo+1:jhi) &
-                                                  + three*phi%data(ihi,jlo:jhi-1) - four*phi%data(ihi-1,jlo:jhi-1) + phi%data(ihi-2,jlo:jhi-1)  )
+                pd%data(ihi,jlo+1:jhi) = scale * (  three*phi%data(ihi,jlo+1:jhi)   &
+                                                  -  four*phi%data(ihi-1,jlo+1:jhi) &
+                                                  +       phi%data(ihi-2,jlo+1:jhi) &
+                                                  + three*phi%data(ihi,jlo:jhi-1)   &
+                                                  -  four*phi%data(ihi-1,jlo:jhi-1) &
+                                                  +       phi%data(ihi-2,jlo:jhi-1)  )
 
                 ! Lower x boundary
-                pd%data(ilo,jlo+1:jhi) = -scale * (  three*phi%data(ilo,jlo+1:jhi) - four*phi%data(ilo+1,jlo+1:jhi) + phi%data(ilo+2,jlo+1:jhi) &
-                                                   + three*phi%data(ilo,jlo:jhi-1) - four*phi%data(ilo+1,jlo:jhi-1) + phi%data(ilo+2,jlo:jhi-1)  )
+                pd%data(ilo,jlo+1:jhi) = -scale * (  three*phi%data(ilo,jlo+1:jhi)   &
+                                                   -  four*phi%data(ilo+1,jlo+1:jhi) &
+                                                   +       phi%data(ilo+2,jlo+1:jhi) &
+                                                   + three*phi%data(ilo,jlo:jhi-1)   &
+                                                   -  four*phi%data(ilo+1,jlo:jhi-1) &
+                                                   +       phi%data(ilo+2,jlo:jhi-1)  )
 
                 ! At y boundaries...
                 ! Lower y boundary
-                pd%data(ilo:ihi,jlo) = two*pd%data(ilo:ihi,jlo+1) - pd%data(ilo:ihi,jlo+2)
+                pd%data(ilo:ihi,jlo) = two*pd%data(ilo:ihi,jlo+1) &
+                                     -     pd%data(ilo:ihi,jlo+2)
 
                 ! Upper y boundary
-                pd%data(ilo:ihi,jhi+1) = two*pd%data(ilo:ihi,jhi) - pd%data(ilo:ihi,jhi-1)
+                pd%data(ilo:ihi,jhi+1) = two*pd%data(ilo:ihi,jhi) &
+                                       -     pd%data(ilo:ihi,jhi-1)
             endif
         else
             if (nodedir .eq. dir) then
                 ! TODO: Need to fill ghosts.
                 scale = one / phi%valid%dy
-                pd%data(ilo:ihi,jlo:jhi+1) = scale * (phi%data(ilo:ihi,jlo:jhi+1) - phi%data(ilo:ihi,jlo-1:jhi))
+                pd%data(ilo:ihi,jlo:jhi+1) = scale * (  phi%data(ilo:ihi,jlo:jhi+1) &
+                                                      - phi%data(ilo:ihi,jlo-1:jhi)  )
             else
                 scale = fourth / phi%valid%dy
 
                 ! Away from x boundaries...
                 ! Interior
-                pd%data(ilo+1:ihi,jlo+1:jhi-1) = scale * (  phi%data(ilo+1:ihi,jlo+2:jhi) - phi%data(ilo+1:ihi,jlo:jhi-2) &
-                                                          + phi%data(ilo:ihi-1,jlo+2:jhi) - phi%data(ilo:ihi-1,jlo:jhi-2)  )
+                pd%data(ilo+1:ihi,jlo+1:jhi-1) = scale * (  phi%data(ilo+1:ihi,jlo+2:jhi) &
+                                                          - phi%data(ilo+1:ihi,jlo:jhi-2) &
+                                                          + phi%data(ilo:ihi-1,jlo+2:jhi) &
+                                                          - phi%data(ilo:ihi-1,jlo:jhi-2)  )
                 ! Upper y boundary
-                pd%data(ilo+1:ihi,jhi) = scale * (  three*phi%data(ilo+1:ihi,jhi) - four*phi%data(ilo+1:ihi,jhi-1) + phi%data(ilo+1:ihi,jhi-2) &
-                                                  + three*phi%data(ilo:ihi-1,jhi) - four*phi%data(ilo:ihi-1,jhi-1) + phi%data(ilo:ihi-1,jhi-2)  )
+                pd%data(ilo+1:ihi,jhi) = scale * (  three*phi%data(ilo+1:ihi,jhi)   &
+                                                  -  four*phi%data(ilo+1:ihi,jhi-1) &
+                                                  +       phi%data(ilo+1:ihi,jhi-2) &
+                                                  + three*phi%data(ilo:ihi-1,jhi)   &
+                                                  -  four*phi%data(ilo:ihi-1,jhi-1) &
+                                                  +       phi%data(ilo:ihi-1,jhi-2)  )
 
                 ! Lower y boundary
-                pd%data(ilo+1:ihi,jlo) = -scale * (  three*phi%data(ilo+1:ihi,jlo) - four*phi%data(ilo+1:ihi,jlo+1) + phi%data(ilo+1:ihi,jlo+2) &
-                                                   + three*phi%data(ilo:ihi-1,jlo) - four*phi%data(ilo:ihi-1,jlo+1) + phi%data(ilo:ihi-1,jlo+2)  )
+                pd%data(ilo+1:ihi,jlo) = -scale * (  three*phi%data(ilo+1:ihi,jlo)   &
+                                                   -  four*phi%data(ilo+1:ihi,jlo+1) &
+                                                   +       phi%data(ilo+1:ihi,jlo+2) &
+                                                   + three*phi%data(ilo:ihi-1,jlo)   &
+                                                   -  four*phi%data(ilo:ihi-1,jlo+1) &
+                                                   +       phi%data(ilo:ihi-1,jlo+2)  )
 
                 ! At x boundaries...
                 ! Lower x boundary
-                pd%data(ilo,jlo:jhi) = two*pd%data(ilo+1,jlo:jhi) - pd%data(ilo+2,jlo:jhi)
+                pd%data(ilo,jlo:jhi) = two*pd%data(ilo+1,jlo:jhi) &
+                                     -     pd%data(ilo+2,jlo:jhi)
 
                 ! Upper x boundary
-                pd%data(ihi+1,jlo:jhi) = two*pd%data(ihi,jlo:jhi) - pd%data(ihi-1,jlo:jhi)
+                pd%data(ihi+1,jlo:jhi) = two*pd%data(ihi,jlo:jhi) &
+                                       -     pd%data(ihi-1,jlo:jhi)
             endif
         endif
 
@@ -1985,7 +2011,7 @@ contains
 
             ! If this is a restart, we expect the residual to rise.
             ! Don't let this stop the solver from proceeding.
-            if (is_restart .eq. .false.) then
+            if (.not. is_restart) then
                 lastres = relres(i-1)
             else
                 lastres = 1.0E200_dp
@@ -2242,7 +2268,7 @@ contains
                 fj = 2*cj
                 do ci = 0, cnx-1
                     fi = 2*ci
-                    crse(ci,cj) = 0.25d0 * (fine(fi,fj) + fine(fi+1,fj) + fine(fi,fj+1) + fine(fi+1,fj+1))
+                    crse(ci,cj) = fourth * (fine(fi,fj) + fine(fi+1,fj) + fine(fi,fj+1) + fine(fi+1,fj+1))
                 enddo
             enddo
 
@@ -2250,7 +2276,7 @@ contains
             do cj = 0, cny-1
                 do ci = 0, cnx-1
                     fi = 2*ci
-                    crse(ci,cj) = 0.50d0 * (fine(fi,cj) + fine(fi+1,cj))
+                    crse(ci,cj) = half * (fine(fi,cj) + fine(fi+1,cj))
                 enddo
             enddo
 
@@ -2258,7 +2284,7 @@ contains
             do cj = 0, cny-1
                 fj = 2*cj
                 do ci = 0, cnx-1
-                    crse(ci,cj) = 0.50d0 * (fine(ci,fj) + fine(ci,fj+1))
+                    crse(ci,cj) = half * (fine(ci,fj) + fine(ci,fj+1))
                 enddo
             enddo
 
@@ -2277,9 +2303,66 @@ contains
         type(box_data), intent(in)    :: fine
         type(box_data), intent(inout) :: crse
 
-        call restrict_array (fine%data, crse%data,         &
-                             fine%valid%nx, fine%valid%ny, &
-                             crse%valid%nx, crse%valid%ny)
+        ! call restrict_array (fine%data, crse%data,         &
+        !                      fine%valid%nx, fine%valid%ny, &
+        !                      crse%valid%nx, crse%valid%ny)
+
+        integer  :: refx, refy
+        real(dp) :: scale
+        integer  :: fi, fj, ci, cj
+
+        refx = fine%valid%nx / crse%valid%nx
+        refy = fine%valid%ny / crse%valid%ny
+
+        if ((fine%offi .eq. BD_CELL) .and. (fine%offj .eq. BD_CELL)) then
+            ! Cell-centered in all directions.
+            crse%data = zero
+            scale = one / (refx*refy)
+            do fj = fine%valid%jlo, fine%valid%jhi
+                cj = fj/refy
+                do fi = fine%valid%ilo, fine%valid%ihi
+                    ci = fi/refx
+                    crse%data(ci,cj) = crse%data(ci,cj) + scale*fine%data(fi,fj)
+                enddo
+            enddo
+
+        else if ((fine%offi .eq. BD_NODE) .and. (fine%offj .eq. BD_CELL)) then
+            ! Nodal in x
+            crse%data = zero
+            scale = one / refy
+            do fj = fine%valid%jlo, fine%valid%jhi
+                cj = fj/refy
+                do ci = crse%valid%ilo, crse%valid%ihi
+                    fi = ci*refx
+                    crse%data(ci,cj) = crse%data(ci,cj) + scale*fine%data(fi,fj)
+                enddo
+            enddo
+
+        else if ((fine%offi .eq. BD_CELL) .and. (fine%offj .eq. BD_NODE)) then
+            ! Nodal in y
+            crse%data = zero
+            scale = one / refy
+            do cj = crse%valid%jlo, crse%valid%jhi
+                fj = cj*refy
+                do fi = fine%valid%ilo, fine%valid%ihi
+                    ci = fi/refx
+                    crse%data(ci,cj) = crse%data(ci,cj) + scale*fine%data(fi,fj)
+                enddo
+            enddo
+
+        else
+            ! Nodal in all directions. Just copy nodes that don't vanish.
+            do cj = crse%valid%jlo, crse%valid%jhi
+                fj = cj*refy
+                do ci = crse%valid%ilo, crse%valid%ihi
+                    fi = ci*refx
+                    crse%data(ci,cj) = fine%data(fi,fj)
+                enddo
+            enddo
+        endif
+
+
+
     end subroutine restrict_bd
 
 
@@ -2351,7 +2434,7 @@ contains
         type(box_data), dimension(:), allocatable  :: e, r, invdiags, work1
         real(dp)                                   :: mgdx, mgdy
         integer                                    :: maxdepth
-        integer                                    :: ilo, ihi, jlo, jhi, i, j
+        ! integer                                    :: ilo, ihi, jlo, jhi, i, j
 
 
         ! Estimate size of scheduling vectors
@@ -2429,6 +2512,12 @@ contains
             stop
         endif
 
+        allocate (mgbc(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
         do d = 0, maxdepth
             call define_box_data (e(d), valid, 1, 1, BD_CELL, BD_CELL)
             call define_box_data (r(d), valid, 0, 0, BD_CELL, BD_CELL)
@@ -2441,10 +2530,6 @@ contains
             call define_box_data (mggeo(d)%Jgup_yy, valid, geo%Jgup_yy%ngx, geo%Jgup_yy%ngy, BD_CELL, BD_NODE)
             call define_box_data (invdiags(d), valid, 0, 0, BD_CELL, BD_CELL)
 
-            call define_bdry_data (mgbc, valid, &
-                                   bc%type_xlo, bc%type_xhi, bc%type_ylo, bc%type_yhi, &
-                                   bc%mode_xlo, bc%mode_xhi, bc%mode_ylo, bc%mode_yhi)
-
             if (d .eq. 0) then
                 ! For now, just copy the data. It would be more economical to
                 ! point to the data that already exists.
@@ -2454,46 +2539,24 @@ contains
                 mggeo(d)%Jgup_yx%data = geo%Jgup_yx%data
                 mggeo(d)%Jgup_yy%data = geo%Jgup_yy%data
                 call compute_inverse_diags(invdiags(d), mggeo(d))
-
-                mgbc(d)%data_xlo = bc%data_xlo
-                mgbc(d)%data_xhi = bc%data_xhi
-                mgbc(d)%data_ylo = bc%data_ylo
-                mgbc(d)%data_yhi = bc%data_yhi
-
             else
+                ! Coarsen the data from MG level d-1
                 call restrict (mggeo(d-1)%J, mggeo(d)%J)
                 call restrict (mggeo(d-1)%Jgup_xx, mggeo(d)%Jgup_xx)
                 call restrict (mggeo(d-1)%Jgup_xy, mggeo(d)%Jgup_xy)
                 call restrict (mggeo(d-1)%Jgup_yx, mggeo(d)%Jgup_yx)
                 call restrict (mggeo(d-1)%Jgup_yy, mggeo(d)%Jgup_yy)
                 call restrict (invdiags(d-1), invdiags(d))
-
-                ! Coarsen the boundary data.
-                ! TODO: This should be its own function.
-                if (bc%mode_xlo .eq. BCMODE_UNIFORM) then
-                    mgbc(d)%data_xlo = mgbc(d-1)%data_xlo
-                else
-                    if (refy(d-1) .eq. 1) then
-                        mgbc(d)%data_xlo = mgbc(d-1)%data_xlo
-                    else
-                        do j = r(d)%valid%jlo, r(d)%valid%jhi
-                            mgbc(d)%data_xlo(j) = half * (mgbc(d-1)%data_xlo(2*j) + mgbc(d-1)%data_xlo(2*j+1))
-                        enddo
-                    endif
-                endif
-
-                if (bc%mode_xhi .eq. BCMODE_UNIFORM) then
-                    mgbc(d)%data_xhi = mgbc(d-1)%data_xhi
-                else
-                    if (refy(d-1) .eq. 1) then
-                        mgbc(d)%data_xhi = mgbc(d-1)%data_xhi
-                    else
-                        do j = r(d)%valid%jlo, r(d)%valid%jhi
-                            mgbc(d)%data_xhi(j) = half * (mgbc(d-1)%data_xhi(2*j) + mgbc(d-1)%data_xhi(2*j+1))
-                        enddo
-                    endif
-                endif
             endif
+
+            ! All BCs will be homogeneous after first residual calculation.
+            call define_bdry_data (mgbc(d), valid, &
+                                   bc%type_xlo, bc%type_xhi, bc%type_ylo, bc%type_yhi, &
+                                   BCMODE_UNIFORM, BCMODE_UNIFORM, BCMODE_UNIFORM, BCMODE_UNIFORM)
+            mgbc(d)%data_xlo = zero
+            mgbc(d)%data_xhi = zero
+            mgbc(d)%data_ylo = zero
+            mgbc(d)%data_yhi = zero
 
             ! Move on to next depth
             if (d .lt. maxDepth) then
@@ -2515,21 +2578,18 @@ contains
 
         if (verbosity .ge. 1) then
             print*, 'scale sq res = ', rscale
-            print*, 'iter ', 0, ': sq res = ', relres(0)
+            print*, 'V-Cycle iter ', 0, ': sq res = ', relres(0)
         endif
 
         do iter = 1, maxiters
             ! Solve for phi's correction.
             e(0)%data = zero
-        !     call MGPoissonSolverSerial2D_VCycleNoInit (e, r, invDiags, work1, &
-        !                                                refx, refy, &
-        !                                                nx, ny, &
-        !                                                dx, dy, crseAMRdx, crseAMRdy, &
-        !                                                bclox, bcloy, bchix, bchiy, &
-        !                                                tol, maxDepth, 0, &
-        !                                                numCycles, &
-        !                                                smoothDown, smoothUp, smoothBottom, &
-        !                                                verbosity)
+            call vcycle_noinit (e, r, invdiags, work1, mggeo, mgbc, &
+                                refx, refy, &
+                                tol, maxdepth, 0, &
+                                numcycles, &
+                                smooth_down, smooth_up, smooth_bottom, &
+                                verbosity)
 
             ! Apply correction
             phi%data = phi%data + e(0)%data
@@ -2538,7 +2598,7 @@ contains
             call compute_residual (r(0), rhs, phi, mggeo(0), bc, homog)
             relres(iter) = inner_prod (r(0), r(0)) / rscale
             if (verbosity .ge. 1) then
-                print*, 'iter ', iter, ': sq res = ', relres(iter)
+                print*, 'V-Cycle iter ', iter, ': sq res = ', relres(iter)
             endif
 
             ! Did we converge?
@@ -2565,24 +2625,24 @@ contains
 
         ! Free memory
         do d = 0, maxDepth
+            call undefine_bdry_data (mgbc(d))
+            call undefine_box_data (invdiags(d))
             call undefine_box_data (mggeo(d)%J)
             call undefine_box_data (mggeo(d)%Jgup_xx)
             call undefine_box_data (mggeo(d)%Jgup_xy)
             call undefine_box_data (mggeo(d)%Jgup_yx)
             call undefine_box_data (mggeo(d)%Jgup_yy)
-
             call undefine_box_data (work1(d))
-            call undefine_box_data (invdiags(d))
             call undefine_box_data (r(d))
             call undefine_box_data (e(d))
         enddo
 
+        if (allocated(mgbc)) deallocate(mgbc)
         if (allocated(invDiags)) deallocate(invDiags)
         if (allocated(mggeo)) deallocate(mggeo)
         if (allocated(work1)) deallocate(work1)
         if (allocated(r)) deallocate(r)
         if (allocated(e)) deallocate(e)
-
         if (allocated(relres)) deallocate(relres)
         if (allocated(refx)) deallocate(refx)
         if (allocated(refy)) deallocate(refy)
@@ -2610,132 +2670,96 @@ contains
         integer, intent(in)                                  :: numcycles
         integer, intent(in)                                  :: verbosity
 
-        ! integer                                              :: cnx, cny, curCycle, numCyclesNoTop
-        ! real(8)                                              :: cdx, cdy
+        integer                                              :: curcycle, numcycles_notop
+        logical, parameter                                   :: homog = .true.
 
-        ! ! Relaxation params
-        ! real(8), parameter                                   :: relax_tol = -1.0d0
-        ! real(8), parameter                                   :: relax_omega = 1.33
-        ! integer, parameter                                   :: relax_doRB = 0
+        ! Relaxation params
+        real(dp), parameter                                  :: relax_tol = 1.0E-12_dp !-one
+        real(dp), parameter                                  :: relax_omega = one ! Was 1.33
+        logical, parameter                                   :: relax_redblack = .false.
+        integer, parameter                                   :: relax_verbosity = 3
 
-        ! ! Bottom solver params
-        ! real(8), parameter                                   :: bottom_tol = 1.0e-6
-        ! integer, parameter                                   :: bottom_maxIters = 80
-        ! integer, parameter                                   :: bottom_maxRestarts = 5
-        ! integer, parameter                                   :: bottom_verbosity = 0
+        ! Bottom solver params
+        real(dp), parameter                                  :: bottom_tol = 1.0E-6_dp
+        integer, parameter                                   :: bottom_maxiters = 80
+        integer, parameter                                   :: bottom_maxrestarts = 5
+        integer, parameter                                   :: bottom_verbosity = 3
 
 
-        ! if (depth .eq. maxDepth) then
-        !     ! Use bottom solver
-        !     if (verbosity .ge. 7) then
-        !         print*, 'MG depth ', depth, ': Bottom relax'
-        !     endif
-        !     call MGPoissonSolverSerial2D_RelaxGS (e(depth)%data, &
-        !                                           r(depth)%data, &
-        !                                           invDiags(depth)%data, &
-        !                                           mgnx, mgny, &
-        !                                           e(depth)%ngx, e(depth)%ngy, &
-        !                                           mgdx, mgdy, crseAMRdx, crseAMRdy, &
-        !                                           bclox, bcloy, bchix, bchiy, &
-        !                                           relax_omega, relax_tol, &
-        !                                           smoothBottom, relax_doRB, 0)
+        if (depth .eq. maxdepth) then
+            ! Use bottom solver...
 
-        !     if (verbosity .ge. 3) then
-        !         print*, 'MG depth ', depth, ': Bottom solver:'
-        !     else if (verbosity .ge. 7) then
-        !         print*, 'MG depth ', depth, ': Relax'
-        !     endif
-        !     call MGPoissonSolverSerial2D_BiCGStab (e(depth)%data, &
-        !                                            r(depth)%data, &
-        !                                            mgnx, mgny, &
-        !                                            e(depth)%ngx, e(depth)%ngy, &
-        !                                            mgdx, mgdy, &
-        !                                            bclox, bcloy, bchix, bchiy, &
-        !                                            bottom_tol, bottom_maxIters, bottom_maxRestarts, 0, &
-        !                                            bottom_verbosity)
-        ! else
-        !     ! V-Cycle...
+            if (verbosity .ge. 7) then
+                print*, 'MG depth ', depth, ': Bottom relax'
+            endif
+            ! call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
+            !                invdiags(depth), relax_omega, relax_tol, &
+            !                smooth_bottom, relax_redblack, &
+            !                .false., & ! zero phi?
+            !                relax_verbosity)
 
-        !     cnx = mgnx / refx(depth)
-        !     cny = mgny / refy(depth)
-        !     cdx = mgdx * real(refx(depth),8)
-        !     cdy = mgdy * real(refy(depth),8)
+            if (verbosity .ge. 3) then
+                print*, 'MG depth ', depth, ': Bottom solver:'
+            endif
+            call solve_bicgstab (e(depth), r(depth), geo(depth), bc(depth), homog, &
+                                 bottom_tol, bottom_maxiters, bottom_maxrestarts, &
+                                 .false., & ! zero phi?
+                                 bottom_verbosity)
 
-        !     if (depth .gt. 0) then
-        !         numCyclesNoTop = numCycles
-        !     else
-        !         numCyclesNoTop = 1
-        !     endif
+        else
+            ! V-Cycle...
 
-        !     do curCycle = 1, numCyclesNoTop
-        !         ! Relax
-        !         if (verbosity .ge. 7) then
-        !             print*, 'MG depth ', depth, ': smooth down'
-        !         endif
-        !         call MGPoissonSolverSerial2D_RelaxGS (e(depth)%data, &
-        !                                               r(depth)%data, &
-        !                                               invDiags(depth)%data, &
-        !                                               mgnx, mgny, &
-        !                                               e(depth)%ngx, e(depth)%ngy, &
-        !                                               mgdx, mgdy, crseAMRdx, crseAMRdy, &
-        !                                               bclox, bcloy, bchix, bchiy, &
-        !                                               relax_omega, relax_tol, &
-        !                                               smoothDown, relax_doRB, 0)
+            if (depth .gt. 0) then
+                numcycles_notop = numcycles
+            else
+                numcycles_notop = 1
+            endif
 
-        !         ! Restrict residual
-        !         if (verbosity .ge. 7) then
-        !             print*, 'MG depth ', depth, ': Restrict resudual'
-        !         endif
-        !         call MGPoissonSolverSerial2D_Residual(work1(depth)%data, &
-        !                                               r(depth)%data, &
-        !                                               e(depth)%data, &
-        !                                               mgnx, mgny, &
-        !                                               e(depth)%ngx, e(depth)%ngy, &
-        !                                               mgdx, mgdy, &
-        !                                               bclox, bcloy, bchix, bchiy)
+            do curcycle = 1, numcycles_notop
+                ! Relax
+                if (verbosity .ge. 7) then
+                    print*, 'MG depth ', depth, ': smooth down'
+                endif
+                call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
+                               invdiags(depth), relax_omega, relax_tol, &
+                               smooth_down, relax_redblack, &
+                               .false., & ! zero phi?
+                               relax_verbosity)
 
-        !         call MGPoissonSolverSerial2D_restrict (work1(depth)%data, &
-        !                                                r(depth+1)%data, &
-        !                                                mgnx, mgny, &
-        !                                                cnx, cny)
+                ! Restrict residual
+                if (verbosity .ge. 7) then
+                    print*, 'MG depth ', depth, ': Restrict resudual'
+                endif
+                call compute_residual (work1(depth), r(depth), e(depth), &
+                                       geo(depth), bc(depth), homog)
+                call restrict (work1(depth), r(depth+1))
 
-        !         ! Coarse level solve
-        !         e(depth+1)%data = 0.0d0
-        !         call MGPoissonSolverSerial2D_VCycleNoInit (e, r, invDiags, work1, &
-        !                                                    refx, refy, &
-        !                                                    cnx, cny, &
-        !                                                    cdx, cdy, crseAMRdx, crseAMRdy, &
-        !                                                    bclox, bcloy, bchix, bchiy, &
-        !                                                    tol, maxDepth, depth+1, &
-        !                                                    numCycles, &
-        !                                                    smoothDown, smoothUp, smoothBottom, &
-        !                                                    verbosity)
+                ! Coarse level solve
+                e(depth+1)%data = zero
+                call vcycle_noinit (e, r, invdiags, work1, geo, bc, &
+                                    refx, refy, &
+                                    tol, maxdepth, depth+1, &
+                                    numcycles, &
+                                    smooth_down, smooth_up, smooth_bottom, &
+                                    verbosity)
 
-        !         ! Prolong correction
-        !         if (verbosity .ge. 7) then
-        !             print*, 'MG depth ', depth, ': Add correction'
-        !         endif
-        !         call MGPoissonSolverSerial2D_prolong (e(depth)%data, &
-        !                                               e(depth+1)%data, &
-        !                                               mgnx, mgny, &
-        !                                               cnx, cny, &
-        !                                               e(depth)%ngx, e(depth)%ngy)
+                ! Prolong correction
+                if (verbosity .ge. 7) then
+                    print*, 'MG depth ', depth, ': Add correction'
+                endif
+                call prolong (e(depth), e(depth+1))
 
-        !         ! Relax
-        !         if (verbosity .ge. 7) then
-        !             print*, 'MG depth ', depth, ': Smooth up'
-        !         endif
-        !         call MGPoissonSolverSerial2D_RelaxGS (e(depth)%data, &
-        !                                               r(depth)%data, &
-        !                                               invDiags(depth)%data, &
-        !                                               mgnx, mgny, &
-        !                                               e(depth)%ngx, e(depth)%ngy, &
-        !                                               mgdx, mgdy, crseAMRdx, crseAMRdy, &
-        !                                               bclox, bcloy, bchix, bchiy, &
-        !                                               relax_omega, relax_tol, &
-        !                                               smoothUp, relax_doRB, 0)
-        !     enddo
-        ! endif
+                ! Relax
+                if (verbosity .ge. 7) then
+                    print*, 'MG depth ', depth, ': Smooth up'
+                endif
+                call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
+                               invdiags(depth), relax_omega, relax_tol, &
+                               smooth_up, relax_redblack, &
+                               .false., & ! zero phi?
+                               relax_verbosity)
+            enddo
+        endif
 
     end subroutine vcycle_noinit
 
