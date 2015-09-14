@@ -1688,11 +1688,14 @@ contains
 
         ! Compute initial residual
         call compute_residual (r, rhs, phi, geo, bc, homog)
-        rscale = inner_prod (r, r)
-        relres(0) = one
-        if (verbosity .ge. 3) then
-            print*, 'scale sq res = ', rscale
-            print*, 'iter ', 0, ': sq res = ', relres(0)
+
+        if (tol .gt. zero) then
+            rscale = inner_prod (r, r)
+            relres(0) = one
+            if (verbosity .ge. 3) then
+                print*, 'scale sq res = ', rscale
+                print*, 'iter ', 0, ': sq res = ', relres(0)
+            endif
         endif
 
         ! Iterate
@@ -1707,17 +1710,20 @@ contains
 
             ! Compute new residual
             call compute_residual (r, rhs, phi, geo, bc, homog)
-            relres(iter) = inner_prod(r, r) / rscale
-            if (verbosity .ge. 3) then
-                print*, 'iter ', iter, ': sq res = ', relres(iter)
-            endif
 
-            ! Did we converge?
-            if (relres(iter) .le. tol) then
+            if (tol .gt. zero) then
+                relres(iter) = inner_prod(r, r) / rscale
                 if (verbosity .ge. 3) then
-                    print*, "Converged."
+                    print*, 'iter ', iter, ': sq res = ', relres(iter)
                 endif
-                exit
+
+                ! Did we converge?
+                if (relres(iter) .le. tol) then
+                    if (verbosity .ge. 3) then
+                        print*, "Converged."
+                    endif
+                    exit
+                endif
             endif
         enddo
 
@@ -1769,11 +1775,13 @@ contains
 
         ! Compute initial residual
         call compute_residual (r, rhs, phi, geo, bc, homog)
-        rscale = inner_prod (r, r)
-        relres(0) = one
-        if (verbosity .ge. 3) then
-            print*, 'scale sq res = ', rscale
-            print*, 'iter ', 0, ': sq res = ', relres(0)
+        if (tol .gt. zero) then
+            rscale = inner_prod (r, r)
+            relres(0) = one
+            if (verbosity .ge. 3) then
+                print*, 'scale sq res = ', rscale
+                print*, 'iter ', 0, ': sq res = ', relres(0)
+            endif
         endif
 
         ! Iterate
@@ -1832,17 +1840,20 @@ contains
 
             ! Compute new residual
             call compute_residual (r, rhs, phi, geo, bc, .true.)
-            relres(iter) = inner_prod (r, r) / rscale
-            if (verbosity .ge. 3) then
-                print*, 'iter ', iter, ': sq res = ', relres(iter)
-            endif
 
-            ! Did we converge?
-            if (relres(iter) .le. tol) then
+            if (tol .gt. zero) then
+                relres(iter) = inner_prod (r, r) / rscale
                 if (verbosity .ge. 3) then
-                    print*, "Converged."
+                    print*, 'iter ', iter, ': sq res = ', relres(iter)
                 endif
-                exit
+
+                ! Did we converge?
+                if (relres(iter) .le. tol) then
+                    if (verbosity .ge. 3) then
+                        print*, "Converged."
+                    endif
+                    exit
+                endif
             endif
         enddo
 
@@ -2300,7 +2311,6 @@ contains
         type(box_data), dimension(:), allocatable  :: e, r, invdiags, work1
         real(dp)                                   :: mgdx, mgdy
         integer                                    :: maxdepth
-        ! integer                                    :: ilo, ihi, jlo, jhi, i, j
 
 
         ! Estimate size of scheduling vectors
@@ -2540,7 +2550,7 @@ contains
         logical, parameter                                   :: homog = .true.
 
         ! Relaxation params
-        real(dp), parameter                                  :: relax_tol = 1.0E-12_dp !-one
+        real(dp), parameter                                  :: relax_tol = -one
         real(dp), parameter                                  :: relax_omega = one ! Was 1.33
         logical, parameter                                   :: relax_redblack = .false.
         integer, parameter                                   :: relax_verbosity = 0

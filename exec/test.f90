@@ -1591,7 +1591,7 @@ contains
         call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
                      1.0d-6,  & ! tol
                      5,       & ! max iters
-                     -1,      & ! max depth
+                     0,      & ! max depth
                      1,       & ! num cycles
                      4,       & ! smooth down
                      4,       & ! smooth up
