@@ -1465,6 +1465,7 @@ contains
         type(box_data)             :: lphi
         type(box_data)             :: invdiags
         type(box_data)             :: phi
+        real(dp)                   :: t1, t2
 
         valid = geo%J%valid
 
@@ -1532,8 +1533,11 @@ contains
                                BCMODE_NONUNIFORM, &    ! ylo
                                BCMODE_NONUNIFORM)      ! yhi
 
-        kx = (valid%nx/2-2) * pi / L
-        ky = (valid%ny/2-2) * pi / L
+        ! kx = (valid%nx/2-2) * pi / L
+        ! ky = (valid%ny/2-2) * pi / L
+
+        kx = two * pi / L
+        ky = two * pi / L
 
         xp => bdx_x%data(ilo,:)
         yp => bdy_x%data(ilo,:)
@@ -1560,8 +1564,8 @@ contains
 
         ! Set up RHS
         call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
-        call compute_laplacian (lphi, soln, geo, bc, homog)
-        ! lphi%data = -(kx**2 + ky**2) * soln%data(ilo:ihi,jlo:jhi)
+        ! call compute_laplacian (lphi, soln, geo, bc, homog, .true.)
+        lphi%data = -(kx**2 + ky**2) * soln%data(ilo:ihi,jlo:jhi)
 
         ! Set up invdiags
         call define_box_data (invdiags, lphi)
@@ -1569,12 +1573,14 @@ contains
 
         ! Solve
         call define_box_data (phi, soln)
-        ! call relax_jacobi (phi, lphi, geo, bc, homog, invdiags, &
-        !                    one,     & ! omega
-        !                    1.0d-6,  & ! tol
-        !                    20,      & ! maxiters
-        !                    .true.,  & ! zerophi
-        !                    verbosity)
+        call cpu_time (t1)
+
+        call relax_jacobi (phi, lphi, geo, bc, homog, invdiags, &
+                           one,     & ! omega
+                           1.0d-6,  & ! tol
+                           20,      & ! maxiters
+                           .true.,  & ! zerophi
+                           verbosity)
         ! call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
         !                one,     & ! omega
         !                1.0d-6,  & ! tol
@@ -1583,21 +1589,24 @@ contains
         !                .true.,  & ! zerophi
         !                verbosity)
         ! call solve_bicgstab (phi, lphi, geo, bc, homog, &
-        !                1.0d-6,  & ! tol
-        !                80,      & ! max iters
-        !                5,       & ! max restarts
-        !                .true.,  & ! zerophi
-        !                verbosity)
-        call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
-                     1.0d-6,  & ! tol
-                     5,       & ! max iters
-                     0,      & ! max depth
-                     1,       & ! num cycles
-                     4,       & ! smooth down
-                     4,       & ! smooth up
-                     2,       & ! smooth bottom
-                     .true.,  & ! zerophi
-                     verbosity)
+        !                      1.0d-6,  & ! tol
+        !                      80,      & ! max iters
+        !                      5,       & ! max restarts
+        !                      .true.,  & ! zerophi
+        !                      verbosity)
+        ! call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
+        !              1.0d-6,  & ! tol
+        !              5,       & ! max iters
+        !              0,      & ! max depth
+        !              1,       & ! num cycles
+        !              4,       & ! smooth down
+        !              4,       & ! smooth up
+        !              2,       & ! smooth bottom
+        !              .true.,  & ! zerophi
+        !              verbosity)
+
+        call cpu_time (t2)
+        print*, 'Solve time (s) = ', t2-t1
 
         ! Compute norm
         phi%data = phi%data - soln%data

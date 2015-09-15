@@ -1376,6 +1376,7 @@ contains
     ! --------------------------------------------------------------------------
     ! Computes 1.0 / the Laplacian's diagonal matrix elements.
     ! invDiags must be prepared (allocated and box set) prior to call.
+    ! NOTE: This assumes the Laplacian is not scaling by 1/J.
     ! --------------------------------------------------------------------------
     pure subroutine compute_inverse_diags (idiags, geo)
         type(box_data), intent(inout) :: idiags
@@ -1393,9 +1394,8 @@ contains
         jhi = idiags%valid%jhi
 
         idiags%data(ilo:ihi,jlo:jhi) = &
-            ( (geo%Jgup_xx%data(ilo+1:ihi+1,jlo:jhi) + geo%Jgup_xx%data(ilo:ihi,jlo:jhi)) * invdxsq    &
-             +(geo%Jgup_yy%data(ilo:ihi,jlo+1:jhi+1) + geo%Jgup_yy%data(ilo:ihi,jlo:jhi)) * invdysq  ) &
-            / geo%J%data(ilo:ihi,jlo:jhi)
+              (geo%Jgup_xx%data(ilo+1:ihi+1,jlo:jhi) + geo%Jgup_xx%data(ilo:ihi,jlo:jhi)) * invdxsq &
+            + (geo%Jgup_yy%data(ilo:ihi,jlo+1:jhi+1) + geo%Jgup_yy%data(ilo:ihi,jlo:jhi)) * invdysq
 
         idiags%data = one / idiags%data
 
@@ -1433,7 +1433,6 @@ contains
 
         if (dir .eq. 1) then
             if (nodedir .eq. dir) then
-                ! TODO: Need to fill ghosts.
                 scale = one / phi%valid%dx
                 pd%data(ilo:ihi+1,jlo:jhi) = scale * (  phi%data(ilo:ihi+1,jlo:jhi) &
                                                       - phi%data(ilo-1:ihi,jlo:jhi))
@@ -1473,7 +1472,6 @@ contains
             endif
         else
             if (nodedir .eq. dir) then
-                ! TODO: Need to fill ghosts.
                 scale = one / phi%valid%dy
                 pd%data(ilo:ihi,jlo:jhi+1) = scale * (  phi%data(ilo:ihi,jlo:jhi+1) &
                                                       - phi%data(ilo:ihi,jlo-1:jhi)  )
@@ -1590,16 +1588,20 @@ contains
 
 
     ! ------------------------------------------------------------------------------
+    ! If opt_jscale is false (default), this function will not scale the result
+    ! by 1/J. Note that a true Laplacian should do this.
     ! ------------------------------------------------------------------------------
-    subroutine compute_laplacian (lap, phi, geo, bc, homog)
+    subroutine compute_laplacian (lap, phi, geo, bc, homog, opt_jscale)
         type(box_data), intent(inout) :: lap
         type(box_data), intent(inout) :: phi
         type(geo_data), intent(in)    :: geo
         type(bdry_data), intent(in)   :: bc
         logical, intent(in)           :: homog
+        logical, intent(in), optional :: opt_jscale
 
         type(box_data)                :: xflux, yflux
         type(box_data)                :: xwk, ywk
+        integer                       :: ilo, ihi, jlo, jhi
 
         ! Allocate scratch space
         call define_box_data (xflux, phi%valid, 0, 0, BD_NODE, BD_CELL)
@@ -1610,6 +1612,19 @@ contains
         ! Compute Div[Grad[phi]]
         call compute_grad (xflux, yflux, phi, geo, bc, homog, xwk, ywk)
         call compute_div (lap, xflux, yflux)
+
+        ! Scale by 1/J if necessary.
+        if (present(opt_jscale)) then
+            if (opt_jscale) then
+                ilo = phi%valid%ilo
+                ihi = phi%valid%ihi
+                jlo = phi%valid%jlo
+                jhi = phi%valid%jhi
+
+                lap%data(ilo:ihi,jlo:jhi) = lap%data(ilo:ihi,jlo:jhi) &
+                                          / geo%J%data(ilo:ihi,jlo:jhi)
+            endif
+        endif
 
         ! Free memory
         call undefine_box_data (xflux)
@@ -1622,23 +1637,33 @@ contains
 
     ! ------------------------------------------------------------------------------
     ! Compute res = rhs - L[phi].
+    ! If opt_jscale is false (default), this function will not scale the result
+    ! by 1/J. Note that a true Laplacian should do this.
     ! ------------------------------------------------------------------------------
-    subroutine compute_residual (res, rhs, phi, geo, bc, homog)
+    subroutine compute_residual (res, rhs, phi, geo, bc, homog, opt_jscale)
         type(box_data), intent(inout) :: res, phi
         type(box_data), intent(in)    :: rhs
         type(geo_data), intent(in)    :: geo
         type(bdry_data), intent(in)   :: bc
         logical, intent(in)           :: homog
 
-        integer                       :: ilo, ihi
-        integer                       :: jlo, jhi
+        logical, intent(in), optional :: opt_jscale
+        logical                       :: jscale
+
+        integer                       :: ilo, ihi, jlo, jhi
+
+        if (present(opt_jscale)) then
+            jscale = opt_jscale
+        else
+            jscale = .false.
+        endif
+
+        call compute_laplacian (res, phi, geo, bc, homog, jscale)
 
         ilo = rhs%valid%ilo
         ihi = rhs%valid%ihi
         jlo = rhs%valid%jlo
         jhi = rhs%valid%jhi
-
-        call compute_laplacian (res, phi, geo, bc, homog)
         res%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) - res%data(ilo:ihi,jlo:jhi)
 
     end subroutine compute_residual
@@ -2282,13 +2307,14 @@ contains
 
 
     ! ------------------------------------------------------------------------------
+    ! rhs will be scaled with J, but restored before the function exits.
     ! ------------------------------------------------------------------------------
     subroutine vcycle (phi, rhs, geo, bc, homog, amrrefx, amrrefy, &
                        tol, maxiters, maxdepth_user, numcycles, &
                        smooth_down, smooth_up, smooth_bottom, &
                        zerophi, verbosity)
         type(box_data), intent(inout) :: phi
-        type(box_data), intent(in)    :: rhs
+        type(box_data), intent(inout) :: rhs
         type(geo_data), intent(in)    :: geo
         type(bdry_data), intent(in)   :: bc
         logical, intent(in)           :: homog
@@ -2304,6 +2330,7 @@ contains
         type(box)                                  :: valid
         integer, dimension(:), allocatable         :: refx, refy
         integer                                    :: ierr, d, iter, i
+        integer                                    :: ilo, ihi, jlo, jhi
         type(geo_data), dimension(:), allocatable  :: mggeo
         type(bdry_data), dimension(:), allocatable :: mgbc
         real(dp), dimension(:), allocatable        :: relres
@@ -2349,6 +2376,7 @@ contains
                 mgdx = mgdx * real(refx(d),8)
                 mgdy = mgdy * real(refy(d),8)
             enddo
+            print*, d, ': dx = ', mgdx, ', dy = ', mgdy
         endif
 
         ! Allocate and set up workspace
@@ -2422,7 +2450,8 @@ contains
                 call restrict (mggeo(d-1)%Jgup_xy, mggeo(d)%Jgup_xy)
                 call restrict (mggeo(d-1)%Jgup_yx, mggeo(d)%Jgup_yx)
                 call restrict (mggeo(d-1)%Jgup_yy, mggeo(d)%Jgup_yy)
-                call restrict (invdiags(d-1), invdiags(d))
+                ! call restrict (invdiags(d-1), invdiags(d))
+                call compute_inverse_diags(invdiags(d), mggeo(d))
             endif
 
             ! All BCs will be homogeneous after first residual calculation.
@@ -2444,6 +2473,14 @@ contains
         if (zerophi) then
             phi%data = zero
         endif
+
+        ! Scale rhs by J
+        ilo = rhs%valid%ilo
+        ihi = rhs%valid%ihi
+        jlo = rhs%valid%jlo
+        jhi = rhs%valid%jhi
+        rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
+                                  * geo%J%data(ilo:ihi,jlo:jhi)
 
         ! Set up residual equation
         call compute_residual (r(0), rhs, phi, geo, bc, homog)
@@ -2482,6 +2519,11 @@ contains
                 if (verbosity .ge. 1) then
                     print*, "Converged."
                 endif
+
+                ! Restore rhs scaling.
+                rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
+                                          / geo%J%data(ilo:ihi,jlo:jhi)
+
                 exit
             endif
 
@@ -2493,6 +2535,10 @@ contains
 
                 ! Undo last correction
                 phi%data = phi%data - e(0)%data
+
+                ! Restore rhs scaling.
+                rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
+                                          / geo%J%data(ilo:ihi,jlo:jhi)
 
                 exit
             endif
@@ -2645,3 +2691,4 @@ end module MGPoisson2D
 ! NOTES ............................
 ! 1. inner_prod should scale by J
 ! 2. check if restrict or prolong need J scaling too.
+! 3. Test compute_pd
