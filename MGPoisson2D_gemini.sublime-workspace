@@ -3,6 +3,30 @@
 	{
 		"selected_items":
 		[
+			[
+				"max",
+				"maxr"
+			],
+			[
+				"res",
+				"restrict"
+			],
+			[
+				"numc",
+				"numcycles_notop"
+			],
+			[
+				"vcy",
+				"vcycle_noinit"
+			],
+			[
+				"BCMOD",
+				"BCMODE_UNIFORM"
+			],
+			[
+				"coarsen",
+				"coarsen_bdry_data"
+			]
 		]
 	},
 	"buffers":
@@ -11,7 +35,7 @@
 			"file": "exec/test.f90",
 			"settings":
 			{
-				"buffer_size": 55860,
+				"buffer_size": 56072,
 				"line_ending": "Unix"
 			}
 		},
@@ -19,7 +43,7 @@
 			"file": "src/MGPoisson2D.f90",
 			"settings":
 			{
-				"buffer_size": 118349,
+				"buffer_size": 107882,
 				"line_ending": "Unix"
 			}
 		}
@@ -67,6 +91,7 @@
 	],
 	"file_history":
 	[
+		"/home/santillie/research/MGPoisson2D/exec/GNUmakefile",
 		"/home/santillie/.config/sublime-text-3/Packages/User/Fortran - Modern.tmLanguage",
 		"/home/santillie/.config/sublime-text-3/Packages/User/Fortran - Punchcard.tmLanguage",
 		"/home/santillie/research/MGPoisson2D/src/MGPoisson2D.f90"
@@ -87,6 +112,9 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"prolong",
+			"\\",
+			"restrict",
 			"<string>!-<"
 		],
 		"highlight": true,
@@ -114,29 +142,94 @@
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 55860,
+						"buffer_size": 56072,
 						"regions":
 						{
+							"bookmarks":
+							{
+								"flags": 144,
+								"icon": "bookmark",
+								"regions":
+								[
+									[
+										13734,
+										13734
+									],
+									[
+										55029,
+										55029
+									]
+								],
+								"scope": "bookmarks"
+							}
 						},
 						"selection":
 						[
 							[
-								7117,
-								7117
+								53867,
+								53867
 							]
 						],
 						"settings":
 						{
-							"function_name_status_row": 220,
+							"function_name_status_row": 1563,
 							"syntax": "Packages/Fortran/Fortran.tmLanguage",
 							"tab_size": 4,
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 3155.0,
+						"translation.y": 26333.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 1,
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "src/MGPoisson2D.f90",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 107882,
+						"regions":
+						{
+							"bookmarks":
+							{
+								"flags": 144,
+								"icon": "bookmark",
+								"regions":
+								[
+									[
+										16231,
+										16231
+									],
+									[
+										106482,
+										106482
+									]
+								],
+								"scope": "bookmarks"
+							}
+						},
+						"selection":
+						[
+							[
+								90205,
+								90205
+							]
+						],
+						"settings":
+						{
+							"function_name_status_row": 2418,
+							"syntax": "Packages/Fortran/Fortran.tmLanguage",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 37328.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 2,
 					"type": "text"
 				}
 			]
@@ -151,43 +244,26 @@
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 118349,
+						"buffer_size": 107882,
 						"regions":
 						{
-							"bookmarks":
-							{
-								"flags": 144,
-								"icon": "bookmark",
-								"regions":
-								[
-									[
-										19252,
-										19252
-									],
-									[
-										105278,
-										105278
-									]
-								],
-								"scope": "bookmarks"
-							}
 						},
 						"selection":
 						[
 							[
-								19448,
-								19448
+								98358,
+								98358
 							]
 						],
 						"settings":
 						{
-							"function_name_status_row": 509,
+							"function_name_status_row": 2418,
 							"syntax": "Packages/Fortran/Fortran.tmLanguage",
 							"tab_size": 4,
-							"translate_tabs_to_spaces": false
+							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 8276.0,
+						"translation.y": 40604.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 0,
@@ -251,6 +327,10 @@
 		"last_filter": "",
 		"selected_items":
 		[
+			[
+				"mg",
+				"src/MGPoisson2D.f90"
+			]
 		],
 		"width": 0.0
 	},
@@ -279,7 +359,7 @@
 	"show_minimap": true,
 	"show_open_files": false,
 	"show_tabs": true,
-	"side_bar_visible": true,
+	"side_bar_visible": false,
 	"side_bar_width": 218.0,
 	"status_bar_visible": true,
 	"template_settings":
