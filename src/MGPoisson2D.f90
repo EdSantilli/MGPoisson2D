@@ -793,6 +793,8 @@ contains
         logical, intent(in)           :: homog
         logical, intent(in), optional :: do_neum_opt
 
+        integer, parameter            :: diri_order = 2
+
         integer  :: xlo, xhi, ylo, yhi
         integer  :: ilo, ihi, jlo, jhi
         integer  :: i, j, e
@@ -921,15 +923,30 @@ contains
                     endif
 
                 case (BCTYPE_DIRI)
-                    if (homog) then
-                        phi%data(ilo-1, jlo:jhi) = -phi%data(ilo, jlo:jhi)
-                    else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
-                        bcval = two * bcd%data_xlo(1)
-                        phi%data(ilo-1, jlo:jhi) = two*bcval - phi%data(ilo, jlo:jhi)
-                    else
-                        phi%data(ilo-1,jlo:jhi) = two*bcd%data_xlo(jlo:jhi) - phi%data(ilo,jlo:jhi)
-                    endif
+                    select case (diri_order)
+                        case (1)
+                            if (homog) then
+                                phi%data(ilo-1, jlo:jhi) = -phi%data(ilo, jlo:jhi)
+                            else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                                bcval = two * bcd%data_xlo(1)
+                                phi%data(ilo-1, jlo:jhi) = two*bcval - phi%data(ilo, jlo:jhi)
+                            else
+                                phi%data(ilo-1,jlo:jhi) = two*bcd%data_xlo(jlo:jhi) - phi%data(ilo,jlo:jhi)
+                            endif
 
+                        case (2)
+                            if (homog) then
+                                phi%data(ilo-1, jlo:jhi) = third*(-six*phi%data(ilo, jlo:jhi) + phi%data(ilo+1, jlo:jhi))
+                            else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                                bcval = bcd%data_xlo(1)
+                                phi%data(ilo-1, jlo:jhi) = third*(eight*bcval - six*phi%data(ilo, jlo:jhi) + phi%data(ilo+1, jlo:jhi))
+                            else
+                                phi%data(ilo-1, jlo:jhi) = third*(eight*bcd%data_xlo(jlo:jhi) - six*phi%data(ilo, jlo:jhi) + phi%data(ilo+1, jlo:jhi))
+                            endif
+
+                        case default
+                            print*, 'fill_ghosts: Bad diri_order'
+                    end select
                 case (BCTYPE_PERIODIC)
                     phi%data(ilo-1, jlo:jhi) = phi%data(ihi, jlo:jhi)
 
@@ -1019,14 +1036,29 @@ contains
                     endif
 
                 case (BCTYPE_DIRI)
-                    if (homog) then
-                        phi%data(ihi+1, jlo:jhi) = -phi%data(ihi, jlo:jhi)
-                    else if (bcd%mode_xhi .eq. BCMODE_UNIFORM) then
-                        bcval = two * bcd%data_xhi(1)
-                        phi%data(ihi+1, jlo:jhi) = two*bcval - phi%data(ihi, jlo:jhi)
-                    else
-                        phi%data(ihi+1, jlo:jhi) = two*bcd%data_xhi(jlo:jhi) - phi%data(ihi, jlo:jhi)
-                    endif
+                    select case (diri_order)
+                        case (1)
+                            if (homog) then
+                                phi%data(ihi+1, jlo:jhi) = -phi%data(ihi, jlo:jhi)
+                            else if (bcd%mode_xhi .eq. BCMODE_UNIFORM) then
+                                bcval = two * bcd%data_xhi(1)
+                                phi%data(ihi+1, jlo:jhi) = two*bcval - phi%data(ihi, jlo:jhi)
+                            else
+                                phi%data(ihi+1, jlo:jhi) = two*bcd%data_xhi(jlo:jhi) - phi%data(ihi, jlo:jhi)
+                            endif
+                        case (2)
+                           if (homog) then
+                                phi%data(ihi+1, jlo:jhi) = third*(-six*phi%data(ihi, jlo:jhi) + phi%data(ihi-1, jlo:jhi))
+                            else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                                bcval = bcd%data_xhi(1)
+                                phi%data(ihi+1, jlo:jhi) = third*(eight*bcval - six*phi%data(ihi, jlo:jhi) + phi%data(ihi-1, jlo:jhi))
+                            else
+                                phi%data(ihi+1, jlo:jhi) = third*(eight*bcd%data_xlo(jlo:jhi) - six*phi%data(ihi, jlo:jhi) + phi%data(ihi-1, jlo:jhi))
+                            endif
+
+                        case default
+                            print*, 'fill_ghosts: Bad diri_order'
+                    end select
 
                 case (BCTYPE_PERIODIC)
                     phi%data(ihi+1, jlo:jhi) = phi%data(ilo, jlo:jhi)
@@ -1119,14 +1151,29 @@ contains
                     endif
 
                 case (BCTYPE_DIRI)
-                    if (homog) then
-                        phi%data(ilo:ihi, jlo-1) = -phi%data(ilo:ihi, jlo)
-                    else if (bcd%mode_ylo .eq. BCMODE_UNIFORM) then
-                        bcval = two * bcd%data_ylo(1)
-                        phi%data(ilo:ihi, jlo-1) = two*bcval - phi%data(ilo:ihi, jlo)
-                    else
-                        phi%data(ilo:ihi, jlo-1) = two*bcd%data_ylo(ilo:ihi) - phi%data(ilo:ihi, jlo)
-                    endif
+                    select case (diri_order)
+                        case (1)
+                            if (homog) then
+                                phi%data(ilo:ihi, jlo-1) = -phi%data(ilo:ihi, jlo)
+                            else if (bcd%mode_ylo .eq. BCMODE_UNIFORM) then
+                                bcval = two * bcd%data_ylo(1)
+                                phi%data(ilo:ihi, jlo-1) = two*bcval - phi%data(ilo:ihi, jlo)
+                            else
+                                phi%data(ilo:ihi, jlo-1) = two*bcd%data_ylo(ilo:ihi) - phi%data(ilo:ihi, jlo)
+                            endif
+                        case (2)
+                            if (homog) then
+                                phi%data(ilo:ihi, jlo-1) = third*(-six*phi%data(ilo:ihi, jlo) + phi%data(ilo:ihi, jlo+1))
+                            else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                                bcval = bcd%data_ylo(1)
+                                phi%data(ilo:ihi, jlo-1) = third*(eight*bcval - six*phi%data(ilo:ihi, jlo) + phi%data(ilo:ihi, jlo+1))
+                            else
+                                phi%data(ilo:ihi, jlo-1) = third*(eight*bcd%data_ylo(jlo:jhi) - six*phi%data(ilo:ihi, jlo) + phi%data(ilo:ihi, jlo+1))
+                            endif
+
+                        case default
+                            print*, 'fill_ghosts: Bad diri_order'
+                    end select
 
                 case (BCTYPE_PERIODIC)
                     phi%data(ilo:ihi, jlo-1) = phi%data(ilo:ihi, jhi)
@@ -1217,14 +1264,29 @@ contains
                     endif
 
                 case (BCTYPE_DIRI)
-                    if (homog) then
-                        phi%data(ilo:ihi, jhi+1) = -phi%data(ilo:ihi, jhi)
-                    else if (bcd%mode_yhi .eq. BCMODE_UNIFORM) then
-                        bcval = two * bcd%data_yhi(1)
-                        phi%data(ilo:ihi, jhi+1) = two*bcval - phi%data(ilo:ihi, jhi)
-                    else
-                        phi%data(ilo:ihi, jhi+1) = two*bcd%data_yhi(ilo:ihi) - phi%data(ilo:ihi, jhi)
-                    endif
+                    select case (diri_order)
+                        case (1)
+                            if (homog) then
+                                phi%data(ilo:ihi, jhi+1) = -phi%data(ilo:ihi, jhi)
+                            else if (bcd%mode_yhi .eq. BCMODE_UNIFORM) then
+                                bcval = two * bcd%data_yhi(1)
+                                phi%data(ilo:ihi, jhi+1) = two*bcval - phi%data(ilo:ihi, jhi)
+                            else
+                                phi%data(ilo:ihi, jhi+1) = two*bcd%data_yhi(ilo:ihi) - phi%data(ilo:ihi, jhi)
+                            endif
+                        case (2)
+                            if (homog) then
+                                phi%data(ilo:ihi, jhi+1) = third*(-six*phi%data(ilo:ihi, jhi) + phi%data(ilo:ihi, jhi-1))
+                            else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                                bcval = bcd%data_yhi(1)
+                                phi%data(ilo:ihi, jhi+1) = third*(eight*bcval - six*phi%data(ilo:ihi, jhi) + phi%data(ilo:ihi, jhi-1))
+                            else
+                                phi%data(ilo:ihi, jhi+1) = third*(eight*bcd%data_yhi(jlo:jhi) - six*phi%data(ilo:ihi, jhi) + phi%data(ilo:ihi, jhi-1))
+                            endif
+
+                        case default
+                            print*, 'fill_ghosts: Bad diri_order'
+                    end select
 
                 case (BCTYPE_PERIODIC)
                     phi%data(ilo:ihi, jhi+1) = phi%data(ilo:ihi, jlo)
@@ -1426,8 +1488,22 @@ contains
         jhi = phi%valid%jhi
 
         ! Find the nodal direction
-        nodedir = 1
-        if (pd%offj .eq. 0) nodedir = 2
+        if ((pd%offi .ne. 0) .and. (pd%offj .ne. 0)) then
+            print*, 'compute_pd cannot handle totally cell-centered data.'
+            stop
+        endif
+
+        if ((pd%offi .eq. 0) .and. (pd%offj .eq. 0)) then
+            print*, 'compute_pd cannot handle totally nodal-centered data.'
+            stop
+        endif
+
+        if (pd%offi .eq. 0) then
+            nodedir = 1
+        else
+            nodedir = 2
+        endif
+
 
         ! Compute xflux...
 
@@ -2692,3 +2768,4 @@ end module MGPoisson2D
 ! 1. inner_prod should scale by J
 ! 2. check if restrict or prolong need J scaling too.
 ! 3. Test compute_pd
+! 4. Refinement ratio is hard-coded at 4,4 in fill_ghosts.
