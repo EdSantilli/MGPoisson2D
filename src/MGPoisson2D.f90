@@ -714,10 +714,10 @@ contains
     ! --------------------------------------------------------------------------
     ! Computes sum = Sum_{i,j} bd*J*dx*dy
     ! If opt_jscale is true (default), dx*dy will be scaled by J.
-    ! NOTE: bd must be cell-centered.
+    ! bd and bx must be cell-centered.
     ! WARNING: This function does not check that bd contains bx.
     ! --------------------------------------------------------------------------
-    function integrate2D (bd, bx, geo, opt_jscale) result (sum)
+    function integrate2d (bd, bx, geo, opt_jscale) result (sum)
         type(box_data), intent(in) :: bd
         type(box), intent(in)      :: bx
         type(geo_data), intent(in) :: geo
@@ -757,7 +757,43 @@ contains
                 enddo
             enddo
         endif
-    end function integrate2D
+    end function integrate2d
+
+
+    ! --------------------------------------------------------------------------
+    ! Computes sum of outward normal fluxes.
+    ! It is assumed that xflux and yflux are already scaled by J.
+    ! bx should be cell-centered.
+    ! xflux should be node-centered in x.
+    ! yflux should be node-centered in y.
+    ! WARNING: This function does not check that xflux or yflux overlap bx.
+    ! --------------------------------------------------------------------------
+    function integrate2d_bdry (xflux, yflux, bx) result (sum)
+        type(box_data), intent(in) :: xflux, yflux
+        type(box), intent(in)      :: bx
+        real(dp)                   :: sum
+
+        integer :: ilo, ihi, i
+        integer :: jlo, jhi, j
+        real(dp) :: dx, dy
+
+        ilo = bx%ilo
+        ihi = bx%ihi
+        jlo = bx%jlo
+        jhi = bx%jhi
+        dx = bx%dx
+        dy = bx%dy
+
+        ! Compute integral.
+        sum = zero
+        do j = jlo, jhi
+            sum = sum + dx * (xflux%data(ihi+1,j) - xflux%data(ilo,j))
+        enddo
+        do i = ilo, ihi
+            sum = sum + dy * (yflux%data(i,jhi+1) - yflux%data(i,jlo))
+        enddo
+
+    end function integrate2d_bdry
 
 
     ! --------------------------------------------------------------------------
@@ -1907,8 +1943,8 @@ contains
         ! Iterate
         do iter = 1, maxIters
             if (verbosity .ge. 5) then
-                sum = integrate2D (r, r%valid, geo, .false.)
-                print*, ' sum div = ', sum
+                sum = integrate2d (r, r%valid, geo, .false.)
+                print*, ' sum rhs = ', sum
             endif
 
             ! Update phi
@@ -1962,7 +1998,7 @@ contains
         real(dp)                        :: rscale
         real(dp), dimension(0:maxiters) :: relres
         integer                         :: iter, color
-        real(dp)                        :: newphi
+        real(dp)                        :: newphi, sum
         integer                         :: ilo, ihi, i, imin
         integer                         :: jlo, jhi, j
 
@@ -1997,6 +2033,11 @@ contains
 
         ! Iterate
         do iter = 1, maxiters
+            if (verbosity .ge. 5) then
+                sum = integrate2d (r, r%valid, geo, .false.)
+                print*, ' sum rhs = ', sum
+            endif
+
             if (redblack) then
                 ! Update phi via Red-Black Gauss-Seidel
                 if (omega .eq. one) then
@@ -2091,7 +2132,7 @@ contains
         integer                                       :: ilo, ihi
         integer                                       :: jlo, jhi
         type(box_data)                                :: r, r0, nu, p, t
-        real(dp)                                      :: rscale
+        real(dp)                                      :: rscale, sum
         real(dp), dimension(0:max_iters+max_restarts) :: rho, omega, relres
         real(dp)                                      :: alpha, beta, lastres
         integer                                       :: iter, i, num_restarts
@@ -2148,6 +2189,11 @@ contains
             ! Increment index for bookkeeping vars.
             i = i + 1
 
+            if (verbosity .ge. 5) then
+                sum = integrate2d (r, r%valid, geo, .false.)
+                print*, ' sum rhs = ', sum
+            endif
+
             rho(i) = inner_prod (r0, r)
             beta = (rho(i) / rho(i-1)) * (alpha / omega(i-1))
             p%data = beta*p%data
@@ -2196,7 +2242,7 @@ contains
             endif
 
             ! Are we hanging?
-            if (abs(relres(i) - lastres) .lt. hang) then
+            if (abs(relres(i) - lastres) .lt. tol*hang) then
                 if (num_restarts .lt. max_restarts) then
                     ! The act of restarting will produce a new residual which we
                     ! would like to include in our bookkeeping, so we increase i,
@@ -2778,6 +2824,7 @@ contains
         integer, intent(in)                                  :: numcycles
         integer, intent(in)                                  :: verbosity
 
+        real(dp)                                             :: sum
         integer                                              :: curcycle, numcycles_notop
         logical, parameter                                   :: homog = .true.
 
@@ -2793,6 +2840,12 @@ contains
         integer, parameter                                   :: bottom_maxrestarts = 5
         integer, parameter                                   :: bottom_verbosity = 0
 
+
+        ! Compute the rhs integral
+        if (verbosity .ge. 8) then
+            sum = integrate2d (r(depth), r(depth)%valid, geo(depth), .false.)
+            print*, ' sum rhs = ', sum
+        endif
 
         if (depth .eq. maxdepth) then
             ! Use bottom solver...

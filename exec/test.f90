@@ -2005,9 +2005,9 @@ contains
         real(dp)                   :: kx, ky
 
         real(dp), parameter        :: tol = 1.0E-12_dp
-        integer, parameter         :: maxiters = 10
+        integer, parameter         :: maxiters = 50
         logical, parameter         :: homog = .true.
-        integer, parameter         :: verbosity = 5
+        integer, parameter         :: verbosity = 8
 
         real(dp), dimension(:), pointer :: xp, yp
         type(box_data),target      :: bdx, bdx_x, bdx_y
@@ -2016,7 +2016,7 @@ contains
         type(box_data)             :: xflux, yflux, xwk, ywk, xgp, ygp
         type(box_data)             :: phi, div, invdiags
         type(bdry_data)            :: bc, extrap_bc
-        real(dp)                   :: divnorm0, divnorm1, sum
+        real(dp)                   :: divnorm0, divnorm1, sum, x
 
         valid = geo%J%valid
 
@@ -2072,13 +2072,28 @@ contains
         call fill_dxdxi (ywk, 1, 1)
         yflux%data =  ywk%data * (-ky * cos(kx*bdx_y%data) * sin(ky*bdy_y%data)) + yflux%data
 
+        ! Do the fluxes integrate to zero?
+        sum = integrate2d_bdry (xflux, yflux, valid)
+        print*, '  flux sum = ', sum
+
+        ! Correct xflux to bring net flux to zero.
+        sum = sum / (geo%J%L * geo%J%H)
+        do j = jlo, jhi
+            do i = ilo, ihi+1
+                x = i * dx
+                xflux%data(i,j) = xflux%data(i,j) - sum*x
+            enddo
+        enddo
+        sum = integrate2d_bdry (xflux, yflux, valid)
+        print*, '  new flux sum = ', sum
+
         ! Compute initial divergence
         call compute_div (div, xflux, yflux)
         divnorm0 = pnorm (div, div%valid, norm_type)
 
         ! Does div integrate to zero?
-        sum = integrate2D (div, div%valid, geo, .false.)
-        print*, ' sum div = ', sum
+        sum = integrate2D (div, valid, geo, .false.)
+        print*, '  sum div = ', sum
 
         ! Set BCs
         call define_bdry_data (extrap_bc, valid, &
@@ -2107,12 +2122,34 @@ contains
         ! Solve L[phi] = Div[flux].
         call compute_inverse_diags (invdiags, geo)
         ! div%data = div%data * geo%J%data(ilo:ihi,jlo:jhi)
-        call relax_jacobi (phi, div, geo, bc, homog, invdiags, &
-                           one,      & ! omega
-                           tol,      &
-                           maxiters, &
-                           .true.,   & ! zerophi
-                           verbosity)
+        ! call relax_jacobi (phi, div, geo, bc, homog, invdiags, &
+        !                    one,      & ! omega
+        !                    tol,      &
+        !                    maxiters, &
+        !                    .true.,   & ! zerophi
+        !                    verbosity)
+        ! call relax_gs (phi, div, geo, bc, homog, invdiags, &
+        !                one,      & ! omega
+        !                tol,      &
+        !                maxiters, &
+        !                .true.,  & ! redblack
+        !                .true.,   & ! zerophi
+        !                verbosity)
+        ! call solve_bicgstab (phi, div, geo, bc, homog, &
+        !                      tol,      &
+        !                      maxiters, &
+        !                      5,        & ! max restarts
+        !                      .true.,   & ! zerophi
+        !                      verbosity)
+        call vcycle (phi, div, geo, bc, homog, 0, 0, &
+                     tol, maxiters, &
+                     0,      & ! max depth
+                     1,       & ! num cycles
+                     4,       & ! smooth down
+                     4,       & ! smooth up
+                     2,       & ! smooth bottom
+                     .true.,  & ! zerophi
+                     verbosity)
 
         ! Remove Grad[phi] from fluxes
         call compute_grad (xgp, ygp, phi, geo, bc, homog, xwk, ywk)
