@@ -96,6 +96,9 @@ module arrayutils
     integer, parameter :: BCTYPE_DIRI = 1
     integer, parameter :: BCTYPE_PERIODIC = 2
     integer, parameter :: BCTYPE_CF = 3
+    integer, parameter :: BCTYPE_EXTRAP0 = 4
+    integer, parameter :: BCTYPE_EXTRAP1 = 5
+    integer, parameter :: BCTYPE_EXTRAP2 = 6
 
 
     ! --------------------------------------------------------------------------
@@ -709,6 +712,55 @@ contains
 
 
     ! --------------------------------------------------------------------------
+    ! Computes sum = Sum_{i,j} bd*J*dx*dy
+    ! If opt_jscale is true (default), dx*dy will be scaled by J.
+    ! NOTE: bd must be cell-centered.
+    ! WARNING: This function does not check that bd contains bx.
+    ! --------------------------------------------------------------------------
+    function integrate2D (bd, bx, geo, opt_jscale) result (sum)
+        type(box_data), intent(in) :: bd
+        type(box), intent(in)      :: bx
+        type(geo_data), intent(in) :: geo
+        logical, optional          :: opt_jscale
+        logical                    :: jscale
+        real(dp)                   :: sum
+
+        integer :: i, j
+        real(dp) :: volScale
+
+        if ((bd%offi .ne. BD_CELL) .or. (bd%offj .ne. BD_CELL)) then
+            print*, 'pnorm: Only works with cell-centered data for now.'
+            stop
+        endif
+
+        ! Are we scaling by J?
+        jscale = .true.
+        if (present(opt_jscale)) then
+            jscale = opt_jscale
+        endif
+
+        volScale = geo%dx * geo%dy
+        sum = zero
+
+        if (jscale) then
+            ! Integrate with J scaling.
+            do j = bx%jlo, bx%jhi
+                do i = bx%ilo, bx%ihi
+                    sum = sum + volScale * geo%J%data(i,j) * bd%data(i,j)
+                enddo
+            enddo
+        else
+            ! Integrate without J scaling.
+            do j = bx%jlo, bx%jhi
+                do i = bx%ilo, bx%ihi
+                    sum = sum + volScale * bd%data(i,j)
+                enddo
+            enddo
+        endif
+    end function integrate2D
+
+
+    ! --------------------------------------------------------------------------
     ! Computes pnorm = |bd|_p = [Sum_{i,j} bd^p]^(1/p) / (nx*ny)
     ! WARNING: This function does not check that bd contains bx.
     ! --------------------------------------------------------------------------
@@ -957,6 +1009,15 @@ contains
                 case (BCTYPE_CF)
                     phi%data(ilo-1, jlo:jhi) = c1x*phi%data(ilo, jlo:jhi) + c2x*phi%data(ilo+1, jlo:jhi)
 
+                case (BCTYPE_EXTRAP0)
+                    phi%data(ilo-1,:) = phi%data(ilo,:)
+
+                case (BCTYPE_EXTRAP1)
+                    phi%data(ilo-1,:) = two*phi%data(ilo,:) - phi%data(ilo+1,:)
+
+                case (BCTYPE_EXTRAP2)
+                    phi%data(ilo-1,:) = three*(phi%data(ilo,:) - phi%data(ilo+1,:)) + phi%data(ilo+2,:)
+
                 case default
                     print*, 'fill_ghosts: invalid BCTYPE_'
                     stop
@@ -1073,6 +1134,15 @@ contains
 
                 case (BCTYPE_CF)
                     phi%data(ihi+1, jlo:jhi) = c1x*phi%data(ihi, jlo:jhi) + c2x*phi%data(ihi-1, jlo:jhi)
+
+                case (BCTYPE_EXTRAP0)
+                    phi%data(ihi+1,:) = phi%data(ihi,:)
+
+                case (BCTYPE_EXTRAP1)
+                    phi%data(ihi+1,:) = two*phi%data(ihi,:) - phi%data(ihi-1,:)
+
+                case (BCTYPE_EXTRAP2)
+                    phi%data(ihi+1,:) = three*(phi%data(ihi,:) - phi%data(ihi-1,:)) + phi%data(ihi-2,:)
 
                 case default
                     print*, 'fill_ghosts: invalid BCTYPE_'
@@ -1193,6 +1263,15 @@ contains
                 case (BCTYPE_CF)
                     phi%data(ilo:ihi, jlo-1) = c1x*phi%data(ilo:ihi, jlo) + c2x*phi%data(ilo:ihi, jlo+1)
 
+                case (BCTYPE_EXTRAP0)
+                    phi%data(:,jlo-1) = phi%data(:,jlo)
+
+                case (BCTYPE_EXTRAP1)
+                    phi%data(:,jlo-1) = two*phi%data(:,jlo) - phi%data(:,jlo+1)
+
+                case (BCTYPE_EXTRAP2)
+                    phi%data(:,jlo-1) = three*(phi%data(:,jlo) - phi%data(:,jlo+1)) + phi%data(:,jlo+2)
+
                 case default
                     print*, 'fill_ghosts: invalid BCTYPE_'
                     stop
@@ -1309,6 +1388,15 @@ contains
 
                 case (BCTYPE_CF)
                     phi%data(ilo:ihi, jhi+1) = c1x*phi%data(ilo:ihi, jhi) + c2x*phi%data(ilo:ihi, jhi-1)
+
+                case (BCTYPE_EXTRAP0)
+                    phi%data(:,jhi+1) = phi%data(:,jhi)
+
+                case (BCTYPE_EXTRAP1)
+                    phi%data(:,jhi+1) = two*phi%data(:,jhi) - phi%data(:,jhi-1)
+
+                case (BCTYPE_EXTRAP2)
+                    phi%data(:,jhi+1) = three*(phi%data(:,jhi) - phi%data(:,jhi-1)) + phi%data(:,jhi-2)
 
                 case default
                     print*, 'fill_ghosts: invalid BCTYPE_'
@@ -1784,6 +1872,7 @@ contains
         integer                         :: iter
         integer                         :: ilo, ihi, i
         integer                         :: jlo, jhi, j
+        real(dp)                        :: sum
 
         ilo = rhs%valid%ilo
         ihi = rhs%valid%ihi
@@ -1817,6 +1906,11 @@ contains
 
         ! Iterate
         do iter = 1, maxIters
+            if (verbosity .ge. 5) then
+                sum = integrate2D (r, r%valid, geo, .false.)
+                print*, ' sum div = ', sum
+            endif
+
             ! Update phi
             do j = jlo, jhi
                 do i = ilo, ihi

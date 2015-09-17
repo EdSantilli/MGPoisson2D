@@ -129,19 +129,19 @@ program test
     ! enddo
     ! print*
 
-    ! Test 6: Divergence
-    errnorm = bogus_val
-    do r = 1, maxr
-        errnorm(r) = test_divergence (geo(r))
-    enddo
-    call compute_conv_rate (rate, errnorm)
-    print*, 'Test 6: Divergence'
-    print*, 'Error norm                rate'
-    print*, errnorm(1)
-    do r = 2, maxr
-        print*, errnorm(r), rate(r-1)
-    enddo
-    print*
+    ! ! Test 6: Divergence
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_divergence (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 6: Divergence'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
+    ! print*
 
     ! ! Test 7: Laplacian
     ! errnorm = bogus_val
@@ -176,6 +176,23 @@ program test
     ! print*, 'Error norm = ', errnorm(maxr)
     ! print*
 
+    ! Test 9: Projection
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_divergence (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 6: Divergence'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
+    ! print*
+    print*, 'Test 9: Projection test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    errnorm(maxr) = test_projection (geo(maxr))
+    ! print*, 'Error norm = ', errnorm(maxr)
+    print*
 
 
     ! Prints x and y coordinates to the terminal.
@@ -1971,5 +1988,164 @@ contains
         call undefine_bdry_data (bc)
 
     end function test_solver
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    function test_projection (geo) result (res)
+        use MGPoisson2D
+        implicit none
+
+        real(dp)                   :: res
+        type(geo_data), intent(in) :: geo
+
+        type(box)                  :: valid
+        integer                    :: ilo, ihi, jlo, jhi, i, j
+        real(dp)                   :: dx, dy
+        real(dp)                   :: kx, ky
+
+        real(dp), parameter        :: tol = 1.0E-12_dp
+        integer, parameter         :: maxiters = 10
+        logical, parameter         :: homog = .true.
+        integer, parameter         :: verbosity = 5
+
+        real(dp), dimension(:), pointer :: xp, yp
+        type(box_data),target      :: bdx, bdx_x, bdx_y
+        type(box_data),target      :: bdy, bdy_x, bdy_y
+
+        type(box_data)             :: xflux, yflux, xwk, ywk, xgp, ygp
+        type(box_data)             :: phi, div, invdiags
+        type(bdry_data)            :: bc, extrap_bc
+        real(dp)                   :: divnorm0, divnorm1, sum
+
+        valid = geo%J%valid
+
+        ilo = valid%ilo
+        ihi = valid%ihi
+        jlo = valid%jlo
+        jhi = valid%jhi
+
+        dx = valid%dx
+        dy = valid%dy
+
+        call define_box_data (phi  , valid, 1, 1, BD_CELL, BD_CELL)
+        call define_box_data (div  , valid, 0, 0, BD_CELL, BD_CELL)
+        call define_box_data (xflux, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (yflux, valid, 0, 0, BD_CELL, BD_NODE)
+        call define_box_data (xwk  , xflux)
+        call define_box_data (ywk  , yflux)
+        call define_box_data (xgp  , xflux)
+        call define_box_data (ygp  , yflux)
+        call define_box_data (bdx  , phi)
+        call define_box_data (bdx_x, xflux)
+        call define_box_data (bdx_y, yflux)
+        call define_box_data (bdy  , phi)
+        call define_box_data (bdy_x, xflux)
+        call define_box_data (bdy_y, yflux)
+        call define_box_data (invdiags, div)
+
+        ! Compute cell-centered Cartesian locations
+        call fill_x (bdx)
+        call fill_x (bdx_x)
+        call fill_x (bdx_y)
+
+        call fill_y (bdy)
+        call fill_y (bdy_x)
+        call fill_y (bdy_y)
+
+        ! Set the wavenumbers
+        ! kx = two * pi / L
+        ! ky = two * pi / L
+
+        kx = (valid%nx/2-2) * pi / L
+        ky = (valid%ny/2-2) * pi / L
+
+        ! Compute xflux = Grad^x[cos(kx)*cos(my)]
+        call fill_dxdxi (xwk, 2, 2)
+        xflux%data =  xwk%data * (-kx * sin(kx*bdx_x%data) * cos(ky*bdy_x%data))
+        call fill_dxdxi (xwk, 1, 2)
+        xflux%data = -xwk%data * (-ky * cos(kx*bdx_x%data) * sin(ky*bdy_x%data)) + xflux%data
+
+        ! Compute yflux = Grad^y[cos(kx)*cos(my)]
+        call fill_dxdxi (ywk, 2, 1)
+        yflux%data = -ywk%data * (-kx * sin(kx*bdx_y%data) * cos(ky*bdy_y%data))
+        call fill_dxdxi (ywk, 1, 1)
+        yflux%data =  ywk%data * (-ky * cos(kx*bdx_y%data) * sin(ky*bdy_y%data)) + yflux%data
+
+        ! Compute initial divergence
+        call compute_div (div, xflux, yflux)
+        divnorm0 = pnorm (div, div%valid, norm_type)
+
+        ! Does div integrate to zero?
+        sum = integrate2D (div, div%valid, geo, .false.)
+        print*, ' sum div = ', sum
+
+        ! Set BCs
+        call define_bdry_data (extrap_bc, valid, &
+                               BCTYPE_EXTRAP2, &   ! xlo
+                               BCTYPE_EXTRAP2, &   ! xhi
+                               BCTYPE_EXTRAP2, &   ! ylo
+                               BCTYPE_EXTRAP2, &   ! yhi
+                               BCMODE_UNIFORM, &    ! xlo
+                               BCMODE_UNIFORM, &    ! xhi
+                               BCMODE_UNIFORM, &    ! ylo
+                               BCMODE_UNIFORM)      ! yhi
+        call define_bdry_data (bc, valid, &
+                               BCTYPE_NEUM, &   ! xlo
+                               BCTYPE_NEUM, &   ! xhi
+                               BCTYPE_NEUM, &   ! ylo
+                               BCTYPE_NEUM, &   ! yhi
+                               BCMODE_NONUNIFORM, &    ! xlo
+                               BCMODE_NONUNIFORM, &    ! xhi
+                               BCMODE_NONUNIFORM, &    ! ylo
+                               BCMODE_NONUNIFORM)      ! yhi
+        bc%data_xlo = xflux%data(ilo,:)
+        bc%data_xhi = xflux%data(ihi+1,:)
+        bc%data_ylo = yflux%data(:,jlo)
+        bc%data_yhi = yflux%data(:,jhi+1)
+
+        ! Solve L[phi] = Div[flux].
+        call compute_inverse_diags (invdiags, geo)
+        ! div%data = div%data * geo%J%data(ilo:ihi,jlo:jhi)
+        call relax_jacobi (phi, div, geo, bc, homog, invdiags, &
+                           one,      & ! omega
+                           tol,      &
+                           maxiters, &
+                           .true.,   & ! zerophi
+                           verbosity)
+
+        ! Remove Grad[phi] from fluxes
+        call compute_grad (xgp, ygp, phi, geo, bc, homog, xwk, ywk)
+        ! call compute_grad (xgp, ygp, phi, geo, extrap_bc, homog, xwk, ywk)
+        xflux%data = xflux%data - xgp%data
+        yflux%data = yflux%data - ygp%data
+
+        ! Compute final divergence
+        call compute_div (div, xflux, yflux)
+        divnorm1 = pnorm (div, div%valid, norm_type)
+        res = divnorm1 / divnorm0
+        print*, ' |div| = ', divnorm0, ' --> ', divnorm1
+        print*, ' reduction = ', res
+
+        ! Free memory
+        call undefine_box_data (invdiags)
+        call undefine_box_data (phi)
+        call undefine_box_data (div)
+        call undefine_box_data (xflux)
+        call undefine_box_data (yflux)
+        call undefine_box_data (xwk)
+        call undefine_box_data (ywk)
+        call undefine_box_data (xgp)
+        call undefine_box_data (ygp)
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdx_x)
+        call undefine_box_data (bdx_y)
+        call undefine_box_data (bdy)
+        call undefine_box_data (bdy_x)
+        call undefine_box_data (bdy_y)
+        call undefine_bdry_data (bc)
+        call undefine_bdry_data (extrap_bc)
+
+    end function test_projection
 
 end program test
