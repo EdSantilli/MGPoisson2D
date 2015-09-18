@@ -157,47 +157,47 @@ program test
     ! enddo
     ! print*
 
-    ! Test 8: Restriction
-    errnorm = bogus_val
-    do r = 1, maxr
-        errnorm(r) = test_restrict (geo(r))
-    enddo
-    call compute_conv_rate (rate, errnorm)
-    print*, 'Test 8: Restriction'
-    print*, 'Error norm                rate'
-    print*, errnorm(1)
-    do r = 2, maxr
-        print*, errnorm(r), rate(r-1)
-    enddo
-    print*
-
-    ! Test 9: Prolongation
-    errnorm = bogus_val
-    do r = 1, maxr
-        errnorm(r) = test_prolong (geo(r))
-    enddo
-    call compute_conv_rate (rate, errnorm)
-    print*, 'Test 9: Prolongation'
-    print*, 'Error norm                rate'
-    print*, errnorm(1)
-    do r = 2, maxr
-        print*, errnorm(r), rate(r-1)
-    enddo
-    print*
-
-    ! Test 10: Solver test
+    ! ! Test 8: Restriction
     ! errnorm = bogus_val
     ! do r = 1, maxr
-    !     errnorm(r) = test_solver (geo(r))
+    !     errnorm(r) = test_restrict (geo(r))
     ! enddo
     ! call compute_conv_rate (rate, errnorm)
-    ! print*, 'Test 10: Solver test'
+    ! print*, 'Test 8: Restriction'
     ! print*, 'Error norm                rate'
     ! print*, errnorm(1)
     ! do r = 2, maxr
     !     print*, errnorm(r), rate(r-1)
     ! enddo
     ! print*
+
+    ! ! Test 9: Prolongation
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_prolong (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 9: Prolongation'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
+    ! print*
+
+    ! Test 10: Solver test
+    errnorm = bogus_val
+    do r = 1, maxr
+        errnorm(r) = test_solver (geo(r))
+    enddo
+    call compute_conv_rate (rate, errnorm)
+    print*, 'Test 10: Solver test'
+    print*, 'Error norm                rate'
+    print*, errnorm(1)
+    do r = 2, maxr
+        print*, errnorm(r), rate(r-1)
+    enddo
+    print*
 
     ! print*, 'Test 10: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
     ! errnorm(maxr) = test_solver (geo(maxr))
@@ -218,10 +218,10 @@ program test
     ! enddo
     ! print*
 
-    print*, 'Test 11: Projection test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
-    errnorm(maxr) = test_projection (geo(maxr))
-    ! print*, 'Error norm = ', errnorm(maxr)
-    print*
+    ! print*, 'Test 11: Projection test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    ! errnorm(maxr) = test_projection (geo(maxr))
+    ! ! print*, 'Error norm = ', errnorm(maxr)
+    ! print*
 
 
     ! Prints x and y coordinates to the terminal.
@@ -2071,68 +2071,70 @@ contains
         call fill_y (bdy_x)
         call fill_y (bdy_y)
 
-        ! ! Set BCs
-        ! call define_bdry_data (bc, valid, &
-        !                        BCTYPE_DIRI, &   ! xlo
-        !                        BCTYPE_DIRI, &   ! xhi
-        !                        BCTYPE_DIRI, &   ! ylo
-        !                        BCTYPE_DIRI, &   ! yhi
-        !                        BCMODE_NONUNIFORM, &    ! xlo
-        !                        BCMODE_NONUNIFORM, &    ! xhi
-        !                        BCMODE_NONUNIFORM, &    ! ylo
-        !                        BCMODE_NONUNIFORM)      ! yhi
-
-        ! kx = (valid%nx/2-2) * pi / L
-        ! ky = (valid%ny/2-2) * pi / L
-
-        ! xp => bdx_x%data(ilo,:)
-        ! yp => bdy_x%data(ilo,:)
-        ! bc%data_xlo = cos(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_x%data(ihi+1,:)
-        ! yp => bdy_x%data(ihi+1,:)
-        ! bc%data_xhi = cos(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_y%data(:,jlo)
-        ! yp => bdy_y%data(:,jlo)
-        ! bc%data_ylo = cos(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_y%data(:,jhi+1)
-        ! yp => bdy_y%data(:,jhi+1)
-        ! bc%data_yhi = cos(kx*xp) * cos(ky*yp)
-
         ! Set BCs
         call define_bdry_data (bc, valid, &
-                               BCTYPE_NEUM, &   ! xlo
-                               BCTYPE_NEUM, &   ! xhi
-                               BCTYPE_NEUM, &   ! ylo
-                               BCTYPE_NEUM, &   ! yhi
+                               BCTYPE_DIRI, &   ! xlo
+                               BCTYPE_DIRI, &   ! xhi
+                               BCTYPE_DIRI, &   ! ylo
+                               BCTYPE_DIRI, &   ! yhi
                                BCMODE_NONUNIFORM, &    ! xlo
                                BCMODE_NONUNIFORM, &    ! xhi
                                BCMODE_NONUNIFORM, &    ! ylo
                                BCMODE_NONUNIFORM)      ! yhi
 
-        ! kx = (valid%nx/2-2) * pi / L
-        ! ky = (valid%ny/2-2) * pi / L
-
-        kx = two * pi / L
-        ky = two * pi / L
+        ! kx = eight * pi / L
+        ! ky = eight * pi / L
+        kx = (valid%nx/2-3) * pi / L
+        ky = (valid%ny/2-3) * pi / L
 
         xp => bdx_x%data(ilo,:)
         yp => bdy_x%data(ilo,:)
-        bc%data_xlo = -kx * sin(kx*xp) * cos(ky*yp)
+        bc%data_xlo = cos(kx*xp) * cos(ky*yp)
 
         xp => bdx_x%data(ihi+1,:)
         yp => bdy_x%data(ihi+1,:)
-        bc%data_xhi = -kx * sin(kx*xp) * cos(ky*yp)
+        bc%data_xhi = cos(kx*xp) * cos(ky*yp)
 
         xp => bdx_y%data(:,jlo)
         yp => bdy_y%data(:,jlo)
-        bc%data_ylo = -ky * cos(kx*xp) * sin(ky*yp)
+        bc%data_ylo = cos(kx*xp) * cos(ky*yp)
 
         xp => bdx_y%data(:,jhi+1)
         yp => bdy_y%data(:,jhi+1)
-        bc%data_yhi = -ky * cos(kx*xp) * sin(ky*yp)
+        bc%data_yhi = cos(kx*xp) * cos(ky*yp)
+
+        ! ! Set BCs
+        ! call define_bdry_data (bc, valid, &
+        !                        BCTYPE_NEUM, &   ! xlo
+        !                        BCTYPE_NEUM, &   ! xhi
+        !                        BCTYPE_NEUM, &   ! ylo
+        !                        BCTYPE_NEUM, &   ! yhi
+        !                        BCMODE_NONUNIFORM, &    ! xlo
+        !                        BCMODE_NONUNIFORM, &    ! xhi
+        !                        BCMODE_NONUNIFORM, &    ! ylo
+        !                        BCMODE_NONUNIFORM)      ! yhi
+
+        ! ! kx = (valid%nx/2-2) * pi / L
+        ! ! ky = (valid%ny/2-2) * pi / L
+
+        ! kx = two * pi / L
+        ! ky = two * pi / L
+
+        ! xp => bdx_x%data(ilo,:)
+        ! yp => bdy_x%data(ilo,:)
+        ! bc%data_xlo = -kx * sin(kx*xp) * cos(ky*yp)
+
+        ! xp => bdx_x%data(ihi+1,:)
+        ! yp => bdy_x%data(ihi+1,:)
+        ! bc%data_xhi = -kx * sin(kx*xp) * cos(ky*yp)
+
+        ! xp => bdx_y%data(:,jlo)
+        ! yp => bdy_y%data(:,jlo)
+        ! bc%data_ylo = -ky * cos(kx*xp) * sin(ky*yp)
+
+        ! xp => bdx_y%data(:,jhi+1)
+        ! yp => bdy_y%data(:,jhi+1)
+        ! bc%data_yhi = -ky * cos(kx*xp) * sin(ky*yp)
 
         nullify(xp)
         nullify(yp)
@@ -2145,6 +2147,7 @@ contains
         call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
         ! call compute_laplacian (lphi, soln, geo, bc, homog, .true.)
         lphi%data = -(kx**2 + ky**2) * soln%data(ilo:ihi,jlo:jhi)
+        lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
 
         ! Set up invdiags
         call define_box_data (invdiags, lphi)
@@ -2154,19 +2157,19 @@ contains
         call define_box_data (phi, soln)
         call cpu_time (t1)
 
-        call relax_jacobi (phi, lphi, geo, bc, homog, invdiags, &
-                           one,     & ! omega
-                           1.0d-6,  & ! tol
-                           20,      & ! maxiters
-                           .true.,  & ! zerophi
-                           verbosity)
-        ! call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
-        !                one,     & ! omega
-        !                1.0d-6,  & ! tol
-        !                25,      & ! maxiters
-        !                .true.,  & ! redblack
-        !                .true.,  & ! zerophi
-        !                verbosity)
+        ! call relax_jacobi (phi, lphi, geo, bc, homog, invdiags, &
+        !                    one,     & ! omega
+        !                    1.0d-6,  & ! tol
+        !                    20,      & ! maxiters
+        !                    .true.,  & ! zerophi
+        !                    verbosity)
+        call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
+                       one,     & ! omega
+                       1.0d-6,  & ! tol
+                       25,      & ! maxiters
+                       .true.,  & ! redblack
+                       .true.,  & ! zerophi
+                       verbosity)
         ! call solve_bicgstab (phi, lphi, geo, bc, homog, &
         !                      1.0d-6,  & ! tol
         !                      80,      & ! max iters
