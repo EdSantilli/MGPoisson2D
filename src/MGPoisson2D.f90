@@ -218,17 +218,18 @@ contains
         type(box), intent(inout) :: bx
         integer, intent(in)      :: refx, refy
 
+        ! Coarsen in x dir
         bx%ilo = bx%ilo / refx
         bx%ihi = bx%ihi / refx
+        bx%nx = bx%ihi - bx%ilo + 1
+        bx%dx = bx%dx * refx
 
+        ! Coarsen in y dir
         bx%jlo = bx%jlo / refy
         bx%jhi = bx%jhi / refy
-
-        bx%nx = bx%ihi - bx%ilo + 1
         bx%ny = bx%jhi - bx%jlo + 1
-
-        bx%dx = bx%dx * refx
         bx%dy = bx%dy * refy
+
     end subroutine coarsen_box
 
 
@@ -790,20 +791,40 @@ contains
         integer :: i, j
         real(dp) :: volScale
 
-        ! if ((bd%offi .ne. BD_CELL) .or. (bd%offj .ne. BD_CELL)) then
-        !     print*, 'pnorm: Only works with cell-centered data for now.'
-        !     stop
-        ! endif
-
         volScale = bd%bx%dx * bd%bx%dy
-
         pn = zero
-        do j = bx%jlo, bx%jhi
-            do i = bx%ilo, bx%ihi
-                pn = pn + volScale * bd%data(i,j)**p
+
+        if (p .eq. 0) then
+            do j = bx%jlo, bx%jhi
+                do i = bx%ilo, bx%ihi
+                    pn = max(pn, abs(bd%data(i,j)))
+                enddo
             enddo
-        enddo
-        pn = pn**(one/p)
+
+        else if (p .eq. 1) then
+            do j = bx%jlo, bx%jhi
+                do i = bx%ilo, bx%ihi
+                    pn = pn + volScale * abs(bd%data(i,j))
+                enddo
+            enddo
+
+        else if (p .eq. 2) then
+            do j = bx%jlo, bx%jhi
+                do i = bx%ilo, bx%ihi
+                    pn = pn + volScale * bd%data(i,j)**2
+                enddo
+            enddo
+            pn = sqrt(pn)
+
+        else
+            do j = bx%jlo, bx%jhi
+                do i = bx%ilo, bx%ihi
+                    pn = pn + volScale * bd%data(i,j)**p
+                enddo
+            enddo
+            pn = pn**(one/p)
+        endif
+
     end function pnorm
 
 
@@ -2436,9 +2457,11 @@ contains
         type(box_data), intent(in)    :: fine
         type(box_data), intent(inout) :: crse
 
+        logical, parameter            :: full_weighting = .false.
         integer                       :: refx, refy
         integer                       :: fi, fj, ci, cj
         real(dp)                      :: scale
+
 
         if ((fine%offi .eq. BD_CELL) .and. (fine%offj .eq. BD_CELL)) then
             ! Cell-centered in all directions.
@@ -2460,31 +2483,84 @@ contains
             refx = (fine%valid%nx-1) / (crse%valid%nx-1)
             refy = fine%valid%ny / crse%valid%ny
             scale = one / refy
-
             crse%data = zero
-            do fj = fine%valid%jlo, fine%valid%jhi
-                cj = fj/refy
-                do ci = crse%valid%ilo, crse%valid%ihi
+
+            if (full_weighting) then
+                do fj = fine%valid%jlo, fine%valid%jhi
+                    cj = fj/refy
+                    ci = crse%valid%ilo
                     fi = ci*refx
                     crse%data(ci,cj) = crse%data(ci,cj) + scale*fine%data(fi,fj)
                 enddo
-            enddo
+
+                do fj = fine%valid%jlo, fine%valid%jhi
+                    cj = fj/refy
+                    ci = crse%valid%ihi
+                    fi = ci*refx
+                    crse%data(ci,cj) = crse%data(ci,cj) + scale*fine%data(fi,fj)
+                enddo
+
+                scale = fourth / refy
+                do fj = fine%valid%jlo, fine%valid%jhi
+                    cj = fj/refy
+                    do ci = crse%valid%ilo+1, crse%valid%ihi-1
+                        fi = ci*refx
+                        crse%data(ci,cj) = crse%data(ci,cj) &
+                                         + scale*(fine%data(fi-1,fj) + two*fine%data(fi,fj) + fine%data(fi+1,fj))
+                    enddo
+                enddo
+
+            else
+                do fj = fine%valid%jlo, fine%valid%jhi
+                    cj = fj/refy
+                    do ci = crse%valid%ilo, crse%valid%ihi
+                        fi = ci*refx
+                        crse%data(ci,cj) = crse%data(ci,cj) + scale*fine%data(fi,fj)
+                    enddo
+                enddo
+            endif
 
         else if ((fine%offi .eq. BD_CELL) .and. (fine%offj .eq. BD_NODE)) then
             ! Nodal in y
             refx = fine%valid%nx / crse%valid%nx
             refy = (fine%valid%ny-1) / (crse%valid%ny-1)
             scale = one / refx
-
             crse%data = zero
-            do cj = crse%valid%jlo, crse%valid%jhi
+
+            if (full_weighting) then
+                cj = crse%valid%jlo
                 fj = cj*refy
                 do fi = fine%valid%ilo, fine%valid%ihi
                     ci = fi/refx
                     crse%data(ci,cj) = crse%data(ci,cj) + scale*fine%data(fi,fj)
                 enddo
-            enddo
 
+                cj = crse%valid%jhi
+                fj = cj*refy
+                do fi = fine%valid%ilo, fine%valid%ihi
+                    ci = fi/refx
+                    crse%data(ci,cj) = crse%data(ci,cj) + scale*fine%data(fi,fj)
+                enddo
+
+                scale = fourth / refx
+                do cj = crse%valid%jlo+1, crse%valid%jhi-1
+                    fj = cj*refy
+                    do fi = fine%valid%ilo, fine%valid%ihi
+                        ci = fi/refx
+                        crse%data(ci,cj) = crse%data(ci,cj) &
+                                         + scale*(fine%data(fi,fj-1) + two*fine%data(fi,fj) + fine%data(fi,fj+1))
+                    enddo
+                enddo
+
+            else
+                do cj = crse%valid%jlo, crse%valid%jhi
+                    fj = cj*refy
+                    do fi = fine%valid%ilo, fine%valid%ihi
+                        ci = fi/refx
+                        crse%data(ci,cj) = crse%data(ci,cj) + scale*fine%data(fi,fj)
+                    enddo
+                enddo
+            endif
         else
             ! Nodal in all directions. Just copy nodes that don't vanish.
             refx = (fine%valid%nx-1) / (crse%valid%nx-1)
@@ -2564,7 +2640,6 @@ contains
         type(box_data), dimension(:), allocatable  :: e, r, invdiags, work1
         real(dp)                                   :: mgdx, mgdy
         integer                                    :: maxdepth
-
 
         ! Estimate size of scheduling vectors
         valid = rhs%valid
@@ -2649,6 +2724,7 @@ contains
         endif
 
         do d = 0, maxdepth
+            print*, '*** valid = ', valid
             call define_box_data (e(d), valid, 1, 1, BD_CELL, BD_CELL)
             call define_box_data (r(d), valid, 0, 0, BD_CELL, BD_CELL)
             call define_box_data (work1(d), valid, 0, 0, BD_CELL, BD_CELL)
@@ -2676,8 +2752,8 @@ contains
                 call restrict (mggeo(d-1)%Jgup_xy, mggeo(d)%Jgup_xy)
                 call restrict (mggeo(d-1)%Jgup_yx, mggeo(d)%Jgup_yx)
                 call restrict (mggeo(d-1)%Jgup_yy, mggeo(d)%Jgup_yy)
-                ! call restrict (invdiags(d-1), invdiags(d))
-                call compute_inverse_diags(invdiags(d), mggeo(d))
+                call restrict (invdiags(d-1), invdiags(d))
+                ! call compute_inverse_diags(invdiags(d), mggeo(d))
             endif
 
             ! All BCs will be homogeneous after first residual calculation.
@@ -2822,7 +2898,7 @@ contains
 
         character*2                                          :: indent = '  '
         real(dp)                                             :: norm, sum
-        integer                                              :: curcycle, numcycles_notop
+        integer                                              :: curcycle
         logical, parameter                                   :: homog = .true.
 
         ! Relaxation params
@@ -2835,18 +2911,18 @@ contains
         real(dp), parameter                                  :: bottom_tol = 1.0E-6_dp
         integer, parameter                                   :: bottom_maxiters = 80
         integer, parameter                                   :: bottom_maxrestarts = 5
-        integer, parameter                                   :: bottom_verbosity = 0
+        integer, parameter                                   :: bottom_verbosity = 10
 
         if (verbosity .ge. 7) then
             print*, repeat(indent,depth), 'MG depth = ', depth
         endif
 
-        ! Compute the rhs integral
-        if (verbosity .ge. 8) then
-            norm = inner_prod (r(depth), r(depth))
-            sum = integrate2d (r(depth), r(depth)%valid, geo(depth), .false.)
-            print*, repeat(indent,depth), 'sq norm rhs = ', norm, ', sum rhs = ', sum
-        endif
+        ! ! Compute the rhs integral
+        ! if (verbosity .ge. 8) then
+        !     norm = inner_prod (r(depth), r(depth))
+        !     sum = integrate2d (r(depth), r(depth)%valid, geo(depth), .false.)
+        !     print*, repeat(indent,depth), 'sq norm rhs = ', norm, ', sum rhs = ', sum
+        ! endif
 
         if (depth .eq. maxdepth) then
             ! Use bottom solver...
@@ -2863,6 +2939,9 @@ contains
             if (verbosity .ge. 7) then
                 print*, repeat(indent,depth), 'Bottom solver'
             endif
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            ! Only dropping 3 orders. prolongation of soln is hurting, not helping.
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             call solve_bicgstab (e(depth), r(depth), geo(depth), bc(depth), homog, &
                                  bottom_tol, bottom_maxiters, bottom_maxrestarts, &
                                  .false., & ! zero phi?
@@ -2870,15 +2949,6 @@ contains
 
         else
             ! V-Cycle...
-
-            ! ! We want to prevent multiple cycles at depth = 0.
-            ! ! For example, if cycles = 2, we want a W-cycle, not
-            ! ! a WW-cycle.
-            ! if (depth .gt. 0) then
-            !     numcycles_notop = numcycles
-            ! else
-            !     numcycles_notop = 1
-            ! endif
 
             ! Relax
             if (verbosity .ge. 7) then
@@ -2898,9 +2968,9 @@ contains
                                    geo(depth), bc(depth), homog)
             call restrict (work1(depth), r(depth+1))
 
-            print*, repeat(indent,depth), &
-                    'res: ', inner_prod (work1(depth), work1(depth)), &
-                    ' to ', inner_prod (r(depth+1), r(depth+1))
+            ! print*, repeat(indent,depth), &
+            !         'res: ', inner_prod (work1(depth), work1(depth)), &
+            !         ' to ', inner_prod (r(depth+1), r(depth+1))
 
             ! Coarse level solve
             e(depth+1)%data = zero

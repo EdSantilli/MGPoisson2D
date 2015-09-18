@@ -157,13 +157,41 @@ program test
     ! enddo
     ! print*
 
-    ! Test 8: Solver test
+    ! Test 8: Restriction
+    errnorm = bogus_val
+    do r = 1, maxr
+        errnorm(r) = test_restrict (geo(r))
+    enddo
+    call compute_conv_rate (rate, errnorm)
+    print*, 'Test 8: Restriction'
+    print*, 'Error norm                rate'
+    print*, errnorm(1)
+    do r = 2, maxr
+        print*, errnorm(r), rate(r-1)
+    enddo
+    print*
+
+    ! Test 9: Prolongation
+    errnorm = bogus_val
+    do r = 1, maxr
+        errnorm(r) = test_prolong (geo(r))
+    enddo
+    call compute_conv_rate (rate, errnorm)
+    print*, 'Test 9: Prolongation'
+    print*, 'Error norm                rate'
+    print*, errnorm(1)
+    do r = 2, maxr
+        print*, errnorm(r), rate(r-1)
+    enddo
+    print*
+
+    ! Test 10: Solver test
     ! errnorm = bogus_val
     ! do r = 1, maxr
     !     errnorm(r) = test_solver (geo(r))
     ! enddo
     ! call compute_conv_rate (rate, errnorm)
-    ! print*, 'Test 8: Solver test'
+    ! print*, 'Test 10: Solver test'
     ! print*, 'Error norm                rate'
     ! print*, errnorm(1)
     ! do r = 2, maxr
@@ -171,25 +199,26 @@ program test
     ! enddo
     ! print*
 
-    ! print*, 'Test 5: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    ! print*, 'Test 10: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
     ! errnorm(maxr) = test_solver (geo(maxr))
     ! print*, 'Error norm = ', errnorm(maxr)
     ! print*
 
-    ! Test 9: Projection
+    ! Test 11: Projection
     ! errnorm = bogus_val
     ! do r = 1, maxr
     !     errnorm(r) = test_divergence (geo(r))
     ! enddo
     ! call compute_conv_rate (rate, errnorm)
-    ! print*, 'Test 6: Divergence'
+    ! print*, 'Test 11: Projection'
     ! print*, 'Error norm                rate'
     ! print*, errnorm(1)
     ! do r = 2, maxr
     !     print*, errnorm(r), rate(r-1)
     ! enddo
     ! print*
-    print*, 'Test 9: Projection test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+
+    print*, 'Test 11: Projection test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
     errnorm(maxr) = test_projection (geo(maxr))
     ! print*, 'Error norm = ', errnorm(maxr)
     print*
@@ -1443,7 +1472,7 @@ contains
         call define_box_data (bdy_x, xflux)
         call define_box_data (bdy_y, yflux)
 
-        ! Compute cell-centered Cartesian locations
+        ! Compute Cartesian locations
         call fill_x (bdx)
         call fill_x (bdx_x)
         call fill_x (bdx_y)
@@ -1589,7 +1618,7 @@ contains
         call define_box_data (bdy_x, xflux)
         call define_box_data (bdy_y, yflux)
 
-        ! Compute cell-centered Cartesian locations
+        ! Compute Cartesian locations
         call fill_x (bdx)
         call fill_x (bdx_x)
         call fill_x (bdx_y)
@@ -1692,7 +1721,7 @@ contains
         dx = valid%dx
         dy = valid%dy
 
-        ! Compute cell-centered Cartesian locations
+        ! Compute Cartesian locations
         call define_box_data (bdx  , valid, 1, 1, BD_CELL, BD_CELL)
         call define_box_data (bdx_x, valid, 0, 0, BD_NODE, BD_CELL)
         call define_box_data (bdx_y, valid, 0, 0, BD_CELL, BD_NODE)
@@ -1805,6 +1834,194 @@ contains
 
     ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
+    function test_restrict (geo) result (res)
+        use MGPoisson2D
+        implicit none
+
+        real(dp)                   :: res
+        type(geo_data), intent(in) :: geo
+
+        type(box)                  :: valid
+        integer, parameter         :: refx = 4
+        integer, parameter         :: refy = 4
+
+
+        real(dp), dimension(:), pointer :: xp, yp
+        type(box_data),target      :: bdx, bdx_x, bdx_y
+        type(box_data),target      :: bdy, bdy_x, bdy_y
+        type(box_data)             :: xflux, yflux, xwk, ywk
+        type(box_data)             :: xcrse, ycrse
+
+        ! Fine level fluxes...
+        valid = geo%J%valid
+
+        call define_box_data (xflux, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (yflux, valid, 0, 0, BD_CELL, BD_NODE)
+        call define_box_data (xwk  , xflux)
+        call define_box_data (ywk  , yflux)
+        call define_box_data (bdx  , valid, 0, 0, BD_CELL, BD_CELL)
+        call define_box_data (bdx_x, xflux)
+        call define_box_data (bdx_y, yflux)
+        call define_box_data (bdy  , bdx)
+        call define_box_data (bdy_x, xflux)
+        call define_box_data (bdy_y, yflux)
+
+        ! Compute Cartesian locations
+        call fill_x (bdx)
+        call fill_x (bdx_x)
+        call fill_x (bdx_y)
+
+        call fill_y (bdy)
+        call fill_y (bdy_x)
+        call fill_y (bdy_y)
+
+        ! Compute fluxes
+        xflux%data = bdx_x%data**3 * bdy_x%data**3
+        yflux%data = bdx_y%data**3 * bdy_y%data**3
+
+        ! Restrict to coarse holder
+        call coarsen_box (valid, refx, refy)
+        call define_box_data (xcrse, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (ycrse, valid, 0, 0, BD_CELL, BD_NODE)
+        call restrict (xflux, xcrse)
+        call restrict (yflux, ycrse)
+
+        ! Free memory
+        call undefine_box_data (xflux)
+        call undefine_box_data (yflux)
+        call undefine_box_data (xwk)
+        call undefine_box_data (ywk)
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdx_x)
+        call undefine_box_data (bdx_y)
+        call undefine_box_data (bdy)
+        call undefine_box_data (bdy_x)
+        call undefine_box_data (bdy_y)
+
+
+        ! Coarse level fluxes...
+        call define_box_data (xflux, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (yflux, valid, 0, 0, BD_CELL, BD_NODE)
+        call define_box_data (xwk  , xflux)
+        call define_box_data (ywk  , yflux)
+        call define_box_data (bdx  , valid, 0, 0, BD_CELL, BD_CELL)
+        call define_box_data (bdx_x, xflux)
+        call define_box_data (bdx_y, yflux)
+        call define_box_data (bdy  , bdx)
+        call define_box_data (bdy_x, xflux)
+        call define_box_data (bdy_y, yflux)
+
+        ! Compute Cartesian locations
+        call fill_x (bdx)
+        call fill_x (bdx_x)
+        call fill_x (bdx_y)
+
+        call fill_y (bdy)
+        call fill_y (bdy_x)
+        call fill_y (bdy_y)
+
+        ! Compute fluxes
+        xflux%data = bdx_x%data**3 * bdy_x%data**3
+        yflux%data = bdx_y%data**3 * bdy_y%data**3
+
+        ! Compute difference
+        xcrse%data = xcrse%data - xflux%data
+        ycrse%data = ycrse%data - yflux%data
+
+        ! Free memory
+        call undefine_box_data (xflux)
+        call undefine_box_data (yflux)
+        call undefine_box_data (xwk)
+        call undefine_box_data (ywk)
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdx_x)
+        call undefine_box_data (bdx_y)
+        call undefine_box_data (bdy)
+        call undefine_box_data (bdy_x)
+        call undefine_box_data (bdy_y)
+
+        ! Compute norm
+        ! res = pnorm (xcrse, xcrse%valid, norm_type)
+        res = pnorm (ycrse, ycrse%valid, norm_type)
+
+        ! Free memory
+        call undefine_box_data (xcrse)
+        call undefine_box_data (ycrse)
+
+    end function test_restrict
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    function test_prolong (geo) result (res)
+        use MGPoisson2D
+        implicit none
+
+        real(dp)                   :: res
+        type(geo_data), intent(in) :: geo
+
+        type(box)                  :: valid
+        integer, parameter         :: refx = 4
+        integer, parameter         :: refy = 1
+
+        type(box_data)             :: bdx, bdy
+        type(box_data)             :: crse, fine
+
+        ! Allocate coarse and fine fields
+        valid = geo%J%valid
+        call define_box_data (fine, valid, 0, 0, BD_CELL, BD_CELL)
+        call coarsen_box (valid, refx, refy)
+        call define_box_data (crse, valid, 0, 0, BD_CELL, BD_CELL)
+
+
+        ! Fine level field...
+
+        ! Compute Cartesian locations
+        call define_box_data (bdx, fine)
+        call define_box_data (bdy, fine)
+        call fill_x (bdx)
+        call fill_y (bdy)
+
+        ! Compute field
+        fine%data = bdx%data**3 * bdy%data**3
+
+        ! Free memory
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdy)
+
+
+        ! Coarse level field...
+
+        ! Compute Cartesian locations
+        call define_box_data (bdx, crse)
+        call define_box_data (bdy, crse)
+        call fill_x (bdx)
+        call fill_y (bdy)
+
+        ! Compute field
+        crse%data = bdx%data**3 * bdy%data**3
+
+        ! Free memory
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdy)
+
+
+        ! Remove prolongation
+        crse%data = -crse%data
+        call prolong (fine, crse)
+
+        ! Compute norm
+        res = pnorm (fine, fine%valid, norm_type)
+
+        ! Free memory
+        call undefine_box_data (crse)
+        call undefine_box_data (fine)
+
+    end function test_prolong
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
     function test_solver (geo) result (res)
         use MGPoisson2D
         implicit none
@@ -1839,7 +2056,7 @@ contains
         dx = valid%dx
         dy = valid%dy
 
-        ! Compute cell-centered Cartesian locations
+        ! Compute Cartesian locations
         call define_box_data (bdx  , valid, 1, 1, BD_CELL, BD_CELL)
         call define_box_data (bdx_x, valid, 0, 0, BD_NODE, BD_CELL)
         call define_box_data (bdx_y, valid, 0, 0, BD_CELL, BD_NODE)
@@ -2044,7 +2261,7 @@ contains
         call define_box_data (bdy_y, yflux)
         call define_box_data (invdiags, div)
 
-        ! Compute cell-centered Cartesian locations
+        ! Compute Cartesian locations
         call fill_x (bdx)
         call fill_x (bdx_x)
         call fill_x (bdx_y)
@@ -2151,9 +2368,11 @@ contains
                      1,       & ! num cycles
                      4,       & ! smooth down
                      4,       & ! smooth up
-                     2,       & ! smooth bottom
+                     0,       & ! smooth bottom
                      .true.,  & ! zerophi
                      10)!verbosity)
+
+
 
         ! Remove Grad[phi] from fluxes
         call compute_grad (xgp, ygp, phi, geo, bc, homog, xwk, ywk)
