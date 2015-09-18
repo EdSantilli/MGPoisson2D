@@ -2005,7 +2005,7 @@ contains
         real(dp)                   :: kx, ky
 
         real(dp), parameter        :: tol = 1.0E-12_dp
-        integer, parameter         :: maxiters = 50
+        integer, parameter         :: maxiters = 5
         logical, parameter         :: homog = .true.
         integer, parameter         :: verbosity = 8
 
@@ -2056,9 +2056,10 @@ contains
         ! Set the wavenumbers
         ! kx = two * pi / L
         ! ky = two * pi / L
-
-        kx = (valid%nx/2-2) * pi / L
-        ky = (valid%ny/2-2) * pi / L
+        kx = eight * pi / L
+        ky = eight * pi / L
+        ! kx = (valid%nx/2-2) * pi / L
+        ! ky = (valid%ny/2-2) * pi / L
 
         ! Compute xflux = Grad^x[cos(kx)*cos(my)]
         call fill_dxdxi (xwk, 2, 2)
@@ -2121,7 +2122,9 @@ contains
 
         ! Solve L[phi] = Div[flux].
         call compute_inverse_diags (invdiags, geo)
-        ! div%data = div%data * geo%J%data(ilo:ihi,jlo:jhi)
+        div%data = div%data / geo%J%data(ilo:ihi,jlo:jhi)
+        ! sum = integrate2d (div, valid, geo, .true.)
+        ! print*, '*sum rhs = ', sum
         ! call relax_jacobi (phi, div, geo, bc, homog, invdiags, &
         !                    one,      & ! omega
         !                    tol,      &
@@ -2142,14 +2145,15 @@ contains
         !                      .true.,   & ! zerophi
         !                      verbosity)
         call vcycle (phi, div, geo, bc, homog, 0, 0, &
-                     tol, maxiters, &
-                     0,      & ! max depth
+                     tol,     &
+                     1,       & ! max iters
+                     1,       & ! max depth
                      1,       & ! num cycles
                      4,       & ! smooth down
                      4,       & ! smooth up
                      2,       & ! smooth bottom
                      .true.,  & ! zerophi
-                     verbosity)
+                     10)!verbosity)
 
         ! Remove Grad[phi] from fluxes
         call compute_grad (xgp, ygp, phi, geo, bc, homog, xwk, ywk)

@@ -187,15 +187,6 @@ module arrayutils
         module procedure define_box_data_dup
     end interface
 
-
-    ! --------------------------------------------------------------------------
-    ! Computes inner product of data arrays for norms.
-    ! --------------------------------------------------------------------------
-    interface inner_prod
-        module procedure inner_prod_array
-        module procedure inner_prod_box_data
-    end interface
-
 contains
 
     ! --------------------------------------------------------------------------
@@ -671,32 +662,22 @@ contains
 
 
     ! --------------------------------------------------------------------------
-    ! Computes ip = (arr1, arr2)
-    ! arr1 and arr2 must be exactly the same size and rank.
-    ! --------------------------------------------------------------------------
-    pure function inner_prod_array (arr1, arr2, nx, ny) result (ip)
-        integer, intent(in)                      :: nx, ny
-        real(dp), intent(in), dimension(1:nx*ny) :: arr1, arr2
-        real(dp)                                 :: ip
-
-        ip = dot_product(arr1, arr2)
-    end function inner_prod_array
-
-
-    ! --------------------------------------------------------------------------
     ! Computes ip = (bd1, bd2)
     ! bd1 and bd2 are box_data objects that must be exactly the same size.
     ! --------------------------------------------------------------------------
-    function inner_prod_box_data (bd1, bd2) result (ip)
+    function inner_prod (bd1, bd2) result (ip)
         type(box_data), intent(in) :: bd1, bd2
         real(dp)                   :: ip
 
         integer                    :: ilo, ihi, jlo, jhi, j
+        real(dp)                   :: vol
 
         ilo = max(bd1%valid%ilo, bd2%valid%ilo)
         ihi = min(bd1%valid%ihi, bd2%valid%ihi)
         jlo = max(bd1%valid%jlo, bd2%valid%jlo)
         jhi = min(bd1%valid%jhi, bd2%valid%jhi)
+
+        vol = bd1%valid%dx * bd1%valid%dy
 
         ! Bounds checks
         if ((ilo .gt. ihi) .or. (jlo .gt. jhi)) then
@@ -706,9 +687,9 @@ contains
 
         ip = zero
         do j = jlo, jhi
-            ip = ip + dot_product (bd1%data(ilo:ihi,j), bd2%data(ilo:ihi,j))
+            ip = ip + vol * dot_product (bd1%data(ilo:ihi,j), bd2%data(ilo:ihi,j))
         enddo
-    end function inner_prod_box_data
+    end function inner_prod
 
 
     ! --------------------------------------------------------------------------
@@ -2196,6 +2177,10 @@ contains
 
             rho(i) = inner_prod (r0, r)
             beta = (rho(i) / rho(i-1)) * (alpha / omega(i-1))
+            if (beta .eq. zero) then
+                print*, 'solve_bicgstab: beta is zero. Probably due to a zero rhs.'
+                stop
+            endif
             p%data = beta*p%data
             p%data = p%data                  &
                    - beta*omega(i-1)*nu%data &
@@ -2455,13 +2440,13 @@ contains
         integer                       :: fi, fj, ci, cj
         real(dp)                      :: scale
 
-        refx = fine%valid%nx / crse%valid%nx
-        refy = fine%valid%ny / crse%valid%ny
-
         if ((fine%offi .eq. BD_CELL) .and. (fine%offj .eq. BD_CELL)) then
             ! Cell-centered in all directions.
-            crse%data = zero
+            refx = fine%valid%nx / crse%valid%nx
+            refy = fine%valid%ny / crse%valid%ny
             scale = one / (refx*refy)
+
+            crse%data = zero
             do fj = fine%valid%jlo, fine%valid%jhi
                 cj = fj/refy
                 do fi = fine%valid%ilo, fine%valid%ihi
@@ -2472,8 +2457,11 @@ contains
 
         else if ((fine%offi .eq. BD_NODE) .and. (fine%offj .eq. BD_CELL)) then
             ! Nodal in x
-            crse%data = zero
+            refx = (fine%valid%nx-1) / (crse%valid%nx-1)
+            refy = fine%valid%ny / crse%valid%ny
             scale = one / refy
+
+            crse%data = zero
             do fj = fine%valid%jlo, fine%valid%jhi
                 cj = fj/refy
                 do ci = crse%valid%ilo, crse%valid%ihi
@@ -2484,8 +2472,11 @@ contains
 
         else if ((fine%offi .eq. BD_CELL) .and. (fine%offj .eq. BD_NODE)) then
             ! Nodal in y
+            refx = fine%valid%nx / crse%valid%nx
+            refy = (fine%valid%ny-1) / (crse%valid%ny-1)
+            scale = one / refx
+
             crse%data = zero
-            scale = one / refy
             do cj = crse%valid%jlo, crse%valid%jhi
                 fj = cj*refy
                 do fi = fine%valid%ilo, fine%valid%ihi
@@ -2496,6 +2487,9 @@ contains
 
         else
             ! Nodal in all directions. Just copy nodes that don't vanish.
+            refx = (fine%valid%nx-1) / (crse%valid%nx-1)
+            refy = (fine%valid%ny-1) / (crse%valid%ny-1)
+
             do cj = crse%valid%jlo, crse%valid%jhi
                 fj = cj*refy
                 do ci = crse%valid%ilo, crse%valid%ihi
@@ -2517,11 +2511,11 @@ contains
         integer                       :: refx, refy
         integer                       :: fi, fj, ci, cj
 
-        refx = fine%valid%nx / crse%valid%nx
-        refy = fine%valid%ny / crse%valid%ny
-
         if ((fine%offi .eq. BD_CELL) .and. (fine%offj .eq. BD_CELL)) then
             ! Cell-centered in all directions.
+            refx = fine%valid%nx / crse%valid%nx
+            refy = fine%valid%ny / crse%valid%ny
+
             do fj = fine%valid%jlo, fine%valid%jhi
                 cj = fj/refy
                 do fi = fine%valid%ilo, fine%valid%ihi
@@ -2566,7 +2560,7 @@ contains
         type(geo_data), dimension(:), allocatable  :: mggeo
         type(bdry_data), dimension(:), allocatable :: mgbc
         real(dp), dimension(:), allocatable        :: relres
-        real(dp)                                   :: rscale
+        real(dp)                                   :: rscale, sum
         type(box_data), dimension(:), allocatable  :: e, r, invdiags, work1
         real(dp)                                   :: mgdx, mgdy
         integer                                    :: maxdepth
@@ -2722,10 +2716,12 @@ contains
         rscale = inner_prod (r(0), r(0))
 
         if (verbosity .ge. 1) then
-            print*, 'scale sq res = ', rscale
+            sum = integrate2d (r(0), r(0)%valid, mggeo(0), .false.)
+            print*, 'scale sq res = ', rscale, ', sum res = ', sum
             print*, 'V-Cycle iter ', 0, ': sq res = ', relres(0)
         endif
 
+        ! The main iteration loop.
         do iter = 1, maxiters
             ! Solve for phi's correction.
             e(0)%data = zero
@@ -2818,13 +2814,14 @@ contains
         type(geo_data), intent(in), dimension(0:maxdepth)    :: geo
         type(bdry_data), intent(in), dimension(0:maxdepth)   :: bc
         integer, intent(in), dimension(0:maxdepth-1)         :: refx, refy
-        real(8), intent(in)                                  :: tol
+        real(dp), intent(in)                                 :: tol
         integer, intent(in)                                  :: depth
         integer, intent(in)                                  :: smooth_down, smooth_up, smooth_bottom
         integer, intent(in)                                  :: numcycles
         integer, intent(in)                                  :: verbosity
 
-        real(dp)                                             :: sum
+        character*2                                          :: indent = '  '
+        real(dp)                                             :: norm, sum
         integer                                              :: curcycle, numcycles_notop
         logical, parameter                                   :: homog = .true.
 
@@ -2840,18 +2837,22 @@ contains
         integer, parameter                                   :: bottom_maxrestarts = 5
         integer, parameter                                   :: bottom_verbosity = 0
 
+        if (verbosity .ge. 7) then
+            print*, repeat(indent,depth), 'MG depth = ', depth
+        endif
 
         ! Compute the rhs integral
         if (verbosity .ge. 8) then
+            norm = inner_prod (r(depth), r(depth))
             sum = integrate2d (r(depth), r(depth)%valid, geo(depth), .false.)
-            print*, ' sum rhs = ', sum
+            print*, repeat(indent,depth), 'sq norm rhs = ', norm, ', sum rhs = ', sum
         endif
 
         if (depth .eq. maxdepth) then
             ! Use bottom solver...
 
             if (verbosity .ge. 7) then
-                print*, 'MG depth ', depth, ': Bottom relax'
+                print*, repeat(indent,depth), 'Bottom relax'
             endif
             call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
                            invdiags(depth), relax_omega, relax_tol, &
@@ -2860,7 +2861,7 @@ contains
                            relax_verbosity)
 
             if (verbosity .ge. 7) then
-                print*, 'MG depth ', depth, ': Bottom solver:'
+                print*, repeat(indent,depth), 'Bottom solver'
             endif
             call solve_bicgstab (e(depth), r(depth), geo(depth), bc(depth), homog, &
                                  bottom_tol, bottom_maxiters, bottom_maxrestarts, &
@@ -2870,56 +2871,63 @@ contains
         else
             ! V-Cycle...
 
-            if (depth .gt. 0) then
-                numcycles_notop = numcycles
-            else
-                numcycles_notop = 1
+            ! ! We want to prevent multiple cycles at depth = 0.
+            ! ! For example, if cycles = 2, we want a W-cycle, not
+            ! ! a WW-cycle.
+            ! if (depth .gt. 0) then
+            !     numcycles_notop = numcycles
+            ! else
+            !     numcycles_notop = 1
+            ! endif
+
+            ! Relax
+            if (verbosity .ge. 7) then
+                print*, repeat(indent,depth), 'Smooth down'
             endif
+            call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
+                           invdiags(depth), relax_omega, relax_tol, &
+                           smooth_down, relax_redblack, &
+                           .false., & ! zero phi?
+                           relax_verbosity)
 
-            do curcycle = 1, numcycles_notop
-                ! Relax
-                if (verbosity .ge. 7) then
-                    print*, 'MG depth ', depth, ': smooth down'
-                endif
-                call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
-                               invdiags(depth), relax_omega, relax_tol, &
-                               smooth_down, relax_redblack, &
-                               .false., & ! zero phi?
-                               relax_verbosity)
+            ! Restrict residual
+            if (verbosity .ge. 7) then
+                print*, repeat(indent,depth), 'Restrict resudual'
+            endif
+            call compute_residual (work1(depth), r(depth), e(depth), &
+                                   geo(depth), bc(depth), homog)
+            call restrict (work1(depth), r(depth+1))
 
-                ! Restrict residual
-                if (verbosity .ge. 7) then
-                    print*, 'MG depth ', depth, ': Restrict resudual'
-                endif
-                call compute_residual (work1(depth), r(depth), e(depth), &
-                                       geo(depth), bc(depth), homog)
-                call restrict (work1(depth), r(depth+1))
+            print*, repeat(indent,depth), &
+                    'res: ', inner_prod (work1(depth), work1(depth)), &
+                    ' to ', inner_prod (r(depth+1), r(depth+1))
 
-                ! Coarse level solve
-                e(depth+1)%data = zero
+            ! Coarse level solve
+            e(depth+1)%data = zero
+            do curcycle = 1, numcycles
                 call vcycle_noinit (e, r, invdiags, work1, geo, bc, &
                                     refx, refy, &
                                     tol, maxdepth, depth+1, &
                                     numcycles, &
                                     smooth_down, smooth_up, smooth_bottom, &
                                     verbosity)
-
-                ! Prolong correction
-                if (verbosity .ge. 7) then
-                    print*, 'MG depth ', depth, ': Add correction'
-                endif
-                call prolong (e(depth), e(depth+1))
-
-                ! Relax
-                if (verbosity .ge. 7) then
-                    print*, 'MG depth ', depth, ': Smooth up'
-                endif
-                call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
-                               invdiags(depth), relax_omega, relax_tol, &
-                               smooth_up, relax_redblack, &
-                               .false., & ! zero phi?
-                               relax_verbosity)
             enddo
+
+            ! Prolong correction
+            if (verbosity .ge. 7) then
+                print*, repeat(indent,depth), 'Prolong and add correction'
+            endif
+            call prolong (e(depth), e(depth+1))
+
+            ! Relax
+            if (verbosity .ge. 7) then
+                print*, repeat(indent,depth), 'Smooth up'
+            endif
+            call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
+                           invdiags(depth), relax_omega, relax_tol, &
+                           smooth_up, relax_redblack, &
+                           .false., & ! zero phi?
+                           relax_verbosity)
         endif
 
     end subroutine vcycle_noinit
@@ -2932,3 +2940,5 @@ end module MGPoisson2D
 ! 2. check if restrict or prolong need J scaling too.
 ! 3. Test compute_pd
 ! 4. Refinement ratio is hard-coded at 4,4 in fill_ghosts.
+! 5. If rscale = zero, manually set to one.
+! 6. Handle beta = zero in bicgstab.
