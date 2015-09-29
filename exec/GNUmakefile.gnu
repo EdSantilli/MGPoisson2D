@@ -3,7 +3,7 @@ SRCDIR = ../src
 BUILDDIR = ../build
 
 FC = gfortran
-FCFLAGS = -g -O0 -fbounds-check
+FCFLAGS = -g -O0 -fbounds-check -Wall -fbacktrace -finit-real=nan
 
 .PHONY: all clean
 
