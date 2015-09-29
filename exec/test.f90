@@ -320,6 +320,7 @@ contains
         call fill_Jgup (geo%Jgup_xy, 1, 2)
         call fill_Jgup (geo%Jgup_yx, 2, 1)
         call fill_Jgup (geo%Jgup_yy, 2, 2)
+
         geo%dx = valid%dx
         geo%dy = valid%dy
 
@@ -2118,7 +2119,8 @@ contains
         real(dp)                   :: dx, dy
         real(dp)                   :: kx, ky
         logical, parameter         :: homog = .true.
-        integer, parameter         :: verbosity = 10
+        integer, parameter         :: verbosity = 3
+        logical, parameter         :: use_computed_soln = .true.
 
         real(dp), dimension(:), pointer :: xp, yp
         type(box_data),target      :: bdx, bdx_x, bdx_y
@@ -2155,18 +2157,18 @@ contains
         call fill_y (bdy_x)
         call fill_y (bdy_y)
 
-        ! Set periodic BCs
-        call define_bdry_data (bc, valid, &
-                               BCTYPE_PERIODIC, &   ! xlo
-                               BCTYPE_PERIODIC, &   ! xhi
-                               BCTYPE_PERIODIC, &   ! ylo
-                               BCTYPE_PERIODIC, &   ! yhi
-                               BCMODE_NONUNIFORM, &    ! xlo
-                               BCMODE_NONUNIFORM, &    ! xhi
-                               BCMODE_NONUNIFORM, &    ! ylo
-                               BCMODE_NONUNIFORM)      ! yhi
-        kx = eight * pi / L
-        ky = eight * pi / H
+        ! ! Set periodic BCs
+        ! call define_bdry_data (bc, valid, &
+        !                        BCTYPE_PERIODIC, &   ! xlo
+        !                        BCTYPE_PERIODIC, &   ! xhi
+        !                        BCTYPE_PERIODIC, &   ! ylo
+        !                        BCTYPE_PERIODIC, &   ! yhi
+        !                        BCMODE_NONUNIFORM, &    ! xlo
+        !                        BCMODE_NONUNIFORM, &    ! xhi
+        !                        BCMODE_NONUNIFORM, &    ! ylo
+        !                        BCMODE_NONUNIFORM)      ! yhi
+        ! kx = eight * pi / L
+        ! ky = eight * pi / H
         ! kx = (valid%nx/2-4) * pi / L
         ! ky = (valid%ny/2-4) * pi / L
 
@@ -2202,16 +2204,21 @@ contains
         ! yp => bdy_y%data(:,jhi+1)
         ! bc%data_yhi = cos(kx*xp) * cos(ky*yp)
 
-        ! ! Set BCs
-        ! call define_bdry_data (bc, valid, &
-        !                        BCTYPE_NEUM, &   ! xlo
-        !                        BCTYPE_NEUM, &   ! xhi
-        !                        BCTYPE_NEUM, &   ! ylo
-        !                        BCTYPE_NEUM, &   ! yhi
-        !                        BCMODE_NONUNIFORM, &    ! xlo
-        !                        BCMODE_NONUNIFORM, &    ! xhi
-        !                        BCMODE_NONUNIFORM, &    ! ylo
-        !                        BCMODE_NONUNIFORM)      ! yhi
+        ! Set BCs
+        call define_bdry_data (bc, valid, &
+                               BCTYPE_NEUM, &   ! xlo
+                               BCTYPE_NEUM, &   ! xhi
+                               BCTYPE_NEUM, &   ! ylo
+                               BCTYPE_NEUM, &   ! yhi
+                               BCMODE_NONUNIFORM, &    ! xlo
+                               BCMODE_NONUNIFORM, &    ! xhi
+                               BCMODE_NONUNIFORM, &    ! ylo
+                               BCMODE_NONUNIFORM)      ! yhi
+        bc%data_xlo = zero
+        bc%data_xhi = zero
+        bc%data_ylo = zero
+        bc%data_yhi = zero
+
 
         ! ! kx = (valid%nx/2-2) * pi / L
         ! ! ky = (valid%ny/2-2) * pi / L
@@ -2246,11 +2253,20 @@ contains
             soln%data = soln%data + cos(i*pi*bdx%data/L) * cos(i*pi*bdy%data/H) / dble(i)
         enddo
 
-        ! Set up RHS
+        ! Set up RHS = J*L[phi]
         call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
-        call compute_laplacian (lphi, soln, geo, bc, homog, .true.)
-        ! lphi%data = -(kx**2 + ky**2) * soln%data(ilo:ihi,jlo:jhi)
-        lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
+        if (use_computed_soln) then
+            call compute_laplacian (lphi, soln, geo, bc, homog, .false.)
+        else
+            lphi%data = zero
+            do i = 8, 240, 2
+                lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) &
+                                           - ((pi/L)**2 + (pi/H)**2)*cos(i*pi*bdx%data(ilo:ihi,jlo:jhi)/L) &
+                                                                    *cos(i*pi*bdy%data(ilo:ihi,jlo:jhi)/H) &
+                                                                    *dble(i)
+            enddo
+            lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
+        endif
 
         ! Set up invdiags
         call define_box_data (invdiags, lphi)
@@ -2301,8 +2317,8 @@ contains
         lphi%data = lphi%data / geo%J%data(ilo:ihi,jlo:jhi)
         call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
                      1.0d-30, & ! tol
-                     2,       & ! max iters
-                     1,       & ! max depth
+                     5,       & ! max iters
+                     -1,       & ! max depth
                      1,       & ! num cycles
                      2,       & ! smooth down
                      2,       & ! smooth up

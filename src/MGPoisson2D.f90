@@ -1656,6 +1656,12 @@ contains
             else
                 scale = fourth / phi%valid%dx
 
+                ! Use this for totally periodic data.
+                ! pd%data(ilo:ihi,jlo:jhi+1) = scale * (  phi%data(ilo+1:ihi+1,jlo:jhi+1) &
+                !                                       - phi%data(ilo-1:ihi-1,jlo:jhi+1) &
+                !                                       + phi%data(ilo+1:ihi+1,jlo-1:jhi) &
+                !                                       - phi%data(ilo-1:ihi-1,jlo-1:jhi)  )
+
                 ! Away from y boundaries...
                 ! Interior
                 pd%data(ilo+1:ihi-1,jlo+1:jhi) = scale * (  phi%data(ilo+2:ihi,jlo+1:jhi) &
@@ -1694,6 +1700,12 @@ contains
                                                       - phi%data(ilo:ihi,jlo-1:jhi)  )
             else
                 scale = fourth / phi%valid%dy
+
+                ! Use this for totally periodic data.
+                ! pd%data(ilo:ihi+1,jlo:jhi) = scale * (  phi%data(ilo:ihi+1,jlo+1:jhi+1) &
+                !                                       - phi%data(ilo:ihi+1,jlo-1:jhi-1) &
+                !                                       + phi%data(ilo-1:ihi,jlo+1:jhi+1) &
+                !                                       - phi%data(ilo-1:ihi,jlo-1:jhi-1)  )
 
                 ! Away from x boundaries...
                 ! Interior
@@ -1979,6 +1991,7 @@ contains
 
 
     ! ------------------------------------------------------------------------------
+    ! TODO: This is the Jacobi method! Need to create correct GS iteration.
     ! ------------------------------------------------------------------------------
     subroutine relax_gs (phi, rhs, geo, bc, homog, invdiags, &
                          omega, tol, maxiters, redblack, zerophi, verbosity)
@@ -2642,410 +2655,6 @@ contains
     end subroutine prolong
 
 
-    ! ! ------------------------------------------------------------------------------
-    ! ! rhs will be scaled with J, but restored before the function exits.
-    ! ! ------------------------------------------------------------------------------
-    ! subroutine vcycle (phi, rhs, geo, bc, homog, amrrefx, amrrefy, &
-    !                    tol, maxiters, maxdepth_user, numcycles, &
-    !                    smooth_down, smooth_up, smooth_bottom, &
-    !                    zerophi, verbosity)
-    !     type(box_data), intent(inout) :: phi
-    !     type(box_data), intent(inout) :: rhs
-    !     type(geo_data), intent(in)    :: geo
-    !     type(bdry_data), intent(in)   :: bc
-    !     logical, intent(in)           :: homog
-    !     integer, intent(in)           :: amrrefx, amrrefy
-    !     real(dp), intent(in)          :: tol
-    !     integer, intent(in)           :: maxiters
-    !     integer, intent(in)           :: maxdepth_user
-    !     integer, intent(in)           :: numcycles
-    !     integer, intent(in)           :: smooth_down, smooth_up, smooth_bottom
-    !     logical, intent(in)           :: zerophi
-    !     integer, intent(in)           :: verbosity
-
-    !     type(box)                                  :: valid
-    !     integer, dimension(:), allocatable         :: refx, refy
-    !     integer                                    :: ierr, d, iter, i
-    !     integer                                    :: ilo, ihi, jlo, jhi
-    !     type(geo_data), dimension(:), allocatable  :: mggeo
-    !     type(bdry_data), dimension(:), allocatable :: mgbc
-    !     real(dp), dimension(:), allocatable        :: relres
-    !     real(dp)                                   :: rscale, sum
-    !     type(box_data), dimension(:), allocatable  :: e, r, invdiags, work1
-    !     real(dp)                                   :: mgdx, mgdy
-    !     integer                                    :: maxdepth
-
-    !     ! Estimate size of scheduling vectors
-    !     valid = rhs%valid
-    !     if (maxdepth_user .lt. 0) then
-    !         maxdepth = 1000
-    !     else
-    !         maxdepth = maxdepth_user
-    !     endif
-    !     call estimate_maxdepth (maxdepth, valid)
-
-    !     ! Allocate schedule vectors
-    !     allocate (refx(0:maxdepth-1), stat=ierr)
-    !     if (ierr .ne. 0) then
-    !         print*, 'vcycle: Out of memory'
-    !         stop
-    !     endif
-
-    !     allocate (refy(0:maxdepth-1), stat=ierr)
-    !     if (ierr .ne. 0) then
-    !         print*, 'vcycle: Out of memory'
-    !         stop
-    !     endif
-
-    !     ! Create coarsening schedule
-    !     call create_mgschedule(refx, refy, maxdepth, valid)
-    !     if (verbosity .ge. 1) then
-    !         print*, 'max MG depth = ', maxdepth
-    !     endif
-    !     if (verbosity .ge. 2) then
-    !         mgdx = valid%dx
-    !         mgdy = valid%dy
-    !         do d = 0, maxdepth-1
-    !             ! print*, 'ref(', d, ') = ', refx(d), ', ', refy(d)
-    !             print*, d, ': dx = ', mgdx, ', dy = ', mgdy
-    !             mgdx = mgdx * real(refx(d),8)
-    !             mgdy = mgdy * real(refy(d),8)
-    !         enddo
-    !         print*, d, ': dx = ', mgdx, ', dy = ', mgdy
-    !     endif
-
-    !     ! Allocate and set up workspace
-    !     allocate (relres(0:maxiters), stat=ierr)
-    !     if (ierr .ne. 0) then
-    !         print*, 'Out of memory'
-    !         stop
-    !     endif
-
-    !     allocate (e(0:maxdepth), stat=ierr)
-    !     if (ierr .ne. 0) then
-    !         print*, 'Out of memory'
-    !         stop
-    !     endif
-
-    !     allocate (r(0:maxdepth), stat=ierr)
-    !     if (ierr .ne. 0) then
-    !         print*, 'Out of memory'
-    !         stop
-    !     endif
-
-    !     allocate (invdiags(0:maxdepth), stat=ierr)
-    !     if (ierr .ne. 0) then
-    !         print*, 'Out of memory'
-    !         stop
-    !     endif
-
-    !     allocate (mggeo(0:maxdepth), stat=ierr)
-    !     if (ierr .ne. 0) then
-    !         print*, 'Out of memory'
-    !         stop
-    !     endif
-
-    !     allocate (work1(0:maxdepth), stat=ierr)
-    !     if (ierr .ne. 0) then
-    !         print*, 'Out of memory'
-    !         stop
-    !     endif
-
-    !     allocate (mgbc(0:maxdepth), stat=ierr)
-    !     if (ierr .ne. 0) then
-    !         print*, 'Out of memory'
-    !         stop
-    !     endif
-
-    !     do d = 0, maxdepth
-    !         print*, '*** valid = ', valid
-    !         call define_box_data (e(d), valid, 1, 1, BD_CELL, BD_CELL)
-    !         call define_box_data (r(d), valid, 0, 0, BD_CELL, BD_CELL)
-    !         call define_box_data (work1(d), valid, 0, 0, BD_CELL, BD_CELL)
-
-    !         call define_box_data (mggeo(d)%J, valid, geo%J%ngx, geo%J%ngy, BD_CELL, BD_CELL)
-    !         call define_box_data (mggeo(d)%Jgup_xx, valid, geo%Jgup_xx%ngx, geo%Jgup_xx%ngy, BD_NODE, BD_CELL)
-    !         call define_box_data (mggeo(d)%Jgup_xy, valid, geo%Jgup_xy%ngx, geo%Jgup_xy%ngy, BD_NODE, BD_CELL)
-    !         call define_box_data (mggeo(d)%Jgup_yx, valid, geo%Jgup_yx%ngx, geo%Jgup_yx%ngy, BD_CELL, BD_NODE)
-    !         call define_box_data (mggeo(d)%Jgup_yy, valid, geo%Jgup_yy%ngx, geo%Jgup_yy%ngy, BD_CELL, BD_NODE)
-    !         call define_box_data (invdiags(d), valid, 0, 0, BD_CELL, BD_CELL)
-
-    !         if (d .eq. 0) then
-    !             ! For now, just copy the data. It would be more economical to
-    !             ! point to the data that already exists.
-    !             mggeo(d)%J%data = geo%J%data
-    !             mggeo(d)%Jgup_xx%data = geo%Jgup_xx%data
-    !             mggeo(d)%Jgup_xy%data = geo%Jgup_xy%data
-    !             mggeo(d)%Jgup_yx%data = geo%Jgup_yx%data
-    !             mggeo(d)%Jgup_yy%data = geo%Jgup_yy%data
-    !             call compute_inverse_diags(invdiags(d), mggeo(d))
-    !         else
-    !             ! Coarsen the data from MG level d-1
-    !             call restrict (mggeo(d-1)%J, mggeo(d)%J)
-    !             call restrict (mggeo(d-1)%Jgup_xx, mggeo(d)%Jgup_xx)
-    !             call restrict (mggeo(d-1)%Jgup_xy, mggeo(d)%Jgup_xy)
-    !             call restrict (mggeo(d-1)%Jgup_yx, mggeo(d)%Jgup_yx)
-    !             call restrict (mggeo(d-1)%Jgup_yy, mggeo(d)%Jgup_yy)
-    !             call restrict (invdiags(d-1), invdiags(d))
-    !             ! call compute_inverse_diags(invdiags(d), mggeo(d))
-    !         endif
-
-    !         ! All BCs will be homogeneous after first residual calculation.
-    !         call define_bdry_data (mgbc(d), valid, &
-    !                                bc%type_xlo, bc%type_xhi, bc%type_ylo, bc%type_yhi, &
-    !                                BCMODE_UNIFORM, BCMODE_UNIFORM, BCMODE_UNIFORM, BCMODE_UNIFORM)
-    !         mgbc(d)%data_xlo = zero
-    !         mgbc(d)%data_xhi = zero
-    !         mgbc(d)%data_ylo = zero
-    !         mgbc(d)%data_yhi = zero
-
-    !         ! Move on to next depth
-    !         if (d .lt. maxDepth) then
-    !             call coarsen_box (valid, refx(d), refy(d))
-    !         endif
-    !     enddo
-
-    !     ! Initialize phi to zero if necessary
-    !     if (zerophi) then
-    !         phi%data = zero
-    !     endif
-
-    !     ! Scale rhs by J
-    !     ilo = rhs%valid%ilo
-    !     ihi = rhs%valid%ihi
-    !     jlo = rhs%valid%jlo
-    !     jhi = rhs%valid%jhi
-    !     rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
-    !                               * geo%J%data(ilo:ihi,jlo:jhi)
-
-    !     ! Set up residual equation
-    !     call compute_residual (r(0), rhs, phi, geo, bc, homog)
-
-    !     relres = zero
-    !     relres(0) = one
-    !     rscale = inner_prod (r(0), r(0))
-
-    !     if (verbosity .ge. 1) then
-    !         sum = integrate2d (r(0), r(0)%valid, mggeo(0), .false.)
-    !         print*, 'scale sq res = ', rscale, ', sum res = ', sum
-    !         print*, 'V-Cycle iter ', 0, ': sq res = ', relres(0)
-    !     endif
-
-    !     ! The main iteration loop.
-    !     do iter = 1, maxiters
-    !         ! Solve for phi's correction.
-    !         e(0)%data = zero
-    !         call vcycle_noinit (e, r, invdiags, work1, mggeo, mgbc, &
-    !                             refx, refy, &
-    !                             tol, maxdepth, 0, &
-    !                             numcycles, &
-    !                             smooth_down, smooth_up, smooth_bottom, &
-    !                             verbosity)
-
-    !         ! Apply correction
-    !         phi%data = phi%data + e(0)%data
-
-    !         ! Compute residual
-    !         call compute_residual (r(0), rhs, phi, mggeo(0), bc, homog)
-    !         relres(iter) = inner_prod (r(0), r(0)) / rscale
-    !         if (verbosity .ge. 1) then
-    !             print*, 'V-Cycle iter ', iter, ': sq res = ', relres(iter)
-    !         endif
-
-    !         ! Did we converge?
-    !         if (relres(iter) .le. tol) then
-    !             if (verbosity .ge. 1) then
-    !                 print*, "Converged."
-    !             endif
-
-    !             ! Restore rhs scaling.
-    !             rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
-    !                                       / geo%J%data(ilo:ihi,jlo:jhi)
-
-    !             exit
-    !         endif
-
-    !         ! Are we diverging?
-    !         if (relres(iter) .gt. relres(iter-1)) then
-    !             if (verbosity .ge. 1) then
-    !                 print*, 'Diverging.'
-    !             endif
-
-    !             ! Undo last correction
-    !             phi%data = phi%data - e(0)%data
-
-    !             ! Restore rhs scaling.
-    !             rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
-    !                                       / geo%J%data(ilo:ihi,jlo:jhi)
-
-    !             exit
-    !         endif
-    !     enddo
-
-
-    !     ! Free memory
-    !     do d = 0, maxDepth
-    !         call undefine_bdry_data (mgbc(d))
-    !         call undefine_box_data (invdiags(d))
-    !         call undefine_box_data (mggeo(d)%J)
-    !         call undefine_box_data (mggeo(d)%Jgup_xx)
-    !         call undefine_box_data (mggeo(d)%Jgup_xy)
-    !         call undefine_box_data (mggeo(d)%Jgup_yx)
-    !         call undefine_box_data (mggeo(d)%Jgup_yy)
-    !         call undefine_box_data (work1(d))
-    !         call undefine_box_data (r(d))
-    !         call undefine_box_data (e(d))
-    !     enddo
-
-    !     if (allocated(mgbc)) deallocate(mgbc)
-    !     if (allocated(invDiags)) deallocate(invDiags)
-    !     if (allocated(mggeo)) deallocate(mggeo)
-    !     if (allocated(work1)) deallocate(work1)
-    !     if (allocated(r)) deallocate(r)
-    !     if (allocated(e)) deallocate(e)
-    !     if (allocated(relres)) deallocate(relres)
-    !     if (allocated(refx)) deallocate(refx)
-    !     if (allocated(refy)) deallocate(refy)
-
-    ! end subroutine vcycle
-
-
-    ! ! ------------------------------------------------------------------------------
-    ! ! ------------------------------------------------------------------------------
-    ! recursive subroutine vcycle_noinit (e, r, invdiags, work1, geo, bc, &
-    !                                     refx, refy, &
-    !                                     tol, maxdepth, depth, &
-    !                                     numcycles, &
-    !                                     smooth_down, smooth_up, smooth_bottom, &
-    !                                     verbosity)
-    !     integer, intent(in)                                  :: maxdepth
-    !     type(box_data), intent(inout), dimension(0:maxdepth) :: e, r, work1
-    !     type(box_data), intent(in), dimension(0:maxdepth)    :: invdiags
-    !     type(geo_data), intent(in), dimension(0:maxdepth)    :: geo
-    !     type(bdry_data), intent(in), dimension(0:maxdepth)   :: bc
-    !     integer, intent(in), dimension(0:maxdepth-1)         :: refx, refy
-    !     real(dp), intent(in)                                 :: tol
-    !     integer, intent(in)                                  :: depth
-    !     integer, intent(in)                                  :: smooth_down, smooth_up, smooth_bottom
-    !     integer, intent(in)                                  :: numcycles
-    !     integer, intent(in)                                  :: verbosity
-
-    !     character*2                                          :: indent = '  '
-    !     real(dp)                                             :: norm, sum
-    !     integer                                              :: curcycle
-    !     logical, parameter                                   :: homog = .true.
-    !     integer                                              :: ilo, ihi, jlo, jhi
-
-    !     ! Relaxation params
-    !     real(dp), parameter                                  :: relax_tol = -one
-    !     real(dp), parameter                                  :: relax_omega = one ! Was 1.33
-    !     logical, parameter                                   :: relax_redblack = .false.
-    !     integer, parameter                                   :: relax_verbosity = 0
-
-    !     ! Bottom solver params
-    !     real(dp), parameter                                  :: bottom_tol = 1.0E-6_dp
-    !     integer, parameter                                   :: bottom_maxiters = 80
-    !     integer, parameter                                   :: bottom_maxrestarts = 5
-    !     integer, parameter                                   :: bottom_verbosity = 0
-
-    !     if (verbosity .ge. 7) then
-    !         print*, repeat(indent,depth), 'MG depth = ', depth
-    !     endif
-
-    !     ! ! Compute the rhs integral
-    !     ! if (verbosity .ge. 8) then
-    !     !     norm = inner_prod (r(depth), r(depth))
-    !     !     sum = integrate2d (r(depth), r(depth)%valid, geo(depth), .false.)
-    !     !     print*, repeat(indent,depth), 'sq norm rhs = ', norm, ', sum rhs = ', sum
-    !     ! endif
-
-    !     ! ! Set the initial guess
-    !     ! ilo = r(depth)%valid%ilo
-    !     ! ihi = r(depth)%valid%ihi
-    !     ! jlo = r(depth)%valid%jlo
-    !     ! jhi = r(depth)%valid%jhi
-    !     ! e(depth)%data(ilo:ihi,jlo:jhi) = r(depth)%data(ilo:ihi,jlo:jhi) * invdiags(depth)%data(ilo:ihi,jlo:jhi)
-
-    !     if (depth .eq. maxdepth) then
-    !         ! Use bottom solver...
-
-    !         if (verbosity .ge. 7) then
-    !             print*, repeat(indent,depth), 'Bottom relax'
-    !         endif
-    !         call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
-    !                        invdiags(depth), relax_omega, relax_tol, &
-    !                        smooth_bottom, relax_redblack, &
-    !                        .false., & ! zero phi?
-    !                        relax_verbosity)
-
-    !         if (verbosity .ge. 7) then
-    !             print*, repeat(indent,depth), 'Bottom solver'
-    !         endif
-    !         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !         ! Only dropping 3 orders. prolongation of soln is hurting, not helping.
-    !         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !         call solve_bicgstab (e(depth), r(depth), geo(depth), bc(depth), homog, &
-    !                              bottom_tol, bottom_maxiters, bottom_maxrestarts, &
-    !                              .false., & ! zero phi?
-    !                              bottom_verbosity)
-
-    !     else
-    !         ! V-Cycle...
-
-    !         ! Relax
-    !         if (verbosity .ge. 7) then
-    !             print*, repeat(indent,depth), 'Smooth down'
-    !         endif
-    !         call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
-    !                        invdiags(depth), relax_omega, relax_tol, &
-    !                        smooth_down, relax_redblack, &
-    !                        .false., & ! zero phi?
-    !                        relax_verbosity)
-
-    !         ! Restrict residual
-    !         if (verbosity .ge. 7) then
-    !             print*, repeat(indent,depth), 'Restrict resudual'
-    !         endif
-    !         call compute_residual (work1(depth), r(depth), e(depth), &
-    !                                geo(depth), bc(depth), homog)
-    !         call restrict (work1(depth), r(depth+1))
-
-    !         ! print*, repeat(indent,depth), &
-    !         !         'res: ', inner_prod (work1(depth), work1(depth)), &
-    !         !         ' to ', inner_prod (r(depth+1), r(depth+1))
-
-    !         ! Coarse level solve
-    !         e(depth+1)%data = zero
-    !         do curcycle = 1, numcycles
-    !             call vcycle_noinit (e, r, invdiags, work1, geo, bc, &
-    !                                 refx, refy, &
-    !                                 tol, maxdepth, depth+1, &
-    !                                 numcycles, &
-    !                                 smooth_down, smooth_up, smooth_bottom, &
-    !                                 verbosity)
-    !         enddo
-
-    !         ! Prolong correction
-    !         if (verbosity .ge. 7) then
-    !             print*, repeat(indent,depth), 'Prolong and add correction'
-    !         endif
-    !         call prolong (e(depth), e(depth+1))
-    !         ! call prolong (e(depth), e(depth+1), bc(depth+1), geo(depth+1))
-
-    !         ! Relax
-    !         if (verbosity .ge. 7) then
-    !             print*, repeat(indent,depth), 'Smooth up'
-    !         endif
-    !         call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
-    !                        invdiags(depth), relax_omega, relax_tol, &
-    !                        smooth_up, relax_redblack, &
-    !                        .false., & ! zero phi?
-    !                        relax_verbosity)
-    !     endif
-
-    ! end subroutine vcycle_noinit
-
-
     ! ------------------------------------------------------------------------------
     ! rhs will be scaled with J, but restored before the function exits.
     ! ------------------------------------------------------------------------------
@@ -3070,7 +2679,7 @@ contains
         type(box)                                  :: valid
         integer                                    :: maxdepth
         integer, dimension(:), allocatable         :: refx, refy
-        integer                                    :: ierr, d, iter, i
+        integer                                    :: ierr, d, iter
         real(dp)                                   :: mgdx, mgdy
         real(dp), dimension(:), allocatable        :: relres
         type(box_data), dimension(:), allocatable  :: e, r, invdiags, work1
@@ -3177,30 +2786,24 @@ contains
             if (d .eq. 0) then
                 ! For now, just copy the data. It would be more economical to
                 ! point to the data that already exists.
-                ! mggeo(d)%J%data = geo%J%data
-                ! mggeo(d)%Jgup_xx%data = geo%Jgup_xx%data
-                ! mggeo(d)%Jgup_xy%data = geo%Jgup_xy%data
-                ! mggeo(d)%Jgup_yx%data = geo%Jgup_yx%data
-                ! mggeo(d)%Jgup_yy%data = geo%Jgup_yy%data
-                mggeo(d)%J%data = one
-                mggeo(d)%Jgup_xx%data = one
-                mggeo(d)%Jgup_xy%data = zero
-                mggeo(d)%Jgup_yx%data = zero
-                mggeo(d)%Jgup_yy%data = one
+                mggeo(d)%dx = valid%dx
+                mggeo(d)%dy = valid%dy
+                mggeo(d)%J%data = geo%J%data
+                mggeo(d)%Jgup_xx%data = geo%Jgup_xx%data
+                mggeo(d)%Jgup_xy%data = geo%Jgup_xy%data
+                mggeo(d)%Jgup_yx%data = geo%Jgup_yx%data
+                mggeo(d)%Jgup_yy%data = geo%Jgup_yy%data
                 call compute_inverse_diags(invdiags(d), mggeo(d))
             else
                 ! Coarsen the data from MG level d-1
-                ! call restrict (mggeo(d-1)%J, mggeo(d)%J)
-                ! call restrict (mggeo(d-1)%Jgup_xx, mggeo(d)%Jgup_xx)
-                ! call restrict (mggeo(d-1)%Jgup_xy, mggeo(d)%Jgup_xy)
-                ! call restrict (mggeo(d-1)%Jgup_yx, mggeo(d)%Jgup_yx)
-                ! call restrict (mggeo(d-1)%Jgup_yy, mggeo(d)%Jgup_yy)
-                mggeo(d)%J%data = one
-                mggeo(d)%Jgup_xx%data = one
-                mggeo(d)%Jgup_xy%data = zero
-                mggeo(d)%Jgup_yx%data = zero
-                mggeo(d)%Jgup_yy%data = one
-                call restrict (invdiags(d-1), invdiags(d))
+                mggeo(d)%dx = valid%dx
+                mggeo(d)%dy = valid%dy
+                call restrict (mggeo(d-1)%J, mggeo(d)%J)
+                call restrict (mggeo(d-1)%Jgup_xx, mggeo(d)%Jgup_xx)
+                call restrict (mggeo(d-1)%Jgup_xy, mggeo(d)%Jgup_xy)
+                call restrict (mggeo(d-1)%Jgup_yx, mggeo(d)%Jgup_yx)
+                call restrict (mggeo(d-1)%Jgup_yy, mggeo(d)%Jgup_yy)
+                call compute_inverse_diags(invdiags(d), mggeo(d))
             endif
 
             ! All BCs will be homogeneous after first residual calculation.
@@ -3339,17 +2942,17 @@ contains
 
         character*2                                          :: indent = '  '
         logical, parameter                                   :: homog = .true.
-        integer                                              :: ilo, ihi, jlo, jhi
+        ! integer                                              :: ilo, ihi, jlo, jhi
         integer                                              :: curcycle
         real(dp)                                             :: norm, sum
         type(box_data)                                       :: tmp
 
-        integer, parameter                                   :: prolong_order = 1
+        integer, parameter                                   :: prolong_order = 0
 
         ! Relaxation params
         real(dp), parameter                                  :: relax_tol = -one
         real(dp), parameter                                  :: relax_omega = one ! Was 1.33
-        logical, parameter                                   :: relax_redblack = .false.
+        logical, parameter                                   :: relax_redblack = .true.
         integer, parameter                                   :: relax_verbosity = 0
 
         ! Bottom solver params
