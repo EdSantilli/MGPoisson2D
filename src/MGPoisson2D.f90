@@ -818,7 +818,7 @@ contains
         else
             do j = bx%jlo, bx%jhi
                 do i = bx%ilo, bx%ihi
-                    pn = pn + volScale * bd%data(i,j)**p
+                    pn = pn + volScale * abs(bd%data(i,j))**p
                 enddo
             enddo
             pn = pn**(one/p)
