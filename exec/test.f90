@@ -504,9 +504,9 @@ contains
         do i = ilo, ihi
             xx = x(i)
 
-            el(i) = zero ! Temporary, flat bottom.
+            ! el(i) = zero ! Temporary, flat bottom.
             ! el(i) = Hz*half*(one-xx/Lx) ! Sloped bottom (Use this one)
-            ! el(i) = fourth * sin(pi*xx/Lx)   ! Temporary, sinusoidal bottom.
+            el(i) = fourth * sin(pi*xx/Lx)   ! Temporary, sinusoidal bottom.
 
             ! if (xx .le. C1) then
             !     ! Left flat region
@@ -2118,7 +2118,7 @@ contains
         integer                    :: ilo, ihi, jlo, jhi, i, j
         real(dp)                   :: dx, dy
         real(dp)                   :: kx, ky
-        logical, parameter         :: homog = .true.
+        logical, parameter         :: homog = .false.
         integer, parameter         :: verbosity = 3
         logical, parameter         :: use_computed_soln = .true.
 
@@ -2126,6 +2126,7 @@ contains
         type(box_data),target      :: bdx, bdx_x, bdx_y
         type(box_data),target      :: bdy, bdy_x, bdy_y
         type(box_data)             :: soln, r
+        type(box_data)             :: xflux, yflux, xwk, ywk
         type(bdry_data)            :: bc
         type(box_data)             :: lphi
         type(box_data)             :: invdiags
@@ -2157,6 +2158,13 @@ contains
         call fill_y (bdy_x)
         call fill_y (bdy_y)
 
+        ! Set up solution
+        call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
+        soln%data = zero
+        do i = 8, 240, 2
+            soln%data = soln%data + cos(i*pi*bdx%data/L) * cos(i*pi*bdy%data/H) / dble(i)
+        enddo
+
         ! ! Set periodic BCs
         ! call define_bdry_data (bc, valid, &
         !                        BCTYPE_PERIODIC, &   ! xlo
@@ -2183,28 +2191,24 @@ contains
         !                        BCMODE_NONUNIFORM, &    ! ylo
         !                        BCMODE_NONUNIFORM)      ! yhi
 
-        ! ! kx = eight * pi / L
-        ! ! ky = eight * pi / L
-        ! kx = (valid%nx/2-3) * pi / L
-        ! ky = (valid%ny/2-3) * pi / L
-
-        ! xp => bdx_x%data(ilo,:)
-        ! yp => bdy_x%data(ilo,:)
-        ! bc%data_xlo = cos(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_x%data(ihi+1,:)
-        ! yp => bdy_x%data(ihi+1,:)
-        ! bc%data_xhi = cos(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_y%data(:,jlo)
-        ! yp => bdy_y%data(:,jlo)
-        ! bc%data_ylo = cos(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_y%data(:,jhi+1)
-        ! yp => bdy_y%data(:,jhi+1)
-        ! bc%data_yhi = cos(kx*xp) * cos(ky*yp)
-
         ! Set BCs
+        call define_box_data (xflux, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (yflux, valid, 0, 0, BD_CELL, BD_NODE)
+        call define_box_data (xwk, xflux)
+        call define_box_data (ywk, yflux)
+
+        call define_bdry_data (bc, valid, &
+                               BCTYPE_NONE, &   ! xlo
+                               BCTYPE_NONE, &   ! xhi
+                               BCTYPE_NONE, &   ! ylo
+                               BCTYPE_NONE, &   ! yhi
+                               BCMODE_UNIFORM, &    ! xlo
+                               BCMODE_UNIFORM, &    ! xhi
+                               BCMODE_UNIFORM, &    ! ylo
+                               BCMODE_UNIFORM)      ! yhi
+        call compute_grad (xflux, yflux, soln, geo, bc, homog, xwk, ywk)
+        call undefine_bdry_data (bc)
+
         call define_bdry_data (bc, valid, &
                                BCTYPE_NEUM, &   ! xlo
                                BCTYPE_NEUM, &   ! xhi
@@ -2214,58 +2218,24 @@ contains
                                BCMODE_NONUNIFORM, &    ! xhi
                                BCMODE_NONUNIFORM, &    ! ylo
                                BCMODE_NONUNIFORM)      ! yhi
-        bc%data_xlo = zero
-        bc%data_xhi = zero
-        bc%data_ylo = zero
-        bc%data_yhi = zero
-
-
-        ! ! kx = (valid%nx/2-2) * pi / L
-        ! ! ky = (valid%ny/2-2) * pi / L
-
-        ! kx = two * pi / L
-        ! ky = two * pi / L
-
-        ! xp => bdx_x%data(ilo,:)
-        ! yp => bdy_x%data(ilo,:)
-        ! bc%data_xlo = -kx * sin(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_x%data(ihi+1,:)
-        ! yp => bdy_x%data(ihi+1,:)
-        ! bc%data_xhi = -kx * sin(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_y%data(:,jlo)
-        ! yp => bdy_y%data(:,jlo)
-        ! bc%data_ylo = -ky * cos(kx*xp) * sin(ky*yp)
-
-        ! xp => bdx_y%data(:,jhi+1)
-        ! yp => bdy_y%data(:,jhi+1)
-        ! bc%data_yhi = -ky * cos(kx*xp) * sin(ky*yp)
-
-        nullify(xp)
-        nullify(yp)
-
-        ! Set up solution
-        call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
-        ! soln%data = cos(kx*bdx%data) * cos(ky*bdy%data)
-        soln%data = zero
-        do i = 8, 240, 2
-            soln%data = soln%data + cos(i*pi*bdx%data/L) * cos(i*pi*bdy%data/H) / dble(i)
-        enddo
+        bc%data_xlo(jlo:jhi) = xflux%data(ilo  ,jlo:jhi)
+        bc%data_xhi(jlo:jhi) = xflux%data(ihi+1,jlo:jhi)
+        bc%data_ylo(ilo:ihi) = yflux%data(ilo:ihi,jlo  )
+        bc%data_yhi(ilo:ihi) = yflux%data(ilo:ihi,jhi+1)
 
         ! Set up RHS = J*L[phi]
         call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
         if (use_computed_soln) then
             call compute_laplacian (lphi, soln, geo, bc, homog, .false.)
         else
-            lphi%data = zero
-            do i = 8, 240, 2
-                lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) &
-                                           - ((pi/L)**2 + (pi/H)**2)*cos(i*pi*bdx%data(ilo:ihi,jlo:jhi)/L) &
-                                                                    *cos(i*pi*bdy%data(ilo:ihi,jlo:jhi)/H) &
-                                                                    *dble(i)
-            enddo
-            lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
+            ! lphi%data = zero
+            ! do i = 8, 240, 2
+            !     lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) &
+            !                                - ((pi/L)**2 + (pi/H)**2)*cos(i*pi*bdx%data(ilo:ihi,jlo:jhi)/L) &
+            !                                                         *cos(i*pi*bdy%data(ilo:ihi,jlo:jhi)/H) &
+            !                                                         *dble(i)
+            ! enddo
+            ! lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
         endif
 
         ! Set up invdiags
@@ -2296,14 +2266,14 @@ contains
         !                    .false.,  & ! zerophi
         !                    verbosity)
 
-        ! ! Gauss-Seidel iteration
-        ! call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
-        !                one,     & ! omega
-        !                1.0d-6,  & ! tol
-        !                10,      & ! maxiters
-        !                .true.,  & ! redblack
-        !                .false.,  & ! zerophi
-        !                verbosity)
+        ! Gauss-Seidel iteration
+        call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
+                       one,     & ! omega
+                       1.0d-6,  & ! tol
+                       10,      & ! maxiters
+                       .false.,  & ! redblack
+                       .false.,  & ! zerophi
+                       verbosity)
 
         ! ! BiCGStab solver
         ! call solve_bicgstab (phi, lphi, geo, bc, homog, &
@@ -2313,19 +2283,19 @@ contains
         !                      .false.,  & ! zerophi
         !                      verbosity)
 
-        ! V-Cycle iteration
-        lphi%data = lphi%data / geo%J%data(ilo:ihi,jlo:jhi)
-        call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
-                     1.0d-30, & ! tol
-                     5,       & ! max iters
-                     -1,       & ! max depth
-                     1,       & ! num cycles
-                     2,       & ! smooth down
-                     2,       & ! smooth up
-                     0,       & ! smooth bottom
-                     .false., & ! zerophi
-                     verbosity)
-        lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
+        ! ! V-Cycle iteration
+        ! lphi%data = lphi%data / geo%J%data(ilo:ihi,jlo:jhi)
+        ! call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
+        !              1.0d-30, & ! tol
+        !              1,       & ! max iters
+        !              1,       & ! max depth
+        !              1,       & ! num cycles
+        !              2,       & ! smooth down
+        !              2,       & ! smooth up
+        !              0,       & ! smooth bottom
+        !              .false., & ! zerophi
+        !              verbosity)
+        ! lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
 
         call cpu_time (t2)
         print*, 'Solve time (s) = ', t2-t1
@@ -2341,6 +2311,10 @@ contains
 
 
         ! Free memory
+        call undefine_box_data (ywk)
+        call undefine_box_data (xwk)
+        call undefine_box_data (yflux)
+        call undefine_box_data (xflux)
         call undefine_box_data (phi)
         call undefine_box_data (invdiags)
         call undefine_box_data (lphi)

@@ -1055,6 +1055,9 @@ contains
                 case (BCTYPE_EXTRAP2)
                     phi%data(ilo-1,:) = three*(phi%data(ilo,:) - phi%data(ilo+1,:)) + phi%data(ilo+2,:)
 
+                case (BCTYPE_NONE)
+                    ! Do nothing
+
                 case default
                     print*, 'fill_ghosts: invalid BCTYPE_'
                     stop
@@ -1180,6 +1183,9 @@ contains
 
                 case (BCTYPE_EXTRAP2)
                     phi%data(ihi+1,:) = three*(phi%data(ihi,:) - phi%data(ihi-1,:)) + phi%data(ihi-2,:)
+
+                case (BCTYPE_NONE)
+                    ! Do nothing
 
                 case default
                     print*, 'fill_ghosts: invalid BCTYPE_'
@@ -1309,6 +1315,9 @@ contains
                 case (BCTYPE_EXTRAP2)
                     phi%data(:,jlo-1) = three*(phi%data(:,jlo) - phi%data(:,jlo+1)) + phi%data(:,jlo+2)
 
+                case (BCTYPE_NONE)
+                    ! Do nothing
+
                 case default
                     print*, 'fill_ghosts: invalid BCTYPE_'
                     stop
@@ -1434,6 +1443,9 @@ contains
 
                 case (BCTYPE_EXTRAP2)
                     phi%data(:,jhi+1) = three*(phi%data(:,jhi) - phi%data(:,jhi-1)) + phi%data(:,jhi-2)
+
+                case (BCTYPE_NONE)
+                    ! Do nothing
 
                 case default
                     print*, 'fill_ghosts: invalid BCTYPE_'
@@ -1585,11 +1597,12 @@ contains
         type(box_data), intent(inout) :: idiags
         type(geo_data), intent(in)    :: geo
 
-        real(dp)                      :: invdxsq, invdysq
+        real(dp)                      :: invdxsq, invdysq, invdxdy
         integer                       :: ilo, ihi, jlo, jhi
 
         invdxsq = -one / (idiags%valid%dx**2)
         invdysq = -one / (idiags%valid%dy**2)
+        invdxdy = fourth / (idiags%valid%dx * idiags%valid%dx)
 
         ilo = idiags%valid%ilo
         ihi = idiags%valid%ihi
@@ -1598,7 +1611,9 @@ contains
 
         idiags%data(ilo:ihi,jlo:jhi) = &
               (geo%Jgup_xx%data(ilo+1:ihi+1,jlo:jhi) + geo%Jgup_xx%data(ilo:ihi,jlo:jhi)) * invdxsq &
-            + (geo%Jgup_yy%data(ilo:ihi,jlo+1:jhi+1) + geo%Jgup_yy%data(ilo:ihi,jlo:jhi)) * invdysq
+            + (geo%Jgup_yy%data(ilo:ihi,jlo+1:jhi+1) + geo%Jgup_yy%data(ilo:ihi,jlo:jhi)) * invdysq &
+            + (geo%Jgup_xy%data(ilo+1:ihi+1,jlo:jhi) - geo%Jgup_xy%data(ilo:ihi,jlo:jhi) + &
+               geo%Jgup_yx%data(ilo:ihi,jlo+1:jhi+1) - geo%Jgup_yx%data(ilo:ihi,jlo:jhi)) * invdxdy
 
         idiags%data = one / idiags%data
 
@@ -1991,7 +2006,6 @@ contains
 
 
     ! ------------------------------------------------------------------------------
-    ! TODO: This is the Jacobi method! Need to create correct GS iteration.
     ! ------------------------------------------------------------------------------
     subroutine relax_gs (phi, rhs, geo, bc, homog, invdiags, &
                          omega, tol, maxiters, redblack, zerophi, verbosity)
@@ -2015,6 +2029,14 @@ contains
         real(dp)                        :: newphi, sum
         integer                         :: ilo, ihi, i, imin
         integer                         :: jlo, jhi, j
+
+        real(dp)                        :: lxx, lyy, lxy, lyx, lphi
+        real(dp)                        :: pe, pn, pw, ps
+        real(dp)                        :: pne, pnw, psw, pse
+        real(dp)                        :: gxxe, gxxw, gxye, gxyw
+        real(dp)                        :: gyyn, gyys, gyxn, gyxs
+        real(dp)                        :: xxscale, yyscale, xyscale
+
 
         ilo = rhs%valid%ilo
         ihi = rhs%valid%ihi
@@ -2092,19 +2114,65 @@ contains
             else
                 ! Update phi via standard Gauss-Seidel
                 if (omega .eq. one) then
-                    phi%data(ilo:ihi,jlo:jhi) = phi%data(ilo:ihi,jlo:jhi) &
-                                              + r%data(ilo:ihi,jlo:jhi) * invdiags%data(ilo:ihi,jlo:jhi)
-                else
+                !     phi%data(ilo:ihi,jlo:jhi) = phi%data(ilo:ihi,jlo:jhi) &
+                !                               + r%data(ilo:ihi,jlo:jhi) * invdiags%data(ilo:ihi,jlo:jhi)
+                ! else
+                    call fill_ghosts (phi, bc, geo, .true., .false.)
+
+                    xxscale = one / (geo%dx**2)
+                    yyscale = one / (geo%dy**2)
+                    xyscale = one / (geo%dx*geo%dy)
+
                     do j = jlo, jhi
+
+                        ! ! Lower x boundary
+                        ! i = ilo
+
+                        ! Interior
                         do i = ilo, ihi
-                            newphi = phi%data(i,j) + r%data(i,j) * invdiags%data(i,j)
+                            pe = phi%data(i+1,j  )
+                            pw = phi%data(i-1,j  )
+                            pn = phi%data(i  ,j+1)
+                            ps = phi%data(i  ,j-1)
+
+                            pne = phi%data(i+1,j+1)
+                            pnw = phi%data(i-1,j+1)
+                            pse = phi%data(i+1,j-1)
+                            psw = phi%data(i-1,j-1)
+
+                            gxxe = geo%Jgup_xx%data(i+1,j)
+                            gxxw = geo%Jgup_xx%data(i  ,j)
+
+                            gxye = geo%Jgup_xy%data(i+1,j)
+                            gxyw = geo%Jgup_xy%data(i  ,j)
+
+                            gyyn = geo%Jgup_yy%data(i,j+1)
+                            gyys = geo%Jgup_yy%data(i,j  )
+
+                            gyxn = geo%Jgup_yx%data(i,j+1)
+                            gyxs = geo%Jgup_yx%data(i,j  )
+
+                            lxx = gxxe*pe + gxxw*pw
+                            lyy = gyyn*pn + gyys*ps
+                            lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
+                            lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+
+                            lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+
+                            newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
                             phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
                         enddo
+
+                        ! ! Upper x boundary
+                        ! i = ihi
+
                     enddo
                 endif
             endif
 
             ! Compute new residual
+            ! TODO: Once this function has been corrected,
+            ! this can move inside the i(tol>0) block.
             call compute_residual (r, rhs, phi, geo, bc, .true.)
 
             if (tol .gt. zero) then
