@@ -2118,7 +2118,7 @@ contains
 
                 xxscale = one / (geo%dx**2)
                 yyscale = one / (geo%dy**2)
-                xyscale = one / (geo%dx*geo%dy)
+                xyscale = fourth / (geo%dx*geo%dy)
 
                 ! Lower x boundary (avoid west), lower y boundary (avoid south)
                 j = jlo
