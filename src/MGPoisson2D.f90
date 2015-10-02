@@ -1660,12 +1660,14 @@ contains
     ! invDiags must be prepared (allocated and box set) prior to call.
     ! NOTE: This assumes the Laplacian is not scaling by 1/J.
     ! --------------------------------------------------------------------------
-    pure subroutine compute_inverse_diags (idiags, geo)
+    subroutine compute_inverse_diags (idiags, geo)
         type(box_data), intent(inout) :: idiags
         type(geo_data), intent(in)    :: geo
 
         real(dp)                      :: invdxsq, invdysq, invdxdy
         integer                       :: ilo, ihi, jlo, jhi
+
+        print*, 'compute_inverse_diags is out-dated.'
 
         invdxsq = -one / (idiags%valid%dx**2)
         invdysq = -one / (idiags%valid%dy**2)
@@ -1688,18 +1690,19 @@ contains
 
     ! --------------------------------------------------------------------------
     ! --------------------------------------------------------------------------
-    pure subroutine compute_inverse_diags2 (invdiags, geo, bc)
+    pure subroutine compute_invdiags (invdiags, geo, bc)
         type(box_data), intent(inout) :: invdiags
         type(geo_data), intent(in)    :: geo
         type(bdry_data), intent(in)   :: bc
 
         integer                       :: ilo, ihi, jlo, jhi, i, j
         real(dp)                      :: xxscale, yyscale, xyscale
+        real(dp)                      :: p,pe,pn,pw,ps
+        real(dp)                      :: ee,en,ew,es
+        real(dp)                      :: ene,enw,esw,ese
         real(dp)                      :: gxxe,gxxw,gxye,gxyw
         real(dp)                      :: gyyn,gyys,gyxn,gyxs
         real(dp)                      :: lxx,lxy,lyy,lyx
-
-        real(dp) :: p,pe,pn,pw,ps,pne,pnw,psw,pse
 
         ilo = invdiags%valid%ilo
         ihi = invdiags%valid%ihi
@@ -1710,20 +1713,25 @@ contains
         yyscale = one / (geo%dy**2)
         xyscale = fourth / (geo%dx*geo%dy)
 
+        p  = one
+        pe = zero
+        pw = zero
+        pn = zero
+        ps = zero
+
         ! Lower x boundary (avoid west), lower y boundary (avoid south)
         j = jlo
         i = ilo
 
-        p  = one
-        pe = zero
-        pw = zero !two*p-pe
-        pn = zero
-        ps = zero !two*p-pn
+        ee = zero
+        en = zero
+        ew = three*(p-ee)+zero !two*p-ee
+        es = three*(p-en)+zero !two*p-en
 
-        pne = zero
-        pnw = two*pn-pne
-        pse = two*pe-pne
-        psw = half*((two*ps-pse)+(two*pw-pnw))
+        ene = zero
+        enw = three*(en-ene)+zero !two*en-ene
+        ese = three*(ee-ene)+zero !two*ee-ene
+        esw = half*((three*(es-ese)+zero)+(three*(ew-enw)+zero)) !half*((two*es-ese)+(two*ew-enw))
 
         gxxe = geo%Jgup_xx%data(i+1,j)
         gxxw = geo%Jgup_xx%data(i  ,j)
@@ -1748,22 +1756,21 @@ contains
 
         lxx = gxxe*(pe-p) - gxxw*(p-pw)
         lyy = gyyn*(pn-p) - gyys*(p-ps)
-        lxy = gxye*(pne-pse+pn-ps) - gxyw*(pn-ps+pnw-psw)
-        lyx = gyxn*(pne-pnw+pe-pw) - gyxs*(pe-pw+pse-psw)
+        lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
+        lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
         invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
 
         ! Interior to x, lower y boundary (avoid south)
         do i = ilo+1, ihi-1
-            p  = one
-            pe = zero
-            pw = zero
-            pn = zero
-            ps = zero !two*p-pn
+            ee = zero
+            ew = zero
+            en = zero
+            es = three*(p-en)+zero !two*p-en
 
-            pne = zero
-            pnw = zero
-            pse = two*pe-pne
-            psw = two*pw-pnw
+            ene = zero
+            enw = zero
+            ese = three*(ee-ene)+zero !two*ee-ene
+            esw = three*(ew-enw)+zero !two*ew-enw
 
             gxxe = geo%Jgup_xx%data(i+1,j)
             gxxw = geo%Jgup_xx%data(i  ,j)
@@ -1784,24 +1791,23 @@ contains
 
             lxx = gxxe*(pe-p) - gxxw*(p-pw)
             lyy = gyyn*(pn-p) - gyys*(p-ps)
-            lxy = gxye*(pne-pse+pn-ps) - gxyw*(pn-ps+pnw-psw)
-            lyx = gyxn*(pne-pnw+pe-pw) - gyxs*(pe-pw+pse-psw)
+            lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
+            lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
             invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
         enddo !i
 
         ! Upper x boundary (avoid east), lower y boundary (avoid south)
         i = ihi
 
-        p  = one
-        pw = zero
-        pe = zero !two*p-pw
-        pn = zero
-        ps = zero !two*p-pn
+        ew = zero
+        en = zero
+        ee = three*(p-ew)+zero !two*p-ew
+        es = three*(p-en)+zero !two*p-en
 
-        pnw = zero
-        pne = two*pn-pnw
-        psw = two*pw-pnw
-        pse = half*((two*ps-psw)+(two*pe-pne))
+        enw = zero
+        ene = three*(pn-enw)+zero !two*pn-enw
+        esw = three*(pw-enw)+zero !two*pw-enw
+        ese = half*((three*(es-esw)+zero)+(three*(ee-ene)+zero)) !half*((two*es-esw)+(two*ee-ene))
 
         gxxe = geo%Jgup_xx%data(i+1,j)
         gxxw = geo%Jgup_xx%data(i  ,j)
@@ -1826,8 +1832,8 @@ contains
 
         lxx = gxxe*(pe-p) - gxxw*(p-pw)
         lyy = gyyn*(pn-p) - gyys*(p-ps)
-        lxy = gxye*(pne-pse+pn-ps) - gxyw*(pn-ps+pnw-psw)
-        lyx = gyxn*(pne-pnw+pe-pw) - gyxs*(pe-pw+pse-psw)
+        lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
+        lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
         invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
 
 
@@ -1836,16 +1842,15 @@ contains
             ! Lower x boundary (avoid west), interior to y
             i = ilo
 
-            p  = one
-            pe = zero
-            pw = zero !two*p-pe
-            pn = zero
-            ps = zero
+            ee = zero
+            en = zero
+            es = zero
+            ew = three*(p-ee)+zero !two*p-ee
 
-            pne = zero
-            pnw = two*pn-pne
-            pse = zero
-            psw = two*ps-pse
+            ene = zero
+            ese = zero
+            enw = three*(en-ene)+zero !two*en-ene
+            esw = three*(es-ese)+zero !two*es-ese
 
             gxxe = geo%Jgup_xx%data(i+1,j)
             gxxw = geo%Jgup_xx%data(i  ,j)
@@ -1866,22 +1871,21 @@ contains
 
             lxx = gxxe*(pe-p) - gxxw*(p-pw)
             lyy = gyyn*(pn-p) - gyys*(p-ps)
-            lxy = gxye*(pne-pse+pn-ps) - gxyw*(pn-ps+pnw-psw)
-            lyx = gyxn*(pne-pnw+pe-pw) - gyxs*(pe-pw+pse-psw)
+            lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
+            lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
             invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
 
             ! Interior to x and y
             do i = ilo+1, ihi-1
-                p  = one
-                pe = zero
-                pw = zero
-                pn = zero
-                ps = zero
+                ee = zero
+                ew = zero
+                en = zero
+                es = zero
 
-                pne = zero
-                pnw = zero
-                pse = zero
-                psw = zero
+                ene = zero
+                enw = zero
+                ese = zero
+                esw = zero
 
                 gxxe = geo%Jgup_xx%data(i+1,j)
                 gxxw = geo%Jgup_xx%data(i  ,j)
@@ -1897,24 +1901,23 @@ contains
 
                 lxx = gxxe*(pe-p) - gxxw*(p-pw)
                 lyy = gyyn*(pn-p) - gyys*(p-ps)
-                lxy = gxye*(pne-pse+pn-ps) - gxyw*(pn-ps+pnw-psw)
-                lyx = gyxn*(pne-pnw+pe-pw) - gyxs*(pe-pw+pse-psw)
+                lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
+                lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
                 invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
             enddo !i
 
             ! Upper x boundary (avoid east), interior to y
             i = ihi
 
-            p  = one
-            pw = zero
-            pe = zero !two*p-pw
-            ps = zero
-            pn = zero
+            ew = zero
+            en = zero
+            es = zero
+            ee = three*(p-ew)+zero !two*p-ew
 
-            pnw = zero
-            pne = two*pn-pnw
-            psw = zero
-            pse = two*ps-psw
+            enw = zero
+            esw = zero
+            ene = three*(en-enw)+zero !two*en-enw
+            ese = three*(es-esw)+zero !two*es-esw
 
             gxxe = geo%Jgup_xx%data(i+1,j)
             gxxw = geo%Jgup_xx%data(i  ,j)
@@ -1935,8 +1938,8 @@ contains
 
             lxx = gxxe*(pe-p) - gxxw*(p-pw)
             lyy = gyyn*(pn-p) - gyys*(p-ps)
-            lxy = gxye*(pne-pse+pn-ps) - gxyw*(pn-ps+pnw-psw)
-            lyx = gyxn*(pne-pnw+pe-pw) - gyxs*(pe-pw+pse-psw)
+            lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
+            lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
             invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
         enddo !j
 
@@ -1947,16 +1950,15 @@ contains
         ! Lower x boundary (avoid west), upper y boundary (avoid north)
         i = ilo
 
-        p  = one
-        pe = zero
-        pw = zero !two*p-pe
-        ps = zero
-        pn = zero !two*p-ps
+        ee = zero
+        es = zero
+        ew = three*(p-ee)+zero !two*p-ee
+        en = three*(p-es)+zero !two*p-es
 
-        pse = zero
-        pne = two*pe-pse
-        psw = two*ps-pse
-        pnw = half*((two*pw-psw)+(two*pn-pne))
+        ese = zero
+        ene = three*(ee-ese)+zero !two*ee-ese
+        esw = three*(es-ese)+zero !two*es-ese
+        enw = half*((three*(ew-esw)+zero)+(three*(en-ene)+zero)) !half*((two*ew-esw)+(two*en-ene))
 
         gxxe = geo%Jgup_xx%data(i+1,j)
         gxxw = geo%Jgup_xx%data(i  ,j)
@@ -1981,22 +1983,21 @@ contains
 
         lxx = gxxe*(pe-p) - gxxw*(p-pw)
         lyy = gyyn*(pn-p) - gyys*(p-ps)
-        lxy = gxye*(pne-pse+pn-ps) - gxyw*(pn-ps+pnw-psw)
-        lyx = gyxn*(pne-pnw+pe-pw) - gyxs*(pe-pw+pse-psw)
+        lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
+        lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
         invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
 
         ! Interior to x, upper y boundary (avoid north)
         do i = ilo+1, ihi-1
-            p  = one
-            pe = zero
-            pw = zero
-            ps = zero
-            pn = zero !two*p-ps
+            ee = zero
+            ew = zero
+            es = zero
+            en = three*(p-es)+zero !two*p-es
 
-            pse = zero
-            psw = zero
-            pne = two*pe-pse
-            pnw = two*pw-psw
+            ese = zero
+            esw = zero
+            ene = three*(ee-ese)+zero !two*ee-ese
+            enw = three*(ew-esw)+zero !two*ew-esw
 
             gxxe = geo%Jgup_xx%data(i+1,j)
             gxxw = geo%Jgup_xx%data(i  ,j)
@@ -2017,24 +2018,23 @@ contains
 
             lxx = gxxe*(pe-p) - gxxw*(p-pw)
             lyy = gyyn*(pn-p) - gyys*(p-ps)
-            lxy = gxye*(pne-pse+pn-ps) - gxyw*(pn-ps+pnw-psw)
-            lyx = gyxn*(pne-pnw+pe-pw) - gyxs*(pe-pw+pse-psw)
+            lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
+            lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
             invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
         enddo !i
 
         ! Upper x boundary (avoid east), upper y boundary (avoid north)
         i = ihi
 
-        p  = one
-        pw = zero
-        pe = zero !two*p-pw
-        ps = zero
-        pn = zero !two*p-ps
+        ew = zero
+        es = zero
+        ee = three*(p-ew)+zero !two*p-ew
+        en = three*(p-es)+zero !two*p-es
 
-        psw = zero
-        pnw = two*pw-psw
-        pse = two*ps-psw
-        pne = half*((two*pn-pnw)+(two*pe-pse))
+        esw = zero
+        enw = three*(ew-esw)+zero !two*ew-esw
+        ese = three*(es-esw)+zero !two*es-esw
+        ene = half*((three*(en-enw)+zero)+(three*(ee-ese)+zero)) !half*((two*en-enw)+(two*ee-ese))
 
         gxxe = geo%Jgup_xx%data(i+1,j)
         gxxw = geo%Jgup_xx%data(i  ,j)
@@ -2059,14 +2059,14 @@ contains
 
         lxx = gxxe*(pe-p) - gxxw*(p-pw)
         lyy = gyyn*(pn-p) - gyys*(p-ps)
-        lxy = gxye*(pne-pse+pn-ps) - gxyw*(pn-ps+pnw-psw)
-        lyx = gyxn*(pne-pnw+pe-pw) - gyxs*(pe-pw+pse-psw)
+        lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
+        lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
         invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
 
         ! Invert the diag values
         invdiags%data = one / invdiags%data
 
-    end subroutine compute_inverse_diags2
+    end subroutine compute_invdiags
 
 
     ! ------------------------------------------------------------------------------
@@ -2086,6 +2086,8 @@ contains
         real(dp)                      :: scale
         integer                       :: ilo, ihi, jlo, jhi
         integer                       :: nodedir
+
+        print*, 'compute_pd is out-dated.'
 
         ilo = phi%valid%ilo
         ihi = phi%valid%ihi
@@ -2225,13 +2227,15 @@ contains
 
         integer                       :: ilo, ihi, jlo, jhi
 
+        print*, 'compute_grad is out-dated.'
+
         ilo = phi%valid%ilo
         ihi = phi%valid%ihi
         jlo = phi%valid%jlo
         jhi = phi%valid%jhi
 
         ! Fill ghosts
-        ! call fill_ghosts (phi, bc, geo, homog, .false.)
+        call fill_ghosts (phi, bc, geo, homog, .false.)
 
         ! Compute xflux...
         call compute_pd (xflux, phi, 1)
@@ -2290,55 +2294,6 @@ contains
         type(geo_data), intent(in)    :: geo
         type(bdry_data), intent(in)   :: bc
         logical, intent(in)           :: homog
-        logical, intent(in), optional :: opt_jscale
-
-        type(box_data)                :: xflux, yflux
-        type(box_data)                :: xwk, ywk
-        integer                       :: ilo, ihi, jlo, jhi
-
-        ! Allocate scratch space
-        call define_box_data (xflux, phi%valid, 0, 0, BD_NODE, BD_CELL)
-        call define_box_data (yflux, phi%valid, 0, 0, BD_CELL, BD_NODE)
-        call define_box_data (xwk, xflux)
-        call define_box_data (ywk, yflux)
-
-        ! Compute Div[Grad[phi]]
-        call compute_grad (xflux, yflux, phi, geo, bc, homog, xwk, ywk)
-        call compute_div (lap, xflux, yflux)
-
-        ! Scale by 1/J if necessary.
-        if (present(opt_jscale)) then
-            if (opt_jscale) then
-                ilo = phi%valid%ilo
-                ihi = phi%valid%ihi
-                jlo = phi%valid%jlo
-                jhi = phi%valid%jhi
-
-                lap%data(ilo:ihi,jlo:jhi) = lap%data(ilo:ihi,jlo:jhi) &
-                                          / geo%J%data(ilo:ihi,jlo:jhi)
-            endif
-        endif
-
-        ! Free memory
-        call undefine_box_data (xflux)
-        call undefine_box_data (yflux)
-        call undefine_box_data (xwk)
-        call undefine_box_data (ywk)
-
-    end subroutine compute_laplacian
-
-
-    ! ------------------------------------------------------------------------------
-    ! If opt_jscale is false (default), this function will not scale the result
-    ! by 1/J. Note that a true Laplacian should do this.
-    ! ------------------------------------------------------------------------------
-    subroutine compute_laplacian2 (lap, phi, geo, bc, homog, invdiags, opt_jscale)
-        type(box_data), intent(inout) :: lap
-        type(box_data), intent(inout) :: phi
-        type(geo_data), intent(in)    :: geo
-        type(bdry_data), intent(in)   :: bc
-        logical, intent(in)           :: homog
-        type(box_data), intent(in)    :: invdiags
         logical, intent(in), optional :: opt_jscale
 
         logical, parameter            :: neum_ghosts = .false.
@@ -2412,7 +2367,7 @@ contains
         lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
 
         ! Interior to x, lower y boundary (avoid south)
-        do i = ilo, ihi
+        do i = ilo+1, ihi-1
             p  = phi%data(i  ,j  )
             pe = phi%data(i+1,j  )
             pw = phi%data(i-1,j  )
@@ -2545,7 +2500,7 @@ contains
             lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
 
             ! Interior to x and y
-            do i = ilo, ihi
+            do i = ilo+1, ihi-1
                 p  = phi%data(i  ,j  )
                 pe = phi%data(i+1,j  )
                 pw = phi%data(i-1,j  )
@@ -2675,7 +2630,7 @@ contains
         lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
 
         ! Interior to x, upper y boundary (avoid north)
-        do i = ilo, ihi
+        do i = ilo+1, ihi-1
             p  = phi%data(i  ,j  )
             pe = phi%data(i+1,j  )
             pw = phi%data(i-1,j  )
@@ -2770,7 +2725,7 @@ contains
             endif
         endif
 
-    end subroutine compute_laplacian2
+    end subroutine compute_laplacian
 
 
     ! ------------------------------------------------------------------------------
