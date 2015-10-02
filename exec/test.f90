@@ -143,19 +143,19 @@ program test
     ! enddo
     ! print*
 
-    ! ! Test 7: Laplacian
-    ! errnorm = bogus_val
-    ! do r = 1, maxr
-    !     errnorm(r) = test_laplacian (geo(r))
-    ! enddo
-    ! call compute_conv_rate (rate, errnorm)
-    ! print*, 'Test 7: Laplacian'
-    ! print*, 'Error norm                rate'
-    ! print*, errnorm(1)
-    ! do r = 2, maxr
-    !     print*, errnorm(r), rate(r-1)
-    ! enddo
-    ! print*
+    ! Test 7: Laplacian
+    errnorm = bogus_val
+    do r = 1, maxr
+        errnorm(r) = test_laplacian (geo(r))
+    enddo
+    call compute_conv_rate (rate, errnorm)
+    print*, 'Test 7: Laplacian'
+    print*, 'Error norm                rate'
+    print*, errnorm(1)
+    do r = 2, maxr
+        print*, errnorm(r), rate(r-1)
+    enddo
+    print*
 
     ! ! Test 8: Restriction
     ! errnorm = bogus_val
@@ -171,19 +171,19 @@ program test
     ! enddo
     ! print*
 
-    ! Test 9: Prolongation
-    errnorm = bogus_val
-    do r = 1, maxr
-        errnorm(r) = test_prolong (geo(r))
-    enddo
-    call compute_conv_rate (rate, errnorm)
-    print*, 'Test 9: Prolongation'
-    print*, 'Error norm                rate'
-    print*, errnorm(1)
-    do r = 2, maxr
-        print*, errnorm(r), rate(r-1)
-    enddo
-    print*
+    ! ! Test 9: Prolongation
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_prolong (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 9: Prolongation'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
+    ! print*
 
     ! ! Test 10: Solver test
     ! errnorm = bogus_val
@@ -199,10 +199,10 @@ program test
     ! enddo
     ! print*
 
-    print*, 'Test 10: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
-    errnorm(maxr) = test_solver (geo(maxr))
-    print*, 'Error norm = ', errnorm(maxr)
-    print*
+    ! print*, 'Test 10: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    ! errnorm(maxr) = test_solver (geo(maxr))
+    ! print*, 'Error norm = ', errnorm(maxr)
+    ! print*
 
     ! Test 11: Projection
     ! errnorm = bogus_val
@@ -1710,6 +1710,7 @@ contains
         type(box_data)             :: phi
         type(box_data)             :: lphi
         type(box_data)             :: soln
+        type(box_data)             :: invdiags
         type(bdry_data)            :: bc
 
         valid = geo%J%valid
@@ -1779,9 +1780,6 @@ contains
         !                        BCMODE_NONUNIFORM, &    ! ylo
         !                        BCMODE_NONUNIFORM)      ! yhi
 
-        ! ! kx = (valid%nx/2-2) * pi / L
-        ! ! ky = (valid%ny/2-2) * pi / L
-
         ! xp => bdx_x%data(ilo,:)
         ! yp => bdy_x%data(ilo,:)
         ! bc%data_xlo = -kx * sin(kx*xp) * cos(ky*yp)
@@ -1809,10 +1807,14 @@ contains
         call define_box_data (soln, valid, 0, 0, BD_CELL, BD_CELL)
         soln%data(ilo:ihi,jlo:jhi) = -(kx**2+ky**2) * phi%data(ilo:ihi,jlo:jhi)
         soln%data(ilo:ihi,jlo:jhi) = soln%data(ilo:ihi,jlo:jhi) * geo%J%data(ilo:ihi,jlo:jhi)
+                ! call compute_laplacian (soln, phi, geo, bc, homog)
 
         ! Set up RHS
         call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
-        call compute_laplacian (lphi, phi, geo, bc, homog)
+        call define_box_data (invdiags, valid, 0, 0, BD_CELL, BD_CELL)
+        call compute_inverse_diags2 (invdiags, geo, bc)
+        call compute_laplacian2 (lphi, phi, geo, bc, homog, invdiags)
+        ! call compute_laplacian (lphi, phi, geo, bc, homog)
 
         ! Compute norm
         lphi%data = soln%data - lphi%data
@@ -1820,6 +1822,7 @@ contains
 
         ! Free memory
         call undefine_box_data (phi)
+        call undefine_box_data (invdiags)
         call undefine_box_data (lphi)
         call undefine_box_data (soln)
         call undefine_box_data (bdx)
