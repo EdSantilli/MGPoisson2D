@@ -1807,7 +1807,6 @@ contains
         call define_box_data (soln, valid, 0, 0, BD_CELL, BD_CELL)
         soln%data(ilo:ihi,jlo:jhi) = -(kx**2+ky**2) * phi%data(ilo:ihi,jlo:jhi)
         soln%data(ilo:ihi,jlo:jhi) = soln%data(ilo:ihi,jlo:jhi) * geo%J%data(ilo:ihi,jlo:jhi)
-                ! call compute_laplacian (soln, phi, geo, bc, homog)
 
         ! Set up RHS
         call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)

@@ -54,6 +54,7 @@ module precision
     real(dp), parameter :: half      = one / two
     real(dp), parameter :: third     = one / three
     real(dp), parameter :: fourth    = one / four
+    real(dp), parameter :: fifth     = one / five
 
     real(dp), parameter :: threehalves  = three / two
     real(dp), parameter :: threefourths = three / four
@@ -882,10 +883,10 @@ contains
         logical, intent(in)           :: homog
         logical, intent(in), optional :: do_neum_opt
 
-        integer, parameter            :: diri_order_xlo = 2
-        integer, parameter            :: diri_order_xhi = 2
-        integer, parameter            :: diri_order_ylo = 2
-        integer, parameter            :: diri_order_yhi = 2
+        integer, parameter            :: diri_order_xlo = 3
+        integer, parameter            :: diri_order_xhi = 3
+        integer, parameter            :: diri_order_ylo = 3
+        integer, parameter            :: diri_order_yhi = 3
 
         integer  :: xlo, xhi, ylo, yhi
         integer  :: ilo, ihi, jlo, jhi
@@ -1025,7 +1026,6 @@ contains
                             else
                                 phi%data(ilo-1,jlo:jhi) = two*bcd%data_xlo(jlo:jhi) - phi%data(ilo,jlo:jhi)
                             endif
-
                         case (2)
                             if (homog) then
                                 phi%data(ilo-1, jlo:jhi) = third*(-six*phi%data(ilo, jlo:jhi) + phi%data(ilo+1, jlo:jhi))
@@ -1039,7 +1039,23 @@ contains
                                                                   - six*phi%data(ilo, jlo:jhi) &
                                                                   + phi%data(ilo+1, jlo:jhi))
                             endif
-
+                        case (3)
+                            if (homog) then
+                                phi%data(ilo-1, jlo:jhi) = fifth*(- fifteen*phi%data(ilo  , jlo:jhi) &
+                                                                  -         phi%data(ilo+2, jlo:jhi)) &
+                                                         + phi%data(ilo+1, jlo:jhi)
+                            else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                                bcval = bcd%data_xlo(1)
+                                phi%data(ilo-1, jlo:jhi) = fifth*(  sixteen*bcval &
+                                                                  - fifteen*phi%data(ilo  , jlo:jhi) &
+                                                                  -         phi%data(ilo+2, jlo:jhi)) &
+                                                         + phi%data(ilo+1, jlo:jhi)
+                            else
+                                phi%data(ilo-1, jlo:jhi) = fifth*(  sixteen*bcd%data_xlo(jlo:jhi) &
+                                                                  - fifteen*phi%data(ilo  , jlo:jhi) &
+                                                                  -         phi%data(ilo+2, jlo:jhi)) &
+                                                         + phi%data(ilo+1, jlo:jhi)
+                            endif
                         case default
                             print*, 'fill_ghosts: Bad diri_order_xlo'
                     end select
@@ -1167,8 +1183,24 @@ contains
                                                                   - six*phi%data(ihi, jlo:jhi) &
                                                                   + phi%data(ihi-1, jlo:jhi))
                             endif
-
-                        case default
+                        case (3)
+                             if (homog) then
+                                phi%data(ihi+1, jlo:jhi) = fifth*(- fifteen*phi%data(ihi  , jlo:jhi) &
+                                                                  -         phi%data(ihi-2, jlo:jhi)) &
+                                                         + phi%data(ihi-1, jlo:jhi)
+                            else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                                bcval = bcd%data_xhi(1)
+                                phi%data(ihi+1, jlo:jhi) = fifth*(  sixteen*bcval &
+                                                                  - fifteen*phi%data(ihi  , jlo:jhi) &
+                                                                  -         phi%data(ihi-2, jlo:jhi)) &
+                                                         + phi%data(ihi-1, jlo:jhi)
+                            else
+                                phi%data(ihi+1, jlo:jhi) = fifth*(  sixteen*bcd%data_xhi(jlo:jhi) &
+                                                                  - fifteen*phi%data(ihi  , jlo:jhi) &
+                                                                  -         phi%data(ihi-2, jlo:jhi)) &
+                                                         + phi%data(ihi-1, jlo:jhi)
+                            endif
+                       case default
                             print*, 'fill_ghosts: Bad diri_order_xhi'
                     end select
 
@@ -1298,7 +1330,23 @@ contains
                                                                   - six*phi%data(ilo:ihi, jlo) &
                                                                   + phi%data(ilo:ihi, jlo+1))
                             endif
-
+                        case (3)
+                            if (homog) then
+                                phi%data(ilo:ihi, jlo-1) = fifth*(- fifteen*phi%data(ilo:ihi, jlo) &
+                                                                  -         phi%data(ilo:ihi, jlo+2)) &
+                                                         + phi%data(ilo:ihi, jlo+1)
+                            else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                                bcval = bcd%data_ylo(1)
+                                phi%data(ilo:ihi, jlo-1) = fifth*(  sixteen*bcval &
+                                                                  - fifteen*phi%data(ilo:ihi, jlo) &
+                                                                  -         phi%data(ilo:ihi, jlo+2)) &
+                                                         + phi%data(ilo:ihi, jlo+1)
+                            else
+                                phi%data(ilo:ihi, jlo-1) = fifth*(  sixteen*bcd%data_ylo(jlo:jhi) &
+                                                                  - fifteen*phi%data(ilo:ihi, jlo) &
+                                                                  -         phi%data(ilo:ihi, jlo+2)) &
+                                                         + phi%data(ilo:ihi, jlo+1)
+                            endif
                         case default
                             print*, 'fill_ghosts: Bad diri_order_ylo'
                     end select
@@ -1427,7 +1475,23 @@ contains
                                                                   - six*phi%data(ilo:ihi, jhi) &
                                                                   + phi%data(ilo:ihi, jhi-1))
                             endif
-
+                        case (3)
+                            if (homog) then
+                                phi%data(ilo:ihi, jhi+1) = fifth*(- fifteen*phi%data(ilo:ihi, jhi) &
+                                                                  -         phi%data(ilo:ihi, jhi-2)) &
+                                                         + phi%data(ilo:ihi, jhi-1)
+                            else if (bcd%mode_xlo .eq. BCMODE_UNIFORM) then
+                                bcval = bcd%data_yhi(1)
+                                phi%data(ilo:ihi, jhi+1) = fifth*(  sixteen*bcval &
+                                                                  - fifteen*phi%data(ilo:ihi, jhi) &
+                                                                  -         phi%data(ilo:ihi, jhi-2)) &
+                                                         + phi%data(ilo:ihi, jhi-1)
+                            else
+                                phi%data(ilo:ihi, jhi+1) = fifth*(  sixteen*bcd%data_yhi(jlo:jhi) &
+                                                                  - fifteen*phi%data(ilo:ihi, jhi) &
+                                                                  -         phi%data(ilo:ihi, jhi-2)) &
+                                                         + phi%data(ilo:ihi, jhi-1)
+                            endif
                         case default
                             print*, 'fill_ghosts: Bad diri_order_yhi'
                     end select
@@ -2277,7 +2341,7 @@ contains
         type(box_data), intent(in)    :: invdiags
         logical, intent(in), optional :: opt_jscale
 
-        logical, parameter            :: neum_ghosts = .true.
+        logical, parameter            :: neum_ghosts = .false.
 
         integer                       :: ilo, ihi, jlo, jhi, i, j
         real(dp)                      :: xxscale, yyscale, xyscale
@@ -2298,7 +2362,7 @@ contains
         xyscale = fourth / (geo%dx*geo%dy)
 
         ! Fill ghost cells (except at Neum BCs)
-        ! call fill_ghosts (phi, bc, geo, homog, neum_ghosts)
+        call fill_ghosts (phi, bc, geo, homog, neum_ghosts)
 
         ! Lower x boundary (avoid west), lower y boundary (avoid south)
         j = jlo
