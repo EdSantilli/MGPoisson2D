@@ -2087,6 +2087,13 @@ contains
         integer                       :: ilo, ihi, jlo, jhi
         integer                       :: nodedir
 
+        integer                       :: i, j
+        real(dp)                      :: p,pe,pn,pw,ps
+        real(dp)                      :: ee,en,ew,es
+        real(dp)                      :: ene,enw,esw,ese
+
+        logical, parameter            :: simple_bdry_stencil = .false.
+
         print*, 'compute_pd is out-dated.'
 
         ilo = phi%valid%ilo
@@ -2134,13 +2141,6 @@ contains
                                                           - phi%data(ilo:ihi-2,jlo+1:jhi) &
                                                           + phi%data(ilo+2:ihi,jlo:jhi-1) &
                                                           - phi%data(ilo:ihi-2,jlo:jhi-1)  )
-                ! Upper x boundary
-                pd%data(ihi,jlo+1:jhi) = scale * (  three*phi%data(ihi,jlo+1:jhi)   &
-                                                  -  four*phi%data(ihi-1,jlo+1:jhi) &
-                                                  +       phi%data(ihi-2,jlo+1:jhi) &
-                                                  + three*phi%data(ihi,jlo:jhi-1)   &
-                                                  -  four*phi%data(ihi-1,jlo:jhi-1) &
-                                                  +       phi%data(ihi-2,jlo:jhi-1)  )
 
                 ! Lower x boundary
                 pd%data(ilo,jlo+1:jhi) = -scale * (  three*phi%data(ilo,jlo+1:jhi)   &
@@ -2150,14 +2150,157 @@ contains
                                                    -  four*phi%data(ilo+1,jlo:jhi-1) &
                                                    +       phi%data(ilo+2,jlo:jhi-1)  )
 
-                ! At y boundaries...
-                ! Lower y boundary
-                pd%data(ilo:ihi,jlo) = two*pd%data(ilo:ihi,jlo+1) &
-                                     -     pd%data(ilo:ihi,jlo+2)
+                ! Upper x boundary
+                pd%data(ihi,jlo+1:jhi) = scale * (  three*phi%data(ihi,jlo+1:jhi)   &
+                                                  -  four*phi%data(ihi-1,jlo+1:jhi) &
+                                                  +       phi%data(ihi-2,jlo+1:jhi) &
+                                                  + three*phi%data(ihi,jlo:jhi-1)   &
+                                                  -  four*phi%data(ihi-1,jlo:jhi-1) &
+                                                  +       phi%data(ihi-2,jlo:jhi-1)  )
 
-                ! Upper y boundary
-                pd%data(ilo:ihi,jhi+1) = two*pd%data(ilo:ihi,jhi) &
-                                       -     pd%data(ilo:ihi,jhi-1)
+                ! At y boundaries...
+                if (simple_bdry_stencil) then
+                    ! Lower y boundary
+                    pd%data(ilo:ihi,jlo) = three*(  pd%data(ilo:ihi,jlo+1)    &
+                                                  - pd%data(ilo:ihi,jlo+2)  ) &
+                                         + pd%data(ilo:ihi,jlo+3)
+
+                    ! Upper y boundary
+                    pd%data(ilo:ihi,jhi+1) = three*(  pd%data(ilo:ihi,jhi)      &
+                                                    - pd%data(ilo:ihi,jhi-1)  ) &
+                                           + pd%data(ilo:ihi,jhi-2)
+                else
+                    ! Lower x boundary (avoid west), lower y boundary (avoid south)
+                    j = jlo
+                    i = ilo
+
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ee = phi%data(i+1,j  )
+                    en = phi%data(i  ,j+1)
+                    ew = three*(p-ee)+phi%data(i+2,j  ) !two*p-ee
+                    es = three*(p-en)+phi%data(i  ,j+2) !two*p-en
+
+                    ene = phi%data(i+1,j+1)
+                    enw = three*(en-ene)+phi%data(i+2,j+1) !two*en-ene
+                    ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
+                    esw = half*((three*(es-ese)+phi%data(i+2,j-1))+(three*(ew-enw)+phi%data(i-1,j+2))) !half*((two*es-ese)+(two*ew-enw))
+
+                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+
+                    ! Interior to x, lower y boundary (avoid south)
+                    do i = ilo+1, ihi-1
+                        p  = phi%data(i  ,j  )
+                        pe = phi%data(i+1,j  )
+                        pw = phi%data(i-1,j  )
+                        pn = phi%data(i  ,j+1)
+                        ps = phi%data(i  ,j-1)
+
+                        ee = phi%data(i+1,j  )
+                        ew = phi%data(i-1,j  )
+                        en = phi%data(i  ,j+1)
+                        es = three*(p-en)+phi%data(i,j+2) !two*p-en
+
+                        ene = phi%data(i+1,j+1)
+                        enw = phi%data(i-1,j+1)
+                        ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
+                        esw = three*(ew-enw)+phi%data(i-1,j+2) !two*ew-enw
+
+                        pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                    enddo !i
+
+                    ! Upper x boundary (avoid east), lower y boundary (avoid south)
+                    i = ihi
+
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ew = phi%data(i-1,j  )
+                    en = phi%data(i  ,j+1)
+                    ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
+                    es = three*(p-en)+phi%data(i,j+2) !two*p-en
+
+                    enw = phi%data(i-1,j+1)
+                    ene = three*(pn-enw)+phi%data(i-2,j+1) !two*pn-enw
+                    esw = three*(pw-enw)+phi%data(i-1,j+2) !two*pw-enw
+                    ese = half*((three*(es-esw)+phi%data(i-2,j-1))+(three*(ee-ene)+phi%data(i+1,j+2))) !half*((two*es-esw)+(two*ee-ene))
+
+                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+
+
+                    ! Upper y boundary...
+                    j = jhi
+
+                    ! Lower x boundary (avoid west), upper y boundary (avoid north)
+                    i = ilo
+
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ee = phi%data(i+1,j  )
+                    es = phi%data(i  ,j-1)
+                    ew = three*(p-ee)+phi%data(i+2,j) !two*p-ee
+                    en = three*(p-es)+phi%data(i,j-2) !two*p-es
+
+                    ese = phi%data(i+1,j-1)
+                    ene = three*(ee-ese)+phi%data(i+1,j-2) !two*ee-ese
+                    esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
+                    enw = half*((three*(ew-esw)+phi%data(i-1,j-2))+(three*(en-ene)+phi%data(i+2,j+1))) !half*((two*ew-esw)+(two*en-ene))
+
+                    pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+
+                    ! Interior to x, upper y boundary (avoid north)
+                    do i = ilo+1, ihi-1
+                        p  = phi%data(i  ,j  )
+                        pe = phi%data(i+1,j  )
+                        pw = phi%data(i-1,j  )
+                        pn = phi%data(i  ,j+1)
+                        ps = phi%data(i  ,j-1)
+
+                        ee = phi%data(i+1,j  )
+                        ew = phi%data(i-1,j  )
+                        es = phi%data(i  ,j-1)
+                        en = three*(p-es)+phi%data(i,j-2) !two*p-es
+
+                        ese = phi%data(i+1,j-1)
+                        esw = phi%data(i-1,j-1)
+                        ene = three*(ee-ese)+phi%data(i+1,j-2) !two*ee-ese
+                        enw = three*(ew-esw)+phi%data(i-1,j-2) !two*ew-esw
+
+                        pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+                    enddo !i
+
+                    ! Upper x boundary (avoid east), upper y boundary (avoid north)
+                    i = ihi
+
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ew = phi%data(i-1,j  )
+                    es = phi%data(i  ,j-1)
+                    ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
+                    en = three*(p-es)+phi%data(i,j-2) !two*p-es
+
+                    esw = phi%data(i-1,j-1)
+                    enw = three*(ew-esw)+phi%data(i-1,j-2) !two*ew-esw
+                    ese = three*(es-esw)+phi%data(i-2,j-1) !two*es-esw
+                    ene = half*((three*(en-enw)+phi%data(i-2,j+1))+(three*(ee-ese)+phi%data(i+1,j-2))) !half*((two*en-enw)+(two*ee-ese))
+
+                    pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+                endif
             endif
         else
             if (nodedir .eq. dir) then
@@ -2179,13 +2322,6 @@ contains
                                                           - phi%data(ilo+1:ihi,jlo:jhi-2) &
                                                           + phi%data(ilo:ihi-1,jlo+2:jhi) &
                                                           - phi%data(ilo:ihi-1,jlo:jhi-2)  )
-                ! Upper y boundary
-                pd%data(ilo+1:ihi,jhi) = scale * (  three*phi%data(ilo+1:ihi,jhi)   &
-                                                  -  four*phi%data(ilo+1:ihi,jhi-1) &
-                                                  +       phi%data(ilo+1:ihi,jhi-2) &
-                                                  + three*phi%data(ilo:ihi-1,jhi)   &
-                                                  -  four*phi%data(ilo:ihi-1,jhi-1) &
-                                                  +       phi%data(ilo:ihi-1,jhi-2)  )
 
                 ! Lower y boundary
                 pd%data(ilo+1:ihi,jlo) = -scale * (  three*phi%data(ilo+1:ihi,jlo)   &
@@ -2195,18 +2331,372 @@ contains
                                                    -  four*phi%data(ilo:ihi-1,jlo+1) &
                                                    +       phi%data(ilo:ihi-1,jlo+2)  )
 
-                ! At x boundaries...
-                ! Lower x boundary
-                pd%data(ilo,jlo:jhi) = two*pd%data(ilo+1,jlo:jhi) &
-                                     -     pd%data(ilo+2,jlo:jhi)
+                ! Upper y boundary
+                pd%data(ilo+1:ihi,jhi) = scale * (  three*phi%data(ilo+1:ihi,jhi)   &
+                                                  -  four*phi%data(ilo+1:ihi,jhi-1) &
+                                                  +       phi%data(ilo+1:ihi,jhi-2) &
+                                                  + three*phi%data(ilo:ihi-1,jhi)   &
+                                                  -  four*phi%data(ilo:ihi-1,jhi-1) &
+                                                  +       phi%data(ilo:ihi-1,jhi-2)  )
 
-                ! Upper x boundary
-                pd%data(ihi+1,jlo:jhi) = two*pd%data(ihi,jlo:jhi) &
-                                       -     pd%data(ihi-1,jlo:jhi)
+                ! At x boundaries...
+                if (simple_bdry_stencil) then
+                    ! Lower x boundary
+                    pd%data(ilo,jlo:jhi) = three*(  pd%data(ilo+1,jlo:jhi)    &
+                                                  - pd%data(ilo+2,jlo:jhi)  ) &
+                                         + pd%data(ilo+3,jlo:jhi)
+
+                    ! Upper x boundary
+                    pd%data(ihi+1,jlo:jhi) = three*(  pd%data(ihi,jlo:jhi)      &
+                                                    - pd%data(ihi-1,jlo:jhi)  ) &
+                                           + pd%data(ihi-2,jlo:jhi)
+                else
+                    ! Lower x boundary (avoid west), lower y boundary (avoid south)
+                    i = ilo
+                    j = jlo
+
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ee = phi%data(i+1,j  )
+                    en = phi%data(i  ,j+1)
+                    ew = three*(p-ee)+phi%data(i+2,j  ) !two*p-ee
+                    es = three*(p-en)+phi%data(i  ,j+2) !two*p-en
+
+                    ene = phi%data(i+1,j+1)
+                    enw = three*(en-ene)+phi%data(i+2,j+1) !two*en-ene
+                    ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
+                    esw = half*((three*(es-ese)+phi%data(i+2,j-1))+(three*(ew-enw)+phi%data(i-1,j+2))) !half*((two*es-ese)+(two*ew-enw))
+
+                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+
+                    do j = jlo+1, jhi-1
+                        ! Lower x boundary (avoid west), interior to y
+                        p  = phi%data(i  ,j  )
+                        pe = phi%data(i+1,j  )
+                        pw = phi%data(i-1,j  )
+                        pn = phi%data(i  ,j+1)
+                        ps = phi%data(i  ,j-1)
+
+                        ee = phi%data(i+1,j  )
+                        en = phi%data(i  ,j+1)
+                        es = phi%data(i  ,j-1)
+                        ew = three*(p-ee)+phi%data(i+2,j) !two*p-ee
+
+                        ene = phi%data(i+1,j+1)
+                        ese = phi%data(i+1,j-1)
+                        enw = three*(en-ene)+phi%data(i+2,j+1) !two*en-ene
+                        esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
+
+                        pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                    enddo
+
+                    ! Lower x boundary (avoid west), upper y boundary (avoid north)
+                    j = jhi
+
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ee = phi%data(i+1,j  )
+                    es = phi%data(i  ,j-1)
+                    ew = three*(p-ee)+phi%data(i+2,j) !two*p-ee
+                    en = three*(p-es)+phi%data(i,j-2) !two*p-es
+
+                    ese = phi%data(i+1,j-1)
+                    ene = three*(ee-ese)+phi%data(i+1,j-2) !two*ee-ese
+                    esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
+                    enw = half*((three*(ew-esw)+phi%data(i-1,j-2))+(three*(en-ene)+phi%data(i+2,j+1))) !half*((two*ew-esw)+(two*en-ene))
+
+                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+
+
+                    print*, 'TODO'
+                    stop
+                endif
             endif
         endif
 
     end subroutine compute_pd
+
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    subroutine compute_pd2 (pd, phi, dir)
+        type(box_data), intent(inout) :: pd
+        type(box_data), intent(in)    :: phi
+        integer, intent(in)           :: dir
+
+        real(dp)                      :: scale
+        integer                       :: ilo, ihi, jlo, jhi
+        integer                       :: nodedir
+
+        integer                       :: i, j
+        real(dp)                      :: p,pe,pn,pw,ps
+        real(dp)                      :: ee,en,ew,es
+        real(dp)                      :: ene,enw,esw,ese
+        real(dp)                      :: gxxe,gxxw,gxye,gxyw
+        real(dp)                      :: gyyn,gyys,gyxn,gyxs
+        real(dp)                      :: lxx,lxy,lyy,lyx
+
+        ilo = phi%valid%ilo
+        ihi = phi%valid%ihi
+        jlo = phi%valid%jlo
+        jhi = phi%valid%jhi
+
+        ! Find the nodal direction
+        if ((pd%offi .ne. 0) .and. (pd%offj .ne. 0)) then
+            print*, 'compute_pd cannot handle totally cell-centered data.'
+            stop
+        endif
+
+        if ((pd%offi .eq. 0) .and. (pd%offj .eq. 0)) then
+            print*, 'compute_pd cannot handle totally nodal-centered data.'
+            stop
+        endif
+
+        if (pd%offi .eq. 0) then
+            nodedir = 1
+        else
+            nodedir = 2
+        endif
+
+
+        ! Compute xflux...
+
+        if (dir .eq. 1) then
+            if (nodedir .eq. dir) then
+                scale = one / phi%valid%dx
+                pd%data(ilo:ihi+1,jlo:jhi) = scale * (  phi%data(ilo:ihi+1,jlo:jhi) &
+                                                      - phi%data(ilo-1:ihi,jlo:jhi))
+            else
+                scale = fourth / phi%valid%dx
+
+                ! Lower x boundary (avoid west), lower y boundary (avoid south)
+                j = jlo
+                i = ilo
+
+                p  = phi%data(i  ,j  )
+                pe = phi%data(i+1,j  )
+                pw = phi%data(i-1,j  )
+                pn = phi%data(i  ,j+1)
+                ps = phi%data(i  ,j-1)
+
+                ee = phi%data(i+1,j  )
+                en = phi%data(i  ,j+1)
+                ew = three*(p-ee)+phi%data(i+2,j  ) !two*p-ee
+                es = three*(p-en)+phi%data(i  ,j+2) !two*p-en
+
+                ene = phi%data(i+1,j+1)
+                enw = three*(en-ene)+phi%data(i+2,j+1) !two*en-ene
+                ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
+                esw = half*((three*(es-ese)+phi%data(i+2,j-1))+(three*(ew-enw)+phi%data(i-1,j+2))) !half*((two*es-ese)+(two*ew-enw))
+
+                pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+
+                ! Interior to x, lower y boundary (avoid south)
+                do i = ilo+1, ihi-1
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ee = phi%data(i+1,j  )
+                    ew = phi%data(i-1,j  )
+                    en = phi%data(i  ,j+1)
+                    es = three*(p-en)+phi%data(i,j+2) !two*p-en
+
+                    ene = phi%data(i+1,j+1)
+                    enw = phi%data(i-1,j+1)
+                    ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
+                    esw = three*(ew-enw)+phi%data(i-1,j+2) !two*ew-enw
+
+                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                    pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+                enddo !i
+
+                ! Upper x boundary (avoid east), lower y boundary (avoid south)
+                i = ihi
+
+                p  = phi%data(i  ,j  )
+                pe = phi%data(i+1,j  )
+                pw = phi%data(i-1,j  )
+                pn = phi%data(i  ,j+1)
+                ps = phi%data(i  ,j-1)
+
+                ew = phi%data(i-1,j  )
+                en = phi%data(i  ,j+1)
+                ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
+                es = three*(p-en)+phi%data(i,j+2) !two*p-en
+
+                enw = phi%data(i-1,j+1)
+                ene = three*(pn-enw)+phi%data(i-2,j+1) !two*pn-enw
+                esw = three*(pw-enw)+phi%data(i-1,j+2) !two*pw-enw
+                ese = half*((three*(es-esw)+phi%data(i-2,j-1))+(three*(ee-ene)+phi%data(i+1,j+2))) !half*((two*es-esw)+(two*ee-ene))
+
+                pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+
+
+                ! Interior to y...
+                do j = jlo+1, jhi-1
+                    ! Lower x boundary (avoid west), interior to y
+                    i = ilo
+
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ee = phi%data(i+1,j  )
+                    en = phi%data(i  ,j+1)
+                    es = phi%data(i  ,j-1)
+                    ew = three*(p-ee)+phi%data(i+2,j) !two*p-ee
+
+                    ene = phi%data(i+1,j+1)
+                    ese = phi%data(i+1,j-1)
+                    enw = three*(en-ene)+phi%data(i+2,j+1) !two*en-ene
+                    esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
+
+                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                    pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+
+                    ! Interior to x and y
+                    do i = ilo+1, ihi-1
+                        p  = phi%data(i  ,j  )
+                        pe = phi%data(i+1,j  )
+                        pw = phi%data(i-1,j  )
+                        pn = phi%data(i  ,j+1)
+                        ps = phi%data(i  ,j-1)
+
+                        ee = phi%data(i+1,j  )
+                        ew = phi%data(i-1,j  )
+                        en = phi%data(i  ,j+1)
+                        es = phi%data(i  ,j-1)
+
+                        ene = phi%data(i+1,j+1)
+                        enw = phi%data(i-1,j+1)
+                        ese = phi%data(i+1,j-1)
+                        esw = phi%data(i-1,j-1)
+
+                        pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                        pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+                    enddo !i
+
+                    ! Upper x boundary (avoid east), interior to y
+                    i = ihi
+
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ew = phi%data(i-1,j  )
+                    en = phi%data(i  ,j+1)
+                    es = phi%data(i  ,j-1)
+                    ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
+
+                    enw = phi%data(i-1,j+1)
+                    esw = phi%data(i-1,j-1)
+                    ene = three*(en-enw)+phi%data(i-2,j+1) !two*en-enw
+                    ese = three*(es-esw)+phi%data(i-2,j-1) !two*es-esw
+
+                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                    pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+                enddo !j
+
+
+                ! Upper y boundary...
+                j = jhi
+
+                ! Lower x boundary (avoid west), upper y boundary (avoid north)
+                i = ilo
+
+                p  = phi%data(i  ,j  )
+                pe = phi%data(i+1,j  )
+                pw = phi%data(i-1,j  )
+                pn = phi%data(i  ,j+1)
+                ps = phi%data(i  ,j-1)
+
+                ee = phi%data(i+1,j  )
+                es = phi%data(i  ,j-1)
+                ew = three*(p-ee)+phi%data(i+2,j) !two*p-ee
+                en = three*(p-es)+phi%data(i,j-2) !two*p-es
+
+                ese = phi%data(i+1,j-1)
+                ene = three*(ee-ese)+phi%data(i+1,j-2) !two*ee-ese
+                esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
+                enw = half*((three*(ew-esw)+phi%data(i-1,j-2))+(three*(en-ene)+phi%data(i+2,j+1))) !half*((two*ew-esw)+(two*en-ene))
+
+                pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+
+                ! Interior to x, upper y boundary (avoid north)
+                do i = ilo+1, ihi-1
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ee = phi%data(i+1,j  )
+                    ew = phi%data(i-1,j  )
+                    es = phi%data(i  ,j-1)
+                    en = three*(p-es)+phi%data(i,j-2) !two*p-es
+
+                    ese = phi%data(i+1,j-1)
+                    esw = phi%data(i-1,j-1)
+                    ene = three*(ee-ese)+phi%data(i+1,j-2) !two*ee-ese
+                    enw = three*(ew-esw)+phi%data(i-1,j-2) !two*ew-esw
+
+                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                    pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+                enddo !i
+
+                ! Upper x boundary (avoid east), upper y boundary (avoid north)
+                i = ihi
+
+                p  = phi%data(i  ,j  )
+                pe = phi%data(i+1,j  )
+                pw = phi%data(i-1,j  )
+                pn = phi%data(i  ,j+1)
+                ps = phi%data(i  ,j-1)
+
+                ew = phi%data(i-1,j  )
+                es = phi%data(i  ,j-1)
+                ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
+                en = three*(p-es)+phi%data(i,j-2) !two*p-es
+
+                esw = phi%data(i-1,j-1)
+                enw = three*(ew-esw)+phi%data(i-1,j-2) !two*ew-esw
+                ese = three*(es-esw)+phi%data(i-2,j-1) !two*es-esw
+                ene = half*((three*(en-enw)+phi%data(i-2,j+1))+(three*(ee-ese)+phi%data(i+1,j-2))) !half*((two*en-enw)+(two*ee-ese))
+
+                pd%data(i,j  ) = scale*(ee-ew+ese-esw)
+                pd%data(i,j+1) = scale*(ene-enw+ee-ew)
+            endif
+        else
+            if (nodedir .eq. dir) then
+                scale = one / phi%valid%dy
+                pd%data(ilo:ihi,jlo:jhi+1) = scale * (  phi%data(ilo:ihi,jlo:jhi+1) &
+                                                      - phi%data(ilo:ihi,jlo-1:jhi)  )
+            else
+                print*,'TODO'
+                stop
+            endif
+        endif
+
+    end subroutine compute_pd2
+
 
 
     ! ------------------------------------------------------------------------------

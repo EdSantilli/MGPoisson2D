@@ -101,19 +101,19 @@ program test
     !     print*, errnorm(r), rate(r-1)
     ! enddo
 
-    ! ! Test 4: Staggered partial derivatives
-    ! errnorm = bogus_val
-    ! do r = 1, maxr
-    !     errnorm(r) = test_derivatives (geo(r))
-    ! enddo
-    ! call compute_conv_rate (rate, errnorm)
-    ! print*, 'Test 4: Staggered partial derivatives'
-    ! print*, 'Error norm                rate'
-    ! print*, errnorm(1)
-    ! do r = 2, maxr
-    !     print*, errnorm(r), rate(r-1)
-    ! enddo
-    ! print*
+    ! Test 4: Staggered partial derivatives
+    errnorm = bogus_val
+    do r = 1, maxr
+        errnorm(r) = test_derivatives (geo(r))
+    enddo
+    call compute_conv_rate (rate, errnorm)
+    print*, 'Test 4: Staggered partial derivatives'
+    print*, 'Error norm                rate'
+    print*, errnorm(1)
+    do r = 2, maxr
+        print*, errnorm(r), rate(r-1)
+    enddo
+    print*
 
     ! ! Test 5: Gradient
     ! errnorm = bogus_val
@@ -199,10 +199,10 @@ program test
     ! enddo
     ! print*
 
-    print*, 'Test 10: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
-    errnorm(maxr) = test_solver (geo(maxr))
-    print*, 'Error norm = ', errnorm(maxr)
-    print*
+    ! print*, 'Test 10: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    ! errnorm(maxr) = test_solver (geo(maxr))
+    ! print*, 'Error norm = ', errnorm(maxr)
+    ! print*
 
     ! Test 11: Projection
     ! errnorm = bogus_val
@@ -504,9 +504,9 @@ contains
         do i = ilo, ihi
             xx = x(i)
 
-            ! el(i) = zero ! Temporary, flat bottom.
+            el(i) = zero ! Temporary, flat bottom.
             ! el(i) = Hz*half*(one-xx/Lx) ! Sloped bottom (Use this one)
-            el(i) = fourth * sin(pi*xx/Lx)   ! Temporary, sinusoidal bottom.
+            ! el(i) = fourth * sin(pi*xx/Lx)   ! Temporary, sinusoidal bottom.
 
             ! if (xx .le. C1) then
             !     ! Left flat region
@@ -1362,7 +1362,6 @@ contains
         integer                    :: ilo, ihi, jlo, jhi, i, j
         real(dp)                   :: dx, dy
         type(box_data)             :: bdx, bdy
-
         type(box_data)             :: soln, state, phi
 
         valid = geo%J%valid
@@ -1393,7 +1392,8 @@ contains
         call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
         ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
         state%data = bogus_val
-        call compute_pd (state, phi, 1)
+        call compute_pd (state, phi, 2)
+        ! call compute_pd2 (state, phi, 2)
 
         ! Re-center Cartesian locations
         call undefine_box_data (bdx)
@@ -1409,12 +1409,22 @@ contains
 
         ! Define true soln
         call define_box_data (soln, state)
-        soln%data = three*bdx%data**2 * bdy%data**3
+        ! soln%data = three*bdx%data**2 * bdy%data**3
         ! soln%data = bdx%data**3 * three*bdy%data**2
+        call compute_pd2 (soln, phi, 2)
 
         ! Compute norm
         state%data = state%data - soln%data
         res = pnorm (state, state%valid, norm_type)
+
+        ! do j = jlo,jhi+1
+        !     do i = ilo,ihi
+        !         if (abs(state%data(i,j)) .ge. 1.0E-8_dp) then
+        !             print*, i, j, state%data(i,j)
+        !         endif
+        !     enddo
+        ! enddo
+        ! stop
 
         ! Free memory
         call undefine_box_data (state)
@@ -1501,50 +1511,50 @@ contains
         call fill_dxdxi (ywk, 1, 1)
         ysoln%data =  ywk%data * (-ky * cos(kx*bdx_y%data) * sin(ky*bdy_y%data)) + ysoln%data
 
-        ! ! Set BCs
-        ! call define_bdry_data (bc, valid, &
-        !                        BCTYPE_DIRI, &   ! xlo
-        !                        BCTYPE_DIRI, &   ! xhi
-        !                        BCTYPE_DIRI, &   ! ylo
-        !                        BCTYPE_DIRI, &   ! yhi
-        !                        BCMODE_NONUNIFORM, &    ! xlo
-        !                        BCMODE_NONUNIFORM, &    ! xhi
-        !                        BCMODE_NONUNIFORM, &    ! ylo
-        !                        BCMODE_NONUNIFORM)      ! yhi
-
-        ! xp => bdx_x%data(ilo,:)
-        ! yp => bdy_x%data(ilo,:)
-        ! bc%data_xlo = cos(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_x%data(ihi+1,:)
-        ! yp => bdy_x%data(ihi+1,:)
-        ! bc%data_xhi = cos(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_y%data(:,jlo)
-        ! yp => bdy_y%data(:,jlo)
-        ! bc%data_ylo = cos(kx*xp) * cos(ky*yp)
-
-        ! xp => bdx_y%data(:,jhi+1)
-        ! yp => bdy_y%data(:,jhi+1)
-        ! bc%data_yhi = cos(kx*xp) * cos(ky*yp)
-
-        ! nullify(xp)
-        ! nullify(yp)
-
-        ! Set BCs                                                             TODO: Test Neum BCs
+        ! Set BCs
         call define_bdry_data (bc, valid, &
-                               BCTYPE_NEUM, &   ! xlo
-                               BCTYPE_NEUM, &   ! xhi
-                               BCTYPE_NEUM, &   ! ylo
-                               BCTYPE_NEUM, &   ! yhi
+                               BCTYPE_DIRI, &   ! xlo
+                               BCTYPE_DIRI, &   ! xhi
+                               BCTYPE_DIRI, &   ! ylo
+                               BCTYPE_DIRI, &   ! yhi
                                BCMODE_NONUNIFORM, &    ! xlo
                                BCMODE_NONUNIFORM, &    ! xhi
                                BCMODE_NONUNIFORM, &    ! ylo
                                BCMODE_NONUNIFORM)      ! yhi
-        bc%data_xlo = xsoln%data(ilo,:)
-        bc%data_xhi = xsoln%data(ihi+1,:)
-        bc%data_ylo = ysoln%data(:,jlo)
-        bc%data_yhi = ysoln%data(:,jhi+1)
+
+        xp => bdx_x%data(ilo,:)
+        yp => bdy_x%data(ilo,:)
+        bc%data_xlo = cos(kx*xp) * cos(ky*yp)
+
+        xp => bdx_x%data(ihi+1,:)
+        yp => bdy_x%data(ihi+1,:)
+        bc%data_xhi = cos(kx*xp) * cos(ky*yp)
+
+        xp => bdx_y%data(:,jlo)
+        yp => bdy_y%data(:,jlo)
+        bc%data_ylo = cos(kx*xp) * cos(ky*yp)
+
+        xp => bdx_y%data(:,jhi+1)
+        yp => bdy_y%data(:,jhi+1)
+        bc%data_yhi = cos(kx*xp) * cos(ky*yp)
+
+        nullify(xp)
+        nullify(yp)
+
+        ! ! Set BCs                                                             TODO: Test Neum BCs
+        ! call define_bdry_data (bc, valid, &
+        !                        BCTYPE_NEUM, &   ! xlo
+        !                        BCTYPE_NEUM, &   ! xhi
+        !                        BCTYPE_NEUM, &   ! ylo
+        !                        BCTYPE_NEUM, &   ! yhi
+        !                        BCMODE_NONUNIFORM, &    ! xlo
+        !                        BCMODE_NONUNIFORM, &    ! xhi
+        !                        BCMODE_NONUNIFORM, &    ! ylo
+        !                        BCMODE_NONUNIFORM)      ! yhi
+        ! bc%data_xlo = xsoln%data(ilo,:)
+        ! bc%data_xhi = xsoln%data(ihi+1,:)
+        ! bc%data_ylo = ysoln%data(:,jlo)
+        ! bc%data_yhi = ysoln%data(:,jhi+1)
 
         ! Compute gradient
         call compute_grad (xflux, yflux, phi, geo, bc, homog, xwk, ywk)
@@ -1552,8 +1562,8 @@ contains
         ! Compute norm
         xsoln%data = xsoln%data - xflux%data
         ysoln%data = ysoln%data - yflux%data
-        ! res = pnorm (xsoln, xsoln%valid, norm_type)
-        res = pnorm (ysoln, ysoln%valid, norm_type)
+        res = pnorm (xsoln, xsoln%valid, norm_type)
+        ! res = pnorm (ysoln, ysoln%valid, norm_type)
 
         ! Free memory
         call undefine_box_data (phi)
