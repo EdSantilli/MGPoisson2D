@@ -2072,7 +2072,11 @@ contains
     ! ------------------------------------------------------------------------------
     ! Computes partial derivatives.
     ! phi is expected to be cell-centered with ghosts filled if needed.
-    ! pd is expected to be face-centered with no ghosts.
+    ! pd is expected to be face-centered. No ghosts will be filled.
+    !
+    ! This function uses the EXACT same stencils as compute_laplacian if
+    ! simple_bdry_stencil = .false., otherwise the stencils differ by O(dx^2)
+    ! at the boundaries of transverse derivatives.
     !
     ! NOTE: This function only uses ghosts if we are differentiating in the
     !       nodal direction.
@@ -2469,291 +2473,19 @@ contains
                 endif
             endif
         endif
-
     end subroutine compute_pd
-
-
-    ! ------------------------------------------------------------------------------
-    ! ------------------------------------------------------------------------------
-    subroutine compute_pd2 (pd, phi, dir)
-        type(box_data), intent(inout) :: pd
-        type(box_data), intent(in)    :: phi
-        integer, intent(in)           :: dir
-
-        real(dp)                      :: scale
-        integer                       :: ilo, ihi, jlo, jhi
-        integer                       :: nodedir
-
-        integer                       :: i, j
-        real(dp)                      :: p,pe,pn,pw,ps
-        real(dp)                      :: ee,en,ew,es
-        real(dp)                      :: ene,enw,esw,ese
-        real(dp)                      :: gxxe,gxxw,gxye,gxyw
-        real(dp)                      :: gyyn,gyys,gyxn,gyxs
-        real(dp)                      :: lxx,lxy,lyy,lyx
-
-        ilo = phi%valid%ilo
-        ihi = phi%valid%ihi
-        jlo = phi%valid%jlo
-        jhi = phi%valid%jhi
-
-        ! Find the nodal direction
-        if ((pd%offi .ne. 0) .and. (pd%offj .ne. 0)) then
-            print*, 'compute_pd cannot handle totally cell-centered data.'
-            stop
-        endif
-
-        if ((pd%offi .eq. 0) .and. (pd%offj .eq. 0)) then
-            print*, 'compute_pd cannot handle totally nodal-centered data.'
-            stop
-        endif
-
-        if (pd%offi .eq. 0) then
-            nodedir = 1
-        else
-            nodedir = 2
-        endif
-
-
-        ! Compute xflux...
-
-        if (dir .eq. 1) then
-            if (nodedir .eq. dir) then
-                scale = one / phi%valid%dx
-                pd%data(ilo:ihi+1,jlo:jhi) = scale * (  phi%data(ilo:ihi+1,jlo:jhi) &
-                                                      - phi%data(ilo-1:ihi,jlo:jhi))
-            else
-                scale = fourth / phi%valid%dx
-
-                ! Lower x boundary (avoid west), lower y boundary (avoid south)
-                j = jlo
-                i = ilo
-
-                p  = phi%data(i  ,j  )
-                pe = phi%data(i+1,j  )
-                pw = phi%data(i-1,j  )
-                pn = phi%data(i  ,j+1)
-                ps = phi%data(i  ,j-1)
-
-                ee = phi%data(i+1,j  )
-                en = phi%data(i  ,j+1)
-                ew = three*(p-ee)+phi%data(i+2,j  ) !two*p-ee
-                es = three*(p-en)+phi%data(i  ,j+2) !two*p-en
-
-                ene = phi%data(i+1,j+1)
-                enw = three*(en-ene)+phi%data(i+2,j+1) !two*en-ene
-                ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
-                esw = half*((three*(es-ese)+phi%data(i+2,j-1))+(three*(ew-enw)+phi%data(i-1,j+2))) !half*((two*es-ese)+(two*ew-enw))
-
-                pd%data(i,j  ) = scale*(ee-ew+ese-esw)
-                pd%data(i,j+1) = scale*(ene-enw+ee-ew)
-
-                ! Interior to x, lower y boundary (avoid south)
-                do i = ilo+1, ihi-1
-                    p  = phi%data(i  ,j  )
-                    pe = phi%data(i+1,j  )
-                    pw = phi%data(i-1,j  )
-                    pn = phi%data(i  ,j+1)
-                    ps = phi%data(i  ,j-1)
-
-                    ee = phi%data(i+1,j  )
-                    ew = phi%data(i-1,j  )
-                    en = phi%data(i  ,j+1)
-                    es = three*(p-en)+phi%data(i,j+2) !two*p-en
-
-                    ene = phi%data(i+1,j+1)
-                    enw = phi%data(i-1,j+1)
-                    ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
-                    esw = three*(ew-enw)+phi%data(i-1,j+2) !two*ew-enw
-
-                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
-                    pd%data(i,j+1) = scale*(ene-enw+ee-ew)
-                enddo !i
-
-                ! Upper x boundary (avoid east), lower y boundary (avoid south)
-                i = ihi
-
-                p  = phi%data(i  ,j  )
-                pe = phi%data(i+1,j  )
-                pw = phi%data(i-1,j  )
-                pn = phi%data(i  ,j+1)
-                ps = phi%data(i  ,j-1)
-
-                ew = phi%data(i-1,j  )
-                en = phi%data(i  ,j+1)
-                ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
-                es = three*(p-en)+phi%data(i,j+2) !two*p-en
-
-                enw = phi%data(i-1,j+1)
-                ene = three*(pn-enw)+phi%data(i-2,j+1) !two*pn-enw
-                esw = three*(pw-enw)+phi%data(i-1,j+2) !two*pw-enw
-                ese = half*((three*(es-esw)+phi%data(i-2,j-1))+(three*(ee-ene)+phi%data(i+1,j+2))) !half*((two*es-esw)+(two*ee-ene))
-
-                pd%data(i,j  ) = scale*(ee-ew+ese-esw)
-                pd%data(i,j+1) = scale*(ene-enw+ee-ew)
-
-
-                ! Interior to y...
-                do j = jlo+1, jhi-1
-                    ! Lower x boundary (avoid west), interior to y
-                    i = ilo
-
-                    p  = phi%data(i  ,j  )
-                    pe = phi%data(i+1,j  )
-                    pw = phi%data(i-1,j  )
-                    pn = phi%data(i  ,j+1)
-                    ps = phi%data(i  ,j-1)
-
-                    ee = phi%data(i+1,j  )
-                    en = phi%data(i  ,j+1)
-                    es = phi%data(i  ,j-1)
-                    ew = three*(p-ee)+phi%data(i+2,j) !two*p-ee
-
-                    ene = phi%data(i+1,j+1)
-                    ese = phi%data(i+1,j-1)
-                    enw = three*(en-ene)+phi%data(i+2,j+1) !two*en-ene
-                    esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
-
-                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
-                    pd%data(i,j+1) = scale*(ene-enw+ee-ew)
-
-                    ! Interior to x and y
-                    do i = ilo+1, ihi-1
-                        p  = phi%data(i  ,j  )
-                        pe = phi%data(i+1,j  )
-                        pw = phi%data(i-1,j  )
-                        pn = phi%data(i  ,j+1)
-                        ps = phi%data(i  ,j-1)
-
-                        ee = phi%data(i+1,j  )
-                        ew = phi%data(i-1,j  )
-                        en = phi%data(i  ,j+1)
-                        es = phi%data(i  ,j-1)
-
-                        ene = phi%data(i+1,j+1)
-                        enw = phi%data(i-1,j+1)
-                        ese = phi%data(i+1,j-1)
-                        esw = phi%data(i-1,j-1)
-
-                        pd%data(i,j  ) = scale*(ee-ew+ese-esw)
-                        pd%data(i,j+1) = scale*(ene-enw+ee-ew)
-                    enddo !i
-
-                    ! Upper x boundary (avoid east), interior to y
-                    i = ihi
-
-                    p  = phi%data(i  ,j  )
-                    pe = phi%data(i+1,j  )
-                    pw = phi%data(i-1,j  )
-                    pn = phi%data(i  ,j+1)
-                    ps = phi%data(i  ,j-1)
-
-                    ew = phi%data(i-1,j  )
-                    en = phi%data(i  ,j+1)
-                    es = phi%data(i  ,j-1)
-                    ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
-
-                    enw = phi%data(i-1,j+1)
-                    esw = phi%data(i-1,j-1)
-                    ene = three*(en-enw)+phi%data(i-2,j+1) !two*en-enw
-                    ese = three*(es-esw)+phi%data(i-2,j-1) !two*es-esw
-
-                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
-                    pd%data(i,j+1) = scale*(ene-enw+ee-ew)
-                enddo !j
-
-
-                ! Upper y boundary...
-                j = jhi
-
-                ! Lower x boundary (avoid west), upper y boundary (avoid north)
-                i = ilo
-
-                p  = phi%data(i  ,j  )
-                pe = phi%data(i+1,j  )
-                pw = phi%data(i-1,j  )
-                pn = phi%data(i  ,j+1)
-                ps = phi%data(i  ,j-1)
-
-                ee = phi%data(i+1,j  )
-                es = phi%data(i  ,j-1)
-                ew = three*(p-ee)+phi%data(i+2,j) !two*p-ee
-                en = three*(p-es)+phi%data(i,j-2) !two*p-es
-
-                ese = phi%data(i+1,j-1)
-                ene = three*(ee-ese)+phi%data(i+1,j-2) !two*ee-ese
-                esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
-                enw = half*((three*(ew-esw)+phi%data(i-1,j-2))+(three*(en-ene)+phi%data(i+2,j+1))) !half*((two*ew-esw)+(two*en-ene))
-
-                pd%data(i,j  ) = scale*(ee-ew+ese-esw)
-                pd%data(i,j+1) = scale*(ene-enw+ee-ew)
-
-                ! Interior to x, upper y boundary (avoid north)
-                do i = ilo+1, ihi-1
-                    p  = phi%data(i  ,j  )
-                    pe = phi%data(i+1,j  )
-                    pw = phi%data(i-1,j  )
-                    pn = phi%data(i  ,j+1)
-                    ps = phi%data(i  ,j-1)
-
-                    ee = phi%data(i+1,j  )
-                    ew = phi%data(i-1,j  )
-                    es = phi%data(i  ,j-1)
-                    en = three*(p-es)+phi%data(i,j-2) !two*p-es
-
-                    ese = phi%data(i+1,j-1)
-                    esw = phi%data(i-1,j-1)
-                    ene = three*(ee-ese)+phi%data(i+1,j-2) !two*ee-ese
-                    enw = three*(ew-esw)+phi%data(i-1,j-2) !two*ew-esw
-
-                    pd%data(i,j  ) = scale*(ee-ew+ese-esw)
-                    pd%data(i,j+1) = scale*(ene-enw+ee-ew)
-                enddo !i
-
-                ! Upper x boundary (avoid east), upper y boundary (avoid north)
-                i = ihi
-
-                p  = phi%data(i  ,j  )
-                pe = phi%data(i+1,j  )
-                pw = phi%data(i-1,j  )
-                pn = phi%data(i  ,j+1)
-                ps = phi%data(i  ,j-1)
-
-                ew = phi%data(i-1,j  )
-                es = phi%data(i  ,j-1)
-                ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
-                en = three*(p-es)+phi%data(i,j-2) !two*p-es
-
-                esw = phi%data(i-1,j-1)
-                enw = three*(ew-esw)+phi%data(i-1,j-2) !two*ew-esw
-                ese = three*(es-esw)+phi%data(i-2,j-1) !two*es-esw
-                ene = half*((three*(en-enw)+phi%data(i-2,j+1))+(three*(ee-ese)+phi%data(i+1,j-2))) !half*((two*en-enw)+(two*ee-ese))
-
-                pd%data(i,j  ) = scale*(ee-ew+ese-esw)
-                pd%data(i,j+1) = scale*(ene-enw+ee-ew)
-            endif
-        else
-            if (nodedir .eq. dir) then
-                scale = one / phi%valid%dy
-                pd%data(ilo:ihi,jlo:jhi+1) = scale * (  phi%data(ilo:ihi,jlo:jhi+1) &
-                                                      - phi%data(ilo:ihi,jlo-1:jhi)  )
-            else
-                print*,'TODO'
-                stop
-            endif
-        endif
-
-    end subroutine compute_pd2
-
 
 
     ! ------------------------------------------------------------------------------
     ! Computes J*Grad[Phi].
     ! phi is expected to be cell-centered and have at least 1 ghost layer.
-    ! *flux is expected to be face-centered with no ghosts.
+    ! *flux is expected to be face-centered. No ghosts will be filled.
     ! bc* = 0 for Neum, 1 for Diri, 2 for Periodic, 3 for CF.
     ! xwk is workspace that must be node-centered in x and cell-centered in y.
     ! ywk is workspace that must be node-centered in y and cell-centered in x.
+    !
+    ! This function uses the EXACT same stencils as compute_laplacian as long as
+    ! simple_bdry_stencil = .false. in compute_pd.
     ! ------------------------------------------------------------------------------
     subroutine compute_grad (xflux, yflux, phi, geo, bc, homog, xwk, ywk)
         type(box_data), intent(inout) :: xflux, yflux
@@ -2764,8 +2496,6 @@ contains
         type(box_data), intent(inout) :: xwk, ywk
 
         integer                       :: ilo, ihi, jlo, jhi
-
-        print*, 'compute_grad is out-dated.'
 
         ilo = phi%valid%ilo
         ihi = phi%valid%ihi
@@ -2824,7 +2554,7 @@ contains
 
     ! ------------------------------------------------------------------------------
     ! If opt_jscale is false (default), this function will not scale the result
-    ! by 1/J. Note that a true Laplacian should do this.
+    ! by 1/J. Note that a true Laplacian should scale by 1/J.
     ! ------------------------------------------------------------------------------
     subroutine compute_laplacian (lap, phi, geo, bc, homog, opt_jscale)
         type(box_data), intent(inout) :: lap
@@ -2845,6 +2575,9 @@ contains
         real(dp)                      :: gyyn,gyys,gyxn,gyxs
         real(dp)                      :: lxx,lxy,lyy,lyx
 
+        real(dp)                      :: xfe,xfw,yfn,yfs
+        real(dp)                      :: idx, idy
+
         ilo = lap%valid%ilo
         ihi = lap%valid%ihi
         jlo = lap%valid%jlo
@@ -2853,6 +2586,9 @@ contains
         xxscale = one / (geo%dx**2)
         yyscale = one / (geo%dy**2)
         xyscale = fourth / (geo%dx*geo%dy)
+
+        idx = one / geo%dx
+        idy = one / geo%dy
 
         ! Fill ghost cells (except at Neum BCs)
         call fill_ghosts (phi, bc, geo, homog, neum_ghosts)
@@ -2877,32 +2613,31 @@ contains
         ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
         esw = half*((three*(es-ese)+phi%data(i+2,j-1))+(three*(ew-enw)+phi%data(i-1,j+2))) !half*((two*es-ese)+(two*ew-enw))
 
-        gxxe = geo%Jgup_xx%data(i+1,j)
-        gxxw = geo%Jgup_xx%data(i  ,j)
-
-        gxye = geo%Jgup_xy%data(i+1,j)
-        gxyw = geo%Jgup_xy%data(i  ,j)
-
-        gyyn = geo%Jgup_yy%data(i,j+1)
-        gyys = geo%Jgup_yy%data(i,j  )
-
-        gyxn = geo%Jgup_yx%data(i,j+1)
-        gyxs = geo%Jgup_yx%data(i,j  )
+        xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+        xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+        yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+        yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
         if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-            gxxw = zero
-            gxyw = zero
+            if (homog) then
+                xfw = zero
+            else if (bc%mode_xlo .eq. BCMODE_UNIFORM) then
+                xfw = bc%data_xlo(1)
+            else
+                xfw = bc%data_xlo(j)
+            endif
         endif
         if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-            gyys = zero
-            gyxs = zero
+            if (homog) then
+                yfs = zero
+            else if (bc%mode_ylo .eq. BCMODE_UNIFORM) then
+                yfs = bc%data_ylo(1)
+            else
+                yfs = bc%data_ylo(i)
+            endif
         endif
 
-        lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        lyy = gyyn*(pn-p) - gyys*(p-ps)
-        lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
+        lap%data(i,j) = (xfe-xfw)*idx + (yfn-yfs)*idy
 
         ! Interior to x, lower y boundary (avoid south)
         do i = ilo+1, ihi-1
@@ -2922,28 +2657,22 @@ contains
             ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
             esw = three*(ew-enw)+phi%data(i-1,j+2) !two*ew-enw
 
-            gxxe = geo%Jgup_xx%data(i+1,j)
-            gxxw = geo%Jgup_xx%data(i  ,j)
-
-            gxye = geo%Jgup_xy%data(i+1,j)
-            gxyw = geo%Jgup_xy%data(i  ,j)
-
-            gyyn = geo%Jgup_yy%data(i,j+1)
-            gyys = geo%Jgup_yy%data(i,j  )
-
-            gyxn = geo%Jgup_yx%data(i,j+1)
-            gyxs = geo%Jgup_yx%data(i,j  )
+            xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+            xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+            yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+            yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
             if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-                gyys = zero
-                gyxs = zero
+                if (homog) then
+                    yfs = zero
+                else if (bc%mode_ylo .eq. BCMODE_UNIFORM) then
+                    yfs = bc%data_ylo(1)
+                else
+                    yfs = bc%data_ylo(i)
+                endif
             endif
 
-            lxx = gxxe*(pe-p) - gxxw*(p-pw)
-            lyy = gyyn*(pn-p) - gyys*(p-ps)
-            lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-            lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-            lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
+            lap%data(i,j) = (xfe-xfw)*idx + (yfn-yfs)*idy
         enddo !i
 
         ! Upper x boundary (avoid east), lower y boundary (avoid south)
@@ -2965,32 +2694,31 @@ contains
         esw = three*(pw-enw)+phi%data(i-1,j+2) !two*pw-enw
         ese = half*((three*(es-esw)+phi%data(i-2,j-1))+(three*(ee-ene)+phi%data(i+1,j+2))) !half*((two*es-esw)+(two*ee-ene))
 
-        gxxe = geo%Jgup_xx%data(i+1,j)
-        gxxw = geo%Jgup_xx%data(i  ,j)
-
-        gxye = geo%Jgup_xy%data(i+1,j)
-        gxyw = geo%Jgup_xy%data(i  ,j)
-
-        gyyn = geo%Jgup_yy%data(i,j+1)
-        gyys = geo%Jgup_yy%data(i,j  )
-
-        gyxn = geo%Jgup_yx%data(i,j+1)
-        gyxs = geo%Jgup_yx%data(i,j  )
+        xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+        xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+        yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+        yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
         if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
-            gxxe = zero
-            gxye = zero
+            if (homog) then
+                xfe = zero
+            else if (bc%mode_xhi .eq. BCMODE_UNIFORM) then
+                xfe = bc%data_xhi(1)
+            else
+                xfe = bc%data_xhi(j)
+            endif
         endif
         if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-            gyys = zero
-            gyxs = zero
+            if (homog) then
+                yfs = zero
+            else if (bc%mode_ylo .eq. BCMODE_UNIFORM) then
+                yfs = bc%data_ylo(1)
+            else
+                yfs = bc%data_ylo(i)
+            endif
         endif
 
-        lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        lyy = gyyn*(pn-p) - gyys*(p-ps)
-        lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
+        lap%data(i,j) = (xfe-xfw)*idx + (yfn-yfs)*idy
 
 
         ! Interior to y...
@@ -3014,28 +2742,22 @@ contains
             enw = three*(en-ene)+phi%data(i+2,j+1) !two*en-ene
             esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
 
-            gxxe = geo%Jgup_xx%data(i+1,j)
-            gxxw = geo%Jgup_xx%data(i  ,j)
-
-            gxye = geo%Jgup_xy%data(i+1,j)
-            gxyw = geo%Jgup_xy%data(i  ,j)
-
-            gyyn = geo%Jgup_yy%data(i,j+1)
-            gyys = geo%Jgup_yy%data(i,j  )
-
-            gyxn = geo%Jgup_yx%data(i,j+1)
-            gyxs = geo%Jgup_yx%data(i,j  )
+            xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+            xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+            yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+            yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
             if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-                gxxw = zero
-                gxyw = zero
+                if (homog) then
+                    xfw = zero
+                else if (bc%mode_xlo .eq. BCMODE_UNIFORM) then
+                    xfw = bc%data_xlo(1)
+                else
+                    xfw = bc%data_xlo(j)
+                endif
             endif
 
-            lxx = gxxe*(pe-p) - gxxw*(p-pw)
-            lyy = gyyn*(pn-p) - gyys*(p-ps)
-            lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-            lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-            lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
+            lap%data(i,j) = (xfe-xfw)*idx + (yfn-yfs)*idy
 
             ! Interior to x and y
             do i = ilo+1, ihi-1
@@ -3055,23 +2777,12 @@ contains
                 ese = phi%data(i+1,j-1)
                 esw = phi%data(i-1,j-1)
 
-                gxxe = geo%Jgup_xx%data(i+1,j)
-                gxxw = geo%Jgup_xx%data(i  ,j)
+                xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+                xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+                yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+                yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
-                gxye = geo%Jgup_xy%data(i+1,j)
-                gxyw = geo%Jgup_xy%data(i  ,j)
-
-                gyyn = geo%Jgup_yy%data(i,j+1)
-                gyys = geo%Jgup_yy%data(i,j  )
-
-                gyxn = geo%Jgup_yx%data(i,j+1)
-                gyxs = geo%Jgup_yx%data(i,j  )
-
-                lxx = gxxe*(pe-p) - gxxw*(p-pw)
-                lyy = gyyn*(pn-p) - gyys*(p-ps)
-                lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-                lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-                lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
+                lap%data(i,j) = (xfe-xfw)*idx + (yfn-yfs)*idy
             enddo !i
 
             ! Upper x boundary (avoid east), interior to y
@@ -3093,28 +2804,22 @@ contains
             ene = three*(en-enw)+phi%data(i-2,j+1) !two*en-enw
             ese = three*(es-esw)+phi%data(i-2,j-1) !two*es-esw
 
-            gxxe = geo%Jgup_xx%data(i+1,j)
-            gxxw = geo%Jgup_xx%data(i  ,j)
-
-            gxye = geo%Jgup_xy%data(i+1,j)
-            gxyw = geo%Jgup_xy%data(i  ,j)
-
-            gyyn = geo%Jgup_yy%data(i,j+1)
-            gyys = geo%Jgup_yy%data(i,j  )
-
-            gyxn = geo%Jgup_yx%data(i,j+1)
-            gyxs = geo%Jgup_yx%data(i,j  )
+            xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+            xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+            yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+            yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
             if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
-                gxxe = zero
-                gxye = zero
+                if (homog) then
+                    xfe = zero
+                else if (bc%mode_xhi .eq. BCMODE_UNIFORM) then
+                    xfe = bc%data_xhi(1)
+                else
+                    xfe = bc%data_xhi(j)
+                endif
             endif
 
-            lxx = gxxe*(pe-p) - gxxw*(p-pw)
-            lyy = gyyn*(pn-p) - gyys*(p-ps)
-            lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-            lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-            lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
+            lap%data(i,j) = (xfe-xfw)*idx + (yfn-yfs)*idy
         enddo !j
 
 
@@ -3140,32 +2845,31 @@ contains
         esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
         enw = half*((three*(ew-esw)+phi%data(i-1,j-2))+(three*(en-ene)+phi%data(i+2,j+1))) !half*((two*ew-esw)+(two*en-ene))
 
-        gxxe = geo%Jgup_xx%data(i+1,j)
-        gxxw = geo%Jgup_xx%data(i  ,j)
-
-        gxye = geo%Jgup_xy%data(i+1,j)
-        gxyw = geo%Jgup_xy%data(i  ,j)
-
-        gyyn = geo%Jgup_yy%data(i,j+1)
-        gyys = geo%Jgup_yy%data(i,j  )
-
-        gyxn = geo%Jgup_yx%data(i,j+1)
-        gyxs = geo%Jgup_yx%data(i,j  )
+        xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+        xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+        yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+        yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
         if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-            gxxw = zero
-            gxyw = zero
+            if (homog) then
+                xfw = zero
+            else if (bc%mode_xlo .eq. BCMODE_UNIFORM) then
+                xfw = bc%data_xlo(1)
+            else
+                xfw = bc%data_xlo(j)
+            endif
         endif
         if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-            gyyn = zero
-            gyxn = zero
+            if (homog) then
+                yfn = zero
+            else if (bc%mode_yhi .eq. BCMODE_UNIFORM) then
+                yfn = bc%data_yhi(1)
+            else
+                yfn = bc%data_yhi(j)
+            endif
         endif
 
-        lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        lyy = gyyn*(pn-p) - gyys*(p-ps)
-        lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
+        lap%data(i,j) = (xfe-xfw)*idx + (yfn-yfs)*idy
 
         ! Interior to x, upper y boundary (avoid north)
         do i = ilo+1, ihi-1
@@ -3185,28 +2889,22 @@ contains
             ene = three*(ee-ese)+phi%data(i+1,j-2) !two*ee-ese
             enw = three*(ew-esw)+phi%data(i-1,j-2) !two*ew-esw
 
-            gxxe = geo%Jgup_xx%data(i+1,j)
-            gxxw = geo%Jgup_xx%data(i  ,j)
-
-            gxye = geo%Jgup_xy%data(i+1,j)
-            gxyw = geo%Jgup_xy%data(i  ,j)
-
-            gyyn = geo%Jgup_yy%data(i,j+1)
-            gyys = geo%Jgup_yy%data(i,j  )
-
-            gyxn = geo%Jgup_yx%data(i,j+1)
-            gyxs = geo%Jgup_yx%data(i,j  )
+            xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+            xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+            yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+            yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
             if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-                gyyn = zero
-                gyxn = zero
+                if (homog) then
+                    yfn = zero
+                else if (bc%mode_yhi .eq. BCMODE_UNIFORM) then
+                    yfn = bc%data_yhi(1)
+                else
+                    yfn = bc%data_yhi(j)
+                endif
             endif
 
-            lxx = gxxe*(pe-p) - gxxw*(p-pw)
-            lyy = gyyn*(pn-p) - gyys*(p-ps)
-            lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-            lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-            lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
+            lap%data(i,j) = (xfe-xfw)*idx + (yfn-yfs)*idy
         enddo !i
 
         ! Upper x boundary (avoid east), upper y boundary (avoid north)
@@ -3228,32 +2926,31 @@ contains
         ese = three*(es-esw)+phi%data(i-2,j-1) !two*es-esw
         ene = half*((three*(en-enw)+phi%data(i-2,j+1))+(three*(ee-ese)+phi%data(i+1,j-2))) !half*((two*en-enw)+(two*ee-ese))
 
-        gxxe = geo%Jgup_xx%data(i+1,j)
-        gxxw = geo%Jgup_xx%data(i  ,j)
+        xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+        xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+        yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+        yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
-        gxye = geo%Jgup_xy%data(i+1,j)
-        gxyw = geo%Jgup_xy%data(i  ,j)
-
-        gyyn = geo%Jgup_yy%data(i,j+1)
-        gyys = geo%Jgup_yy%data(i,j  )
-
-        gyxn = geo%Jgup_yx%data(i,j+1)
-        gyxs = geo%Jgup_yx%data(i,j  )
-
-        if (bc%type_xhi .eq. BCTYPE_NEUM) then ! west terms are zero
-            gxxw = zero
-            gxyw = zero
+        if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
+            if (homog) then
+                xfe = zero
+            else if (bc%mode_xhi .eq. BCMODE_UNIFORM) then
+                xfe = bc%data_xhi(1)
+            else
+                xfe = bc%data_xhi(j)
+            endif
         endif
         if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-            gyyn = zero
-            gyxn = zero
+            if (homog) then
+                yfn = zero
+            else if (bc%mode_yhi .eq. BCMODE_UNIFORM) then
+                yfn = bc%data_yhi(1)
+            else
+                yfn = bc%data_yhi(j)
+            endif
         endif
 
-        lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        lyy = gyyn*(pn-p) - gyys*(p-ps)
-        lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        lap%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale !+ p/invdiags%data(i,j)
+        lap%data(i,j) = (xfe-xfw)*idx + (yfn-yfs)*idy
 
         ! Scale by 1/J if necessary.
         if (present(opt_jscale)) then
