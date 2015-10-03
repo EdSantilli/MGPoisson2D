@@ -1389,10 +1389,10 @@ contains
         phi%data = (bdx%data**3) * (bdy%data**3)
 
         ! Compute derivative
-        call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
-        ! call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
+        ! call define_box_data (state, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (state, valid, 0, 0, BD_CELL, BD_NODE)
         state%data = bogus_val
-        call compute_pd (state, phi, 2)
+        call compute_pd (state, phi, 1)
         ! call compute_pd2 (state, phi, 2)
 
         ! Re-center Cartesian locations
@@ -1409,9 +1409,9 @@ contains
 
         ! Define true soln
         call define_box_data (soln, state)
-        ! soln%data = three*bdx%data**2 * bdy%data**3
+        soln%data = three*bdx%data**2 * bdy%data**3
         ! soln%data = bdx%data**3 * three*bdy%data**2
-        call compute_pd2 (soln, phi, 2)
+        ! call compute_pd2 (soln, phi, 2)
 
         ! Compute norm
         state%data = state%data - soln%data
