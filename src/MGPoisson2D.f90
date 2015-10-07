@@ -894,7 +894,7 @@ contains
         real(dp), dimension(:), pointer     :: bcd
         integer                             :: ilo, ihi, i
         integer                             :: jlo, jhi, j
-        real(dp)                            :: dx, dy, bcval
+        real(dp)                            :: dx, dy
         real(dp)                            :: cross, dpn, dpf
         integer                             :: bcmode, e
 
@@ -1234,9 +1234,7 @@ contains
         integer, parameter            :: diri_order_yhi = 3
 
         integer  :: ilo, ihi, jlo, jhi
-        integer  :: i, j, e
-        real(dp) :: dx, dy, bcval
-        real(dp) :: cross, dpn, dpf
+        real(dp) :: dx, dy
         logical  :: do_neum
 
         real(dp) :: refx, c1x, c2x
@@ -1572,20 +1570,32 @@ contains
     ! invdiags must be prepared (allocated and box set) prior to call.
     ! NOTE: This assumes the Laplacian is not scaling by 1/J.
     ! --------------------------------------------------------------------------
-    pure subroutine compute_invdiags (invdiags, geo, bc)
+    pure subroutine compute_invdiags (invdiags, geo, bc, opt_homog)
         type(box_data), intent(inout) :: invdiags
         type(geo_data), intent(in)    :: geo
         type(bdry_data), intent(in)   :: bc
+        logical, intent(in), optional :: opt_homog
+        logical                       :: homog
 
-
-        logical, parameter            :: homog = .true.
         integer                       :: ilo, ihi, inner_ilo, inner_ihi, i
         integer                       :: jlo, jhi, inner_jlo, inner_jhi, j
-        real(dp)                      :: p,pe,pn,pw,ps
         real(dp)                      :: ee,en,ew,es
         real(dp)                      :: ene,enw,esw,ese
         real(dp)                      :: xfe,xfw,yfn,yfs
         real(dp)                      :: idx, idy
+
+        real(dp), parameter           :: p = one
+        real(dp), parameter           :: pe = zero
+        real(dp), parameter           :: pn = zero
+        real(dp), parameter           :: pw = zero
+        real(dp), parameter           :: ps = zero
+
+        if (present(opt_homog)) then
+            homog = opt_homog
+        else
+            homog = .true.
+        endif
+
 
         ilo = invdiags%valid%ilo
         ihi = invdiags%valid%ihi
@@ -1610,12 +1620,6 @@ contains
 
         idx = one / geo%dx
         idy = one / geo%dy
-
-        p  = one
-        pe = zero
-        pw = zero
-        pn = zero
-        ps = zero
 
         ! Lower x boundary (avoid west), lower y boundary (avoid south)
         if (bc%type_ylo .ne. BCTYPE_PERIODIC) then
@@ -1936,377 +1940,6 @@ contains
                 invdiags%data(i,j) = (xfe-xfw)*idx + (yfn-yfs)*idy
             endif ! not periodic in x
         endif ! not periodic in y
-
-
-
-
-        ! integer                       :: ilo, ihi, jlo, jhi, i, j
-        ! real(dp)                      :: xxscale, yyscale, xyscale
-        ! real(dp)                      :: p,pe,pn,pw,ps
-        ! real(dp)                      :: ee,en,ew,es
-        ! real(dp)                      :: ene,enw,esw,ese
-        ! real(dp)                      :: gxxe,gxxw,gxye,gxyw
-        ! real(dp)                      :: gyyn,gyys,gyxn,gyxs
-        ! real(dp)                      :: lxx,lxy,lyy,lyx
-
-        ! ilo = invdiags%valid%ilo
-        ! ihi = invdiags%valid%ihi
-        ! jlo = invdiags%valid%jlo
-        ! jhi = invdiags%valid%jhi
-
-        ! xxscale = one / (geo%dx**2)
-        ! yyscale = one / (geo%dy**2)
-        ! xyscale = fourth / (geo%dx*geo%dy)
-
-        ! p  = one
-        ! pe = zero
-        ! pw = zero
-        ! pn = zero
-        ! ps = zero
-
-        ! ! Lower x boundary (avoid west), lower y boundary (avoid south)
-        ! j = jlo
-        ! i = ilo
-
-        ! ee = zero
-        ! en = zero
-        ! ew = three*(p-ee)+zero !two*p-ee
-        ! es = three*(p-en)+zero !two*p-en
-
-        ! ene = zero
-        ! enw = three*(en-ene)+zero !two*en-ene
-        ! ese = three*(ee-ene)+zero !two*ee-ene
-        ! esw = half*((three*(es-ese)+zero)+(three*(ew-enw)+zero)) !half*((two*es-ese)+(two*ew-enw))
-
-        ! gxxe = geo%Jgup_xx%data(i+1,j)
-        ! gxxw = geo%Jgup_xx%data(i  ,j)
-
-        ! gxye = geo%Jgup_xy%data(i+1,j)
-        ! gxyw = geo%Jgup_xy%data(i  ,j)
-
-        ! gyyn = geo%Jgup_yy%data(i,j+1)
-        ! gyys = geo%Jgup_yy%data(i,j  )
-
-        ! gyxn = geo%Jgup_yx%data(i,j+1)
-        ! gyxs = geo%Jgup_yx%data(i,j  )
-
-        ! if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-        !     gxxw = zero
-        !     gxyw = zero
-        ! endif
-        ! if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-        !     gyys = zero
-        !     gyxs = zero
-        ! endif
-
-        ! lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        ! lyy = gyyn*(pn-p) - gyys*(p-ps)
-        ! lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        ! lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        ! invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-        ! ! Interior to x, lower y boundary (avoid south)
-        ! do i = ilo+1, ihi-1
-        !     ee = zero
-        !     ew = zero
-        !     en = zero
-        !     es = three*(p-en)+zero !two*p-en
-
-        !     ene = zero
-        !     enw = zero
-        !     ese = three*(ee-ene)+zero !two*ee-ene
-        !     esw = three*(ew-enw)+zero !two*ew-enw
-
-        !     gxxe = geo%Jgup_xx%data(i+1,j)
-        !     gxxw = geo%Jgup_xx%data(i  ,j)
-
-        !     gxye = geo%Jgup_xy%data(i+1,j)
-        !     gxyw = geo%Jgup_xy%data(i  ,j)
-
-        !     gyyn = geo%Jgup_yy%data(i,j+1)
-        !     gyys = geo%Jgup_yy%data(i,j  )
-
-        !     gyxn = geo%Jgup_yx%data(i,j+1)
-        !     gyxs = geo%Jgup_yx%data(i,j  )
-
-        !     if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-        !         gyys = zero
-        !         gyxs = zero
-        !     endif
-
-        !     lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        !     lyy = gyyn*(pn-p) - gyys*(p-ps)
-        !     lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        !     lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        !     invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-        ! enddo !i
-
-        ! ! Upper x boundary (avoid east), lower y boundary (avoid south)
-        ! i = ihi
-
-        ! ew = zero
-        ! en = zero
-        ! ee = three*(p-ew)+zero !two*p-ew
-        ! es = three*(p-en)+zero !two*p-en
-
-        ! enw = zero
-        ! ene = three*(pn-enw)+zero !two*pn-enw
-        ! esw = three*(pw-enw)+zero !two*pw-enw
-        ! ese = half*((three*(es-esw)+zero)+(three*(ee-ene)+zero)) !half*((two*es-esw)+(two*ee-ene))
-
-        ! gxxe = geo%Jgup_xx%data(i+1,j)
-        ! gxxw = geo%Jgup_xx%data(i  ,j)
-
-        ! gxye = geo%Jgup_xy%data(i+1,j)
-        ! gxyw = geo%Jgup_xy%data(i  ,j)
-
-        ! gyyn = geo%Jgup_yy%data(i,j+1)
-        ! gyys = geo%Jgup_yy%data(i,j  )
-
-        ! gyxn = geo%Jgup_yx%data(i,j+1)
-        ! gyxs = geo%Jgup_yx%data(i,j  )
-
-        ! if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
-        !     gxxe = zero
-        !     gxye = zero
-        ! endif
-        ! if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-        !     gyys = zero
-        !     gyxs = zero
-        ! endif
-
-        ! lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        ! lyy = gyyn*(pn-p) - gyys*(p-ps)
-        ! lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        ! lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        ! invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-
-        ! ! Interior to y...
-        ! do j = jlo+1, jhi-1
-        !     ! Lower x boundary (avoid west), interior to y
-        !     i = ilo
-
-        !     ee = zero
-        !     en = zero
-        !     es = zero
-        !     ew = three*(p-ee)+zero !two*p-ee
-
-        !     ene = zero
-        !     ese = zero
-        !     enw = three*(en-ene)+zero !two*en-ene
-        !     esw = three*(es-ese)+zero !two*es-ese
-
-        !     gxxe = geo%Jgup_xx%data(i+1,j)
-        !     gxxw = geo%Jgup_xx%data(i  ,j)
-
-        !     gxye = geo%Jgup_xy%data(i+1,j)
-        !     gxyw = geo%Jgup_xy%data(i  ,j)
-
-        !     gyyn = geo%Jgup_yy%data(i,j+1)
-        !     gyys = geo%Jgup_yy%data(i,j  )
-
-        !     gyxn = geo%Jgup_yx%data(i,j+1)
-        !     gyxs = geo%Jgup_yx%data(i,j  )
-
-        !     if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-        !         gxxw = zero
-        !         gxyw = zero
-        !     endif
-
-        !     lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        !     lyy = gyyn*(pn-p) - gyys*(p-ps)
-        !     lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        !     lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        !     invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-        !     ! Interior to x and y
-        !     do i = ilo+1, ihi-1
-        !         ee = zero
-        !         ew = zero
-        !         en = zero
-        !         es = zero
-
-        !         ene = zero
-        !         enw = zero
-        !         ese = zero
-        !         esw = zero
-
-        !         gxxe = geo%Jgup_xx%data(i+1,j)
-        !         gxxw = geo%Jgup_xx%data(i  ,j)
-
-        !         gxye = geo%Jgup_xy%data(i+1,j)
-        !         gxyw = geo%Jgup_xy%data(i  ,j)
-
-        !         gyyn = geo%Jgup_yy%data(i,j+1)
-        !         gyys = geo%Jgup_yy%data(i,j  )
-
-        !         gyxn = geo%Jgup_yx%data(i,j+1)
-        !         gyxs = geo%Jgup_yx%data(i,j  )
-
-        !         lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        !         lyy = gyyn*(pn-p) - gyys*(p-ps)
-        !         lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        !         lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        !         invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-        !     enddo !i
-
-        !     ! Upper x boundary (avoid east), interior to y
-        !     i = ihi
-
-        !     ew = zero
-        !     en = zero
-        !     es = zero
-        !     ee = three*(p-ew)+zero !two*p-ew
-
-        !     enw = zero
-        !     esw = zero
-        !     ene = three*(en-enw)+zero !two*en-enw
-        !     ese = three*(es-esw)+zero !two*es-esw
-
-        !     gxxe = geo%Jgup_xx%data(i+1,j)
-        !     gxxw = geo%Jgup_xx%data(i  ,j)
-
-        !     gxye = geo%Jgup_xy%data(i+1,j)
-        !     gxyw = geo%Jgup_xy%data(i  ,j)
-
-        !     gyyn = geo%Jgup_yy%data(i,j+1)
-        !     gyys = geo%Jgup_yy%data(i,j  )
-
-        !     gyxn = geo%Jgup_yx%data(i,j+1)
-        !     gyxs = geo%Jgup_yx%data(i,j  )
-
-        !     if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
-        !         gxxe = zero
-        !         gxye = zero
-        !     endif
-
-        !     lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        !     lyy = gyyn*(pn-p) - gyys*(p-ps)
-        !     lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        !     lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        !     invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-        ! enddo !j
-
-
-        ! ! Upper y boundary...
-        ! j = jhi
-
-        ! ! Lower x boundary (avoid west), upper y boundary (avoid north)
-        ! i = ilo
-
-        ! ee = zero
-        ! es = zero
-        ! ew = three*(p-ee)+zero !two*p-ee
-        ! en = three*(p-es)+zero !two*p-es
-
-        ! ese = zero
-        ! ene = three*(ee-ese)+zero !two*ee-ese
-        ! esw = three*(es-ese)+zero !two*es-ese
-        ! enw = half*((three*(ew-esw)+zero)+(three*(en-ene)+zero)) !half*((two*ew-esw)+(two*en-ene))
-
-        ! gxxe = geo%Jgup_xx%data(i+1,j)
-        ! gxxw = geo%Jgup_xx%data(i  ,j)
-
-        ! gxye = geo%Jgup_xy%data(i+1,j)
-        ! gxyw = geo%Jgup_xy%data(i  ,j)
-
-        ! gyyn = geo%Jgup_yy%data(i,j+1)
-        ! gyys = geo%Jgup_yy%data(i,j  )
-
-        ! gyxn = geo%Jgup_yx%data(i,j+1)
-        ! gyxs = geo%Jgup_yx%data(i,j  )
-
-        ! if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-        !     gxxw = zero
-        !     gxyw = zero
-        ! endif
-        ! if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-        !     gyyn = zero
-        !     gyxn = zero
-        ! endif
-
-        ! lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        ! lyy = gyyn*(pn-p) - gyys*(p-ps)
-        ! lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        ! lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        ! invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-        ! ! Interior to x, upper y boundary (avoid north)
-        ! do i = ilo+1, ihi-1
-        !     ee = zero
-        !     ew = zero
-        !     es = zero
-        !     en = three*(p-es)+zero !two*p-es
-
-        !     ese = zero
-        !     esw = zero
-        !     ene = three*(ee-ese)+zero !two*ee-ese
-        !     enw = three*(ew-esw)+zero !two*ew-esw
-
-        !     gxxe = geo%Jgup_xx%data(i+1,j)
-        !     gxxw = geo%Jgup_xx%data(i  ,j)
-
-        !     gxye = geo%Jgup_xy%data(i+1,j)
-        !     gxyw = geo%Jgup_xy%data(i  ,j)
-
-        !     gyyn = geo%Jgup_yy%data(i,j+1)
-        !     gyys = geo%Jgup_yy%data(i,j  )
-
-        !     gyxn = geo%Jgup_yx%data(i,j+1)
-        !     gyxs = geo%Jgup_yx%data(i,j  )
-
-        !     if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-        !         gyyn = zero
-        !         gyxn = zero
-        !     endif
-
-        !     lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        !     lyy = gyyn*(pn-p) - gyys*(p-ps)
-        !     lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        !     lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        !     invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-        ! enddo !i
-
-        ! ! Upper x boundary (avoid east), upper y boundary (avoid north)
-        ! i = ihi
-
-        ! ew = zero
-        ! es = zero
-        ! ee = three*(p-ew)+zero !two*p-ew
-        ! en = three*(p-es)+zero !two*p-es
-
-        ! esw = zero
-        ! enw = three*(ew-esw)+zero !two*ew-esw
-        ! ese = three*(es-esw)+zero !two*es-esw
-        ! ene = half*((three*(en-enw)+zero)+(three*(ee-ese)+zero)) !half*((two*en-enw)+(two*ee-ese))
-
-        ! gxxe = geo%Jgup_xx%data(i+1,j)
-        ! gxxw = geo%Jgup_xx%data(i  ,j)
-
-        ! gxye = geo%Jgup_xy%data(i+1,j)
-        ! gxyw = geo%Jgup_xy%data(i  ,j)
-
-        ! gyyn = geo%Jgup_yy%data(i,j+1)
-        ! gyys = geo%Jgup_yy%data(i,j  )
-
-        ! gyxn = geo%Jgup_yx%data(i,j+1)
-        ! gyxs = geo%Jgup_yx%data(i,j  )
-
-        ! if (bc%type_xhi .eq. BCTYPE_NEUM) then ! west terms are zero
-        !     gxxw = zero
-        !     gxyw = zero
-        ! endif
-        ! if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-        !     gyyn = zero
-        !     gyxn = zero
-        ! endif
-
-        ! lxx = gxxe*(pe-p) - gxxw*(p-pw)
-        ! lyy = gyyn*(pn-p) - gyys*(p-ps)
-        ! lxy = gxye*(ene-ese+en-es) - gxyw*(en-es+enw-esw)
-        ! lyx = gyxn*(ene-enw+ee-ew) - gyxs*(ee-ew+ese-esw)
-        ! invdiags%data(i,j) = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
 
         ! Invert the diag values
         invdiags%data = one / invdiags%data
@@ -3313,7 +2946,13 @@ contains
 
         if (tol .gt. zero) then
             rscale = pnorm (r, r%valid, 2)
-            relres(0) = one
+            if (rscale .eq. zero) then
+                relres(0) = rscale
+                rscale = one
+            else
+                relres(0) = one
+            endif
+
             if (verbosity .ge. 3) then
                 print*, 'scale |res| = ', rscale
                 print*, 'iter ', 0, ': rel |res| = ', relres(0)
@@ -3357,10 +2996,515 @@ contains
     end subroutine relax_jacobi
 
 
-    ! ------------------------------------------------------------------------------
+    ! ! ------------------------------------------------------------------------------
+    ! ! ------------------------------------------------------------------------------
+    ! subroutine relax_gs (phi, rhs, geo, bc, homog, invdiags, &
+    !                      omega, tol, maxiters, redblack, zerophi, verbosity)
+    !     type(box_data), intent(inout)   :: phi
+    !     type(box_data), intent(in)      :: rhs
+    !     type(geo_data), intent(in)      :: geo
+    !     type(bdry_data), intent(in)     :: bc
+    !     logical, intent(in)             :: homog
+    !     type(box_data), intent(in)      :: invdiags
+    !     real(dp), intent(in)            :: omega
+    !     real(dp), intent(in)            :: tol
+    !     integer, intent(in)             :: maxiters
+    !     logical, intent(in)             :: redblack
+    !     logical, intent(in)             :: zerophi
+    !     integer, intent(in)             :: verbosity
+
+    !     type(box_data)                  :: r
+    !     real(dp)                        :: rscale
+    !     real(dp), dimension(0:maxiters) :: relres
+    !     integer                         :: iter, color
+    !     real(dp)                        :: newphi, sum
+    !     integer                         :: ilo, ihi, i, imin
+    !     integer                         :: jlo, jhi, j
+
+    !     real(dp)                        :: lxx, lyy, lxy, lyx, lphi
+    !     ! real(dp)                        :: fxe, fxw, fyn, fys
+    !     real(dp)                        :: p, pe, pn, pw, ps
+    !     real(dp)                        :: pne, pnw, psw, pse
+    !     real(dp)                        :: gxxe, gxxw, gxye, gxyw
+    !     real(dp)                        :: gyyn, gyys, gyxn, gyxs
+    !     real(dp)                        :: xxscale, yyscale, xyscale
+
+
+    !     ilo = rhs%valid%ilo
+    !     ihi = rhs%valid%ihi
+    !     jlo = rhs%valid%jlo
+    !     jhi = rhs%valid%jhi
+
+    !     ! Do we even need to be here?
+    !     if (maxiters .eq. 0) then
+    !         return
+    !     endif
+
+    !     ! Allocate workspace
+    !     call define_box_data (r, rhs)
+
+    !     ! Initialize phi to zero
+    !     if (zerophi) then
+    !         phi%data = zero
+    !     endif
+
+    !     ! Compute initial residual
+    !     call compute_residual (r, rhs, phi, geo, bc, homog)
+    !     if (tol .gt. zero) then
+    !         rscale = pnorm (r, r%valid, 2)
+    !         relres(0) = one
+    !         if (verbosity .ge. 3) then
+    !             print*, 'scale |res| = ', rscale
+    !             print*, 'iter ', 0, ': rel |res| = ', relres(0)
+    !         endif
+    !     endif
+
+    !     ! Iterate
+    !     do iter = 1, maxiters
+    !         if (verbosity .ge. 5) then
+    !             sum = integrate2d (r, r%valid, geo, .false.)
+    !             print*, ' sum rhs = ', sum
+    !         endif
+
+    !         if (redblack) then
+    !             ! Update phi via Red-Black Gauss-Seidel
+    !             color = 0
+    !             do j = jlo, jhi
+    !                 imin = ilo + mod(color+j, 2) ! Removed +1
+    !                 do i = imin, ihi, 2
+    !                     newphi = phi%data(i,j) + r%data(i,j) * invdiags%data(i,j)
+    !                     phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+    !                 enddo
+    !             enddo
+
+    !             color = 1
+    !             call compute_residual (r, rhs, phi, geo, bc, homog)
+    !             do j = jlo, jhi
+    !                 imin = ilo + mod(color+j, 2) ! Removed +1
+    !                 do i = imin, ihi, 2
+    !                     newphi = phi%data(i,j) + r%data(i,j) * invdiags%data(i,j)
+    !                     phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+    !                 enddo
+    !             enddo
+    !         else
+    !             ! Update phi via standard Gauss-Seidel
+    !             call fill_ghosts (phi, bc, geo, .true., .false.)
+
+    !             xxscale = one / (geo%dx**2)
+    !             yyscale = one / (geo%dy**2)
+    !             xyscale = fourth / (geo%dx*geo%dy)
+
+    !             ! Lower x boundary (avoid west), lower y boundary (avoid south)
+    !             j = jlo
+    !             i = ilo
+
+    !             p  = phi%data(i  ,j  )
+    !             pe = phi%data(i+1,j  )
+    !             pw = two*p-pe !phi%data(i-1,j  )
+    !             pn = phi%data(i  ,j+1)
+    !             ps = two*p-pn !phi%data(i  ,j-1)
+
+    !             pne = phi%data(i+1,j+1)
+    !             pnw = two*pn-pne !phi%data(i-1,j+1)
+    !             pse = two*pe-pne !phi%data(i+1,j-1)
+    !             psw = half*((two*ps-pse)+(two*pw-pnw)) !phi%data(i-1,j-1)
+
+    !             gxxe = geo%Jgup_xx%data(i+1,j)
+    !             gxxw = geo%Jgup_xx%data(i  ,j)
+
+    !             gxye = geo%Jgup_xy%data(i+1,j)
+    !             gxyw = geo%Jgup_xy%data(i  ,j)
+
+    !             gyyn = geo%Jgup_yy%data(i,j+1)
+    !             gyys = geo%Jgup_yy%data(i,j  )
+
+    !             gyxn = geo%Jgup_yx%data(i,j+1)
+    !             gyxs = geo%Jgup_yx%data(i,j  )
+
+    !             if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
+    !                 gxxw = zero
+    !                 gxyw = zero
+    !             endif
+    !             if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
+    !                 gyys = zero
+    !                 gyxs = zero
+    !             endif
+
+    !             lxx = gxxe*pe + gxxw*pw
+    !             lyy = gyyn*pn + gyys*ps
+    !             lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
+    !             lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+    !             lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+
+    !             newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+    !             phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+
+    !             ! Interior to x, lower y boundary (avoid south)
+    !             do i = ilo, ihi
+    !                 pe = phi%data(i+1,j  )
+    !                 pw = phi%data(i-1,j  )
+    !                 pn = phi%data(i  ,j+1)
+    !                 ps = two*p-pn !phi%data(i  ,j-1)
+
+    !                 pne = phi%data(i+1,j+1)
+    !                 pnw = phi%data(i-1,j+1)
+    !                 pse = two*pe-pne !phi%data(i+1,j-1)
+    !                 psw = two*pw-pnw !phi%data(i-1,j-1)
+
+    !                 gxxe = geo%Jgup_xx%data(i+1,j)
+    !                 gxxw = geo%Jgup_xx%data(i  ,j)
+
+    !                 gxye = geo%Jgup_xy%data(i+1,j)
+    !                 gxyw = geo%Jgup_xy%data(i  ,j)
+
+    !                 gyyn = geo%Jgup_yy%data(i,j+1)
+    !                 gyys = geo%Jgup_yy%data(i,j  )
+
+    !                 gyxn = geo%Jgup_yx%data(i,j+1)
+    !                 gyxs = geo%Jgup_yx%data(i,j  )
+
+    !                 if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
+    !                     gyys = zero
+    !                     gyxs = zero
+    !                 endif
+
+    !                 lxx = gxxe*pe + gxxw*pw
+    !                 lyy = gyyn*pn + gyys*ps
+    !                 lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
+    !                 lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+
+    !                 lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+
+    !                 newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+    !                 phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+    !             enddo !i
+
+    !             ! Upper x boundary (avoid east), lower y boundary (avoid south)
+    !             i = ihi
+
+    !             p  = phi%data(i  ,j  )
+    !             pw = phi%data(i-1,j  )
+    !             pe = two*p-pw !phi%data(i+1,j  )
+    !             pn = phi%data(i  ,j+1)
+    !             ps = two*p-pn !phi%data(i  ,j-1)
+
+    !             pnw = phi%data(i-1,j+1)
+    !             pne = two*pn-pnw !phi%data(i+1,j+1)
+    !             psw = two*pw-pnw !phi%data(i-1,j-1)
+    !             pse = half*((two*ps-psw)+(two*pe-pne)) !phi%data(i+1,j-1)
+
+    !             gxxe = geo%Jgup_xx%data(i+1,j)
+    !             gxxw = geo%Jgup_xx%data(i  ,j)
+
+    !             gxye = geo%Jgup_xy%data(i+1,j)
+    !             gxyw = geo%Jgup_xy%data(i  ,j)
+
+    !             gyyn = geo%Jgup_yy%data(i,j+1)
+    !             gyys = geo%Jgup_yy%data(i,j  )
+
+    !             gyxn = geo%Jgup_yx%data(i,j+1)
+    !             gyxs = geo%Jgup_yx%data(i,j  )
+
+    !             if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
+    !                 gxxe = zero
+    !                 gxye = zero
+    !             endif
+    !             if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
+    !                 gyys = zero
+    !                 gyxs = zero
+    !             endif
+
+    !             lxx = gxxe*pe + gxxw*pw
+    !             lyy = gyyn*pn + gyys*ps
+    !             lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
+    !             lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+    !             lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+
+    !             newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+    !             phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+
+
+    !             ! Interior to y...
+    !             do j = jlo+1, jhi-1
+    !                 ! Lower x boundary (avoid west), interior to y
+    !                 i = ilo
+
+    !                 p  = phi%data(i  ,j  )
+    !                 pe = phi%data(i+1,j  )
+    !                 pw = two*p-pe   !phi%data(i-1,j  )
+    !                 pn = phi%data(i  ,j+1)
+    !                 ps = phi%data(i  ,j-1)
+
+    !                 pne = phi%data(i+1,j+1)
+    !                 pnw = two*pn-pne !phi%data(i-1,j+1)
+    !                 pse = phi%data(i+1,j-1)
+    !                 psw = two*ps-pse !phi%data(i-1,j-1)
+
+    !                 gxxe = geo%Jgup_xx%data(i+1,j)
+    !                 gxxw = geo%Jgup_xx%data(i  ,j)
+
+    !                 gxye = geo%Jgup_xy%data(i+1,j)
+    !                 gxyw = geo%Jgup_xy%data(i  ,j)
+
+    !                 gyyn = geo%Jgup_yy%data(i,j+1)
+    !                 gyys = geo%Jgup_yy%data(i,j  )
+
+    !                 gyxn = geo%Jgup_yx%data(i,j+1)
+    !                 gyxs = geo%Jgup_yx%data(i,j  )
+
+    !                 if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
+    !                     gxxw = zero
+    !                     gxyw = zero
+    !                 endif
+
+    !                 lxx = gxxe*pe + gxxw*pw
+    !                 lyy = gyyn*pn + gyys*ps
+    !                 lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
+    !                 lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+    !                 lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+
+    !                 newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+    !                 phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+
+    !                 ! Interior to x and y
+    !                 do i = ilo, ihi
+    !                     pe = phi%data(i+1,j  )
+    !                     pw = phi%data(i-1,j  )
+    !                     pn = phi%data(i  ,j+1)
+    !                     ps = phi%data(i  ,j-1)
+
+    !                     pne = phi%data(i+1,j+1)
+    !                     pnw = phi%data(i-1,j+1)
+    !                     pse = phi%data(i+1,j-1)
+    !                     psw = phi%data(i-1,j-1)
+
+    !                     gxxe = geo%Jgup_xx%data(i+1,j)
+    !                     gxxw = geo%Jgup_xx%data(i  ,j)
+
+    !                     gxye = geo%Jgup_xy%data(i+1,j)
+    !                     gxyw = geo%Jgup_xy%data(i  ,j)
+
+    !                     gyyn = geo%Jgup_yy%data(i,j+1)
+    !                     gyys = geo%Jgup_yy%data(i,j  )
+
+    !                     gyxn = geo%Jgup_yx%data(i,j+1)
+    !                     gyxs = geo%Jgup_yx%data(i,j  )
+
+    !                     lxx = gxxe*pe + gxxw*pw
+    !                     lyy = gyyn*pn + gyys*ps
+    !                     lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
+    !                     lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+    !                     lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+
+    !                     newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+    !                     phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+    !                 enddo !i
+
+    !                 ! Upper x boundary (avoid east), interior to y
+    !                 i = ihi
+
+    !                 p  = phi%data(i  ,j  )
+    !                 pw = phi%data(i-1,j  )
+    !                 pe = two*p-pw !phi%data(i+1,j  )
+    !                 ps = phi%data(i  ,j-1)
+    !                 pn = phi%data(i  ,j+1)
+
+    !                 pnw = phi%data(i-1,j+1)
+    !                 pne = two*pn-pnw !phi%data(i+1,j+1)
+    !                 psw = phi%data(i-1,j-1)
+    !                 pse = two*ps-psw !phi%data(i+1,j-1)
+
+    !                 gxxe = geo%Jgup_xx%data(i+1,j)
+    !                 gxxw = geo%Jgup_xx%data(i  ,j)
+
+    !                 gxye = geo%Jgup_xy%data(i+1,j)
+    !                 gxyw = geo%Jgup_xy%data(i  ,j)
+
+    !                 gyyn = geo%Jgup_yy%data(i,j+1)
+    !                 gyys = geo%Jgup_yy%data(i,j  )
+
+    !                 gyxn = geo%Jgup_yx%data(i,j+1)
+    !                 gyxs = geo%Jgup_yx%data(i,j  )
+
+    !                 if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
+    !                     gxxe = zero
+    !                     gxye = zero
+    !                 endif
+
+    !                 lxx = gxxe*pe + gxxw*pw
+    !                 lyy = gyyn*pn + gyys*ps
+    !                 lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
+    !                 lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+    !                 lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+
+    !                 newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+    !                 phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+    !             enddo !j
+
+
+    !             ! Upper y boundary...
+    !             j = jhi
+
+    !             ! Lower x boundary (avoid west), upper y boundary (avoid north)
+    !             i = ilo
+
+    !             p  = phi%data(i  ,j  )
+    !             pe = phi%data(i+1,j  )
+    !             pw = two*p-pe !phi%data(i-1,j  )
+    !             ps = phi%data(i  ,j-1)
+    !             pn = two*p-ps !phi%data(i  ,j+1)
+
+    !             pse = phi%data(i+1,j-1)
+    !             pne = two*pe-pse !phi%data(i+1,j+1)
+    !             psw = two*ps-pse !phi%data(i-1,j-1)
+    !             pnw = half*((two*pw-psw)+(two*pn-pne)) !phi%data(i-1,j+1)
+
+    !             gxxe = geo%Jgup_xx%data(i+1,j)
+    !             gxxw = geo%Jgup_xx%data(i  ,j)
+
+    !             gxye = geo%Jgup_xy%data(i+1,j)
+    !             gxyw = geo%Jgup_xy%data(i  ,j)
+
+    !             gyyn = geo%Jgup_yy%data(i,j+1)
+    !             gyys = geo%Jgup_yy%data(i,j  )
+
+    !             gyxn = geo%Jgup_yx%data(i,j+1)
+    !             gyxs = geo%Jgup_yx%data(i,j  )
+
+    !             if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
+    !                 gxxw = zero
+    !                 gxyw = zero
+    !             endif
+    !             if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
+    !                 gyyn = zero
+    !                 gyxn = zero
+    !             endif
+
+    !             lxx = gxxe*pe + gxxw*pw
+    !             lyy = gyyn*pn + gyys*ps
+    !             lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
+    !             lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+    !             lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+
+    !             newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+    !             phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+
+    !             ! Interior to x, upper y boundary (avoid north)
+    !             do i = ilo, ihi
+    !                 pe = phi%data(i+1,j  )
+    !                 pw = phi%data(i-1,j  )
+    !                 ps = phi%data(i  ,j-1)
+    !                 pn = two*p-ps !phi%data(i  ,j+1)
+
+    !                 pse = phi%data(i+1,j-1)
+    !                 psw = phi%data(i-1,j-1)
+    !                 pne = two*pe-pse !phi%data(i+1,j+1)
+    !                 pnw = two*pw-psw !phi%data(i-1,j+1)
+
+    !                 gxxe = geo%Jgup_xx%data(i+1,j)
+    !                 gxxw = geo%Jgup_xx%data(i  ,j)
+
+    !                 gxye = geo%Jgup_xy%data(i+1,j)
+    !                 gxyw = geo%Jgup_xy%data(i  ,j)
+
+    !                 gyyn = geo%Jgup_yy%data(i,j+1)
+    !                 gyys = geo%Jgup_yy%data(i,j  )
+
+    !                 gyxn = geo%Jgup_yx%data(i,j+1)
+    !                 gyxs = geo%Jgup_yx%data(i,j  )
+
+    !                 if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
+    !                     gyyn = zero
+    !                     gyxn = zero
+    !                 endif
+
+    !                 lxx = gxxe*pe + gxxw*pw
+    !                 lyy = gyyn*pn + gyys*ps
+    !                 lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
+    !                 lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+
+    !                 lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+
+    !                 newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+    !                 phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+    !             enddo !i
+
+    !             ! Upper x boundary (avoid east), upper y boundary (avoid north)
+    !             i = ihi
+
+    !             p  = phi%data(i  ,j  )
+    !             pw = phi%data(i-1,j  )
+    !             pe = two*p-pw !phi%data(i+1,j  )
+    !             ps = phi%data(i  ,j-1)
+    !             pn = two*p-ps !phi%data(i  ,j+1)
+
+    !             psw = two*pw-pnw !phi%data(i-1,j-1)
+    !             pnw = phi%data(i-1,j+1)
+    !             pse = two*ps-psw !phi%data(i+1,j-1)
+    !             pne = half*((two*pn-pnw)+(two*pe-pse)) !phi%data(i+1,j+1)
+
+    !             gxxe = geo%Jgup_xx%data(i+1,j)
+    !             gxxw = geo%Jgup_xx%data(i  ,j)
+
+    !             gxye = geo%Jgup_xy%data(i+1,j)
+    !             gxyw = geo%Jgup_xy%data(i  ,j)
+
+    !             gyyn = geo%Jgup_yy%data(i,j+1)
+    !             gyys = geo%Jgup_yy%data(i,j  )
+
+    !             gyxn = geo%Jgup_yx%data(i,j+1)
+    !             gyxs = geo%Jgup_yx%data(i,j  )
+
+    !             if (bc%type_xhi .eq. BCTYPE_NEUM) then ! west terms are zero
+    !                 gxxw = zero
+    !                 gxyw = zero
+    !             endif
+    !             if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
+    !                 gyyn = zero
+    !                 gyxn = zero
+    !             endif
+
+    !             lxx = gxxe*pe + gxxw*pw
+    !             lyy = gyyn*pn + gyys*ps
+    !             lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
+    !             lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+    !             lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+
+    !             newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+    !             phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+    !         endif
+
+    !         ! Compute new residual
+    !         ! TODO: Once this function has been corrected,
+    !         ! this can move inside the i(tol>0) block.
+    !         call compute_residual (r, rhs, phi, geo, bc, .true.)
+
+    !         if (tol .gt. zero) then
+    !             relres(iter) = pnorm (r, r%valid, 2) / rscale
+    !             if (verbosity .ge. 3) then
+    !                 print*, 'iter ', iter, ': rel |res| = ', relres(iter)
+    !             endif
+
+    !             ! Did we converge?
+    !             if (relres(iter) .le. tol) then
+    !                 if (verbosity .ge. 3) then
+    !                     print*, "Converged."
+    !                 endif
+    !                 exit
+    !             endif
+    !         endif
+    !     enddo
+
+    !     ! Free memory
+    !     call undefine_box_data (r)
+
+    ! end subroutine relax_gs
+
+
+! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
     subroutine relax_gs (phi, rhs, geo, bc, homog, invdiags, &
-                         omega, tol, maxiters, redblack, zerophi, verbosity)
+                         omega, tol, maxiters, zerophi, verbosity)
         type(box_data), intent(inout)   :: phi
         type(box_data), intent(in)      :: rhs
         type(geo_data), intent(in)      :: geo
@@ -3370,39 +3514,52 @@ contains
         real(dp), intent(in)            :: omega
         real(dp), intent(in)            :: tol
         integer, intent(in)             :: maxiters
-        logical, intent(in)             :: redblack
         logical, intent(in)             :: zerophi
         integer, intent(in)             :: verbosity
 
         type(box_data)                  :: r
         real(dp)                        :: rscale
         real(dp), dimension(0:maxiters) :: relres
-        integer                         :: iter, color
-        real(dp)                        :: newphi, sum
-        integer                         :: ilo, ihi, i, imin
-        integer                         :: jlo, jhi, j
+        integer                         :: iter
 
-        real(dp)                        :: lxx, lyy, lxy, lyx, lphi
-        real(dp)                        :: fxe, fxw, fyn, fys
-        real(dp)                        :: p, pe, pn, pw, ps
-        real(dp)                        :: pne, pnw, psw, pse
-        real(dp)                        :: gxxe, gxxw, gxye, gxyw
-        real(dp)                        :: gyyn, gyys, gyxn, gyxs
-        real(dp)                        :: xxscale, yyscale, xyscale
-
-
-        ilo = rhs%valid%ilo
-        ihi = rhs%valid%ihi
-        jlo = rhs%valid%jlo
-        jhi = rhs%valid%jhi
+        integer                         :: ilo, ihi, inner_ilo, inner_ihi, i
+        integer                         :: jlo, jhi, inner_jlo, inner_jhi, j
+        real(dp)                        :: p,pe,pn,pw,ps
+        real(dp)                        :: ee,en,ew,es
+        real(dp)                        :: ene,enw,esw,ese
+        real(dp)                        :: xfe,xfw,yfn,yfs
+        real(dp)                        :: idx, idy
+        real(dp)                        :: lphi, newphi, sum
 
         ! Do we even need to be here?
         if (maxiters .eq. 0) then
             return
         endif
 
-        ! Allocate workspace
-        call define_box_data (r, rhs)
+        ! Define some useful quantities
+        ilo = rhs%valid%ilo
+        ihi = rhs%valid%ihi
+        jlo = rhs%valid%jlo
+        jhi = rhs%valid%jhi
+
+        if (bc%type_xlo .eq. BCTYPE_PERIODIC) then
+            inner_ilo = ilo
+            inner_ihi = ihi
+        else
+            inner_ilo = ilo+1
+            inner_ihi = ihi-1
+        endif
+
+        if (bc%type_ylo .eq. BCTYPE_PERIODIC) then
+            inner_jlo = jlo
+            inner_jhi = jhi
+        else
+            inner_jlo = jlo+1
+            inner_jhi = jhi-1
+        endif
+
+        idx = one / geo%dx
+        idy = one / geo%dy
 
         ! Initialize phi to zero
         if (zerophi) then
@@ -3410,10 +3567,18 @@ contains
         endif
 
         ! Compute initial residual
-        call compute_residual (r, rhs, phi, geo, bc, homog)
         if (tol .gt. zero) then
+            call define_box_data (r, rhs)
+            call compute_residual (r, rhs, phi, geo, bc, homog)
+
             rscale = pnorm (r, r%valid, 2)
-            relres(0) = one
+            if (rscale .eq. zero) then
+                relres(0) = rscale
+                rscale = one
+            else
+                relres(0) = one
+            endif
+
             if (verbosity .ge. 3) then
                 print*, 'scale |res| = ', rscale
                 print*, 'iter ', 0, ': rel |res| = ', relres(0)
@@ -3427,437 +3592,419 @@ contains
                 print*, ' sum rhs = ', sum
             endif
 
-            if (redblack) then
-                ! Update phi via Red-Black Gauss-Seidel
-                if (omega .eq. one) then
-                    color = 0
-                    do j = jlo, jhi
-                        imin = ilo + mod(color+j, 2) ! Removed +1
-                        phi%data(imin:ihi:2,j) = phi%data(imin:ihi:2,j) &
-                                               + r%data(imin:ihi:2,j) * invdiags%data(imin:ihi:2,j)
-                    enddo
+            ! Update phi via standard Gauss-Seidel
+            call fill_ghosts (phi, bc, geo, homog, .false.)
 
-                    color = 1
-                    call compute_residual (r, rhs, phi, geo, bc, homog)
-                    do j = jlo, jhi
-                        imin = ilo + mod(color+j, 2) ! Removed +1
-                        phi%data(imin:ihi:2,j) = phi%data(imin:ihi:2,j) &
-                                               + r%data(imin:ihi:2,j) * invdiags%data(imin:ihi:2,j)
-                    enddo
-                else
-                    color = 0
-                    do j = jlo, jhi
-                        imin = ilo + mod(color+j, 2) ! Removed +1
-                        do i = imin, ihi, 2
-                            newphi = phi%data(i,j) + r%data(i,j) * invdiags%data(i,j)
-                            phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-                        enddo
-                    enddo
+            ! The main comutation...
 
-                    color = 1
-                    call compute_residual (r, rhs, phi, geo, bc, homog)
-                    do j = jlo, jhi
-                        imin = ilo + mod(color+j, 2) ! Removed +1
-                        do i = imin, ihi, 2
-                            newphi = phi%data(i,j) + r%data(i,j) * invdiags%data(i,j)
-                            phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-                        enddo
-                    enddo
-                endif
-            else
-                ! Update phi via standard Gauss-Seidel
-                call fill_ghosts (phi, bc, geo, .true., .false.)
-
-                xxscale = one / (geo%dx**2)
-                yyscale = one / (geo%dy**2)
-                xyscale = fourth / (geo%dx*geo%dy)
-
-                ! Lower x boundary (avoid west), lower y boundary (avoid south)
+            ! Lower x boundary (avoid west), lower y boundary (avoid south)
+            if (bc%type_ylo .ne. BCTYPE_PERIODIC) then
                 j = jlo
-                i = ilo
-
-                p  = phi%data(i  ,j  )
-                pe = phi%data(i+1,j  )
-                pw = two*p-pe !phi%data(i-1,j  )
-                pn = phi%data(i  ,j+1)
-                ps = two*p-pn !phi%data(i  ,j-1)
-
-                pne = phi%data(i+1,j+1)
-                pnw = two*pn-pne !phi%data(i-1,j+1)
-                pse = two*pe-pne !phi%data(i+1,j-1)
-                psw = half*((two*ps-pse)+(two*pw-pnw)) !phi%data(i-1,j-1)
-
-                gxxe = geo%Jgup_xx%data(i+1,j)
-                gxxw = geo%Jgup_xx%data(i  ,j)
-
-                gxye = geo%Jgup_xy%data(i+1,j)
-                gxyw = geo%Jgup_xy%data(i  ,j)
-
-                gyyn = geo%Jgup_yy%data(i,j+1)
-                gyys = geo%Jgup_yy%data(i,j  )
-
-                gyxn = geo%Jgup_yx%data(i,j+1)
-                gyxs = geo%Jgup_yx%data(i,j  )
-
-                if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-                    gxxw = zero
-                    gxyw = zero
-                endif
-                if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-                    gyys = zero
-                    gyxs = zero
-                endif
-
-                lxx = gxxe*pe + gxxw*pw
-                lyy = gyyn*pn + gyys*ps
-                lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-                lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-                lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-                newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-                phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-
-                ! Interior to x, lower y boundary (avoid south)
-                do i = ilo, ihi
-                    pe = phi%data(i+1,j  )
-                    pw = phi%data(i-1,j  )
-                    pn = phi%data(i  ,j+1)
-                    ps = two*p-pn !phi%data(i  ,j-1)
-
-                    pne = phi%data(i+1,j+1)
-                    pnw = phi%data(i-1,j+1)
-                    pse = two*pe-pne !phi%data(i+1,j-1)
-                    psw = two*pw-pnw !phi%data(i-1,j-1)
-
-                    gxxe = geo%Jgup_xx%data(i+1,j)
-                    gxxw = geo%Jgup_xx%data(i  ,j)
-
-                    gxye = geo%Jgup_xy%data(i+1,j)
-                    gxyw = geo%Jgup_xy%data(i  ,j)
-
-                    gyyn = geo%Jgup_yy%data(i,j+1)
-                    gyys = geo%Jgup_yy%data(i,j  )
-
-                    gyxn = geo%Jgup_yx%data(i,j+1)
-                    gyxs = geo%Jgup_yx%data(i,j  )
-
-                    if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-                        gyys = zero
-                        gyxs = zero
-                    endif
-
-                    lxx = gxxe*pe + gxxw*pw
-                    lyy = gyyn*pn + gyys*ps
-                    lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-                    lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-
-                    lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-                    newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-                    phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-                enddo !i
-
-                ! Upper x boundary (avoid east), lower y boundary (avoid south)
-                i = ihi
-
-                p  = phi%data(i  ,j  )
-                pw = phi%data(i-1,j  )
-                pe = two*p-pw !phi%data(i+1,j  )
-                pn = phi%data(i  ,j+1)
-                ps = two*p-pn !phi%data(i  ,j-1)
-
-                pnw = phi%data(i-1,j+1)
-                pne = two*pn-pnw !phi%data(i+1,j+1)
-                psw = two*pw-pnw !phi%data(i-1,j-1)
-                pse = half*((two*ps-psw)+(two*pe-pne)) !phi%data(i+1,j-1)
-
-                gxxe = geo%Jgup_xx%data(i+1,j)
-                gxxw = geo%Jgup_xx%data(i  ,j)
-
-                gxye = geo%Jgup_xy%data(i+1,j)
-                gxyw = geo%Jgup_xy%data(i  ,j)
-
-                gyyn = geo%Jgup_yy%data(i,j+1)
-                gyys = geo%Jgup_yy%data(i,j  )
-
-                gyxn = geo%Jgup_yx%data(i,j+1)
-                gyxs = geo%Jgup_yx%data(i,j  )
-
-                if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
-                    gxxe = zero
-                    gxye = zero
-                endif
-                if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-                    gyys = zero
-                    gyxs = zero
-                endif
-
-                lxx = gxxe*pe + gxxw*pw
-                lyy = gyyn*pn + gyys*ps
-                lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-                lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-                lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-                newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-                phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-
-
-                ! Interior to y...
-                do j = jlo+1, jhi-1
-                    ! Lower x boundary (avoid west), interior to y
+                if (bc%type_xlo .ne. BCTYPE_PERIODIC) then
                     i = ilo
 
                     p  = phi%data(i  ,j  )
                     pe = phi%data(i+1,j  )
-                    pw = two*p-pe   !phi%data(i-1,j  )
+                    pw = phi%data(i-1,j  )
                     pn = phi%data(i  ,j+1)
                     ps = phi%data(i  ,j-1)
 
-                    pne = phi%data(i+1,j+1)
-                    pnw = two*pn-pne !phi%data(i-1,j+1)
-                    pse = phi%data(i+1,j-1)
-                    psw = two*ps-pse !phi%data(i-1,j-1)
+                    ee = phi%data(i+1,j  )
+                    en = phi%data(i  ,j+1)
+                    ew = three*(p-ee)+phi%data(i+2,j  ) !two*p-ee
+                    es = three*(p-en)+phi%data(i  ,j+2) !two*p-en
 
-                    gxxe = geo%Jgup_xx%data(i+1,j)
-                    gxxw = geo%Jgup_xx%data(i  ,j)
+                    ene = phi%data(i+1,j+1)
+                    enw = three*(en-ene)+phi%data(i+2,j+1) !two*en-ene
+                    ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
+                    esw = half*((three*(es-ese)+phi%data(i+2,j-1))+(three*(ew-enw)+phi%data(i-1,j+2))) !half*((two*es-ese)+(two*ew-enw))
 
-                    gxye = geo%Jgup_xy%data(i+1,j)
-                    gxyw = geo%Jgup_xy%data(i  ,j)
-
-                    gyyn = geo%Jgup_yy%data(i,j+1)
-                    gyys = geo%Jgup_yy%data(i,j  )
-
-                    gyxn = geo%Jgup_yx%data(i,j+1)
-                    gyxs = geo%Jgup_yx%data(i,j  )
+                    xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+                    xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+                    yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+                    yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
                     if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-                        gxxw = zero
-                        gxyw = zero
+                        if (homog) then
+                            xfw = zero
+                        else if (bc%mode_xlo .eq. BCMODE_UNIFORM) then
+                            xfw = bc%data_xlo(1)
+                        else
+                            xfw = bc%data_xlo(j)
+                        endif
+                    endif
+                    if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
+                        if (homog) then
+                            yfs = zero
+                        else if (bc%mode_ylo .eq. BCMODE_UNIFORM) then
+                            yfs = bc%data_ylo(1)
+                        else
+                            yfs = bc%data_ylo(i)
+                        endif
                     endif
 
-                    lxx = gxxe*pe + gxxw*pw
-                    lyy = gyyn*pn + gyys*ps
-                    lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-                    lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-                    lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+                    lphi = (xfe-xfw)*idx + (yfn-yfs)*idy
 
-                    newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-                    phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+                    newphi = phi%data(i,j) + (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+                    phi%data(i,j) = omega*newphi + (one-omega)*phi%data(i,j)
+                endif ! not periodic in x
 
-                    ! Interior to x and y
-                    do i = ilo, ihi
-                        pe = phi%data(i+1,j  )
-                        pw = phi%data(i-1,j  )
-                        pn = phi%data(i  ,j+1)
-                        ps = phi%data(i  ,j-1)
+                ! Interior to x, lower y boundary (avoid south)
+                do i = inner_ilo, inner_ihi
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
 
-                        pne = phi%data(i+1,j+1)
-                        pnw = phi%data(i-1,j+1)
-                        pse = phi%data(i+1,j-1)
-                        psw = phi%data(i-1,j-1)
+                    ee = phi%data(i+1,j  )
+                    ew = phi%data(i-1,j  )
+                    en = phi%data(i  ,j+1)
+                    es = three*(p-en)+phi%data(i,j+2) !two*p-en
 
-                        gxxe = geo%Jgup_xx%data(i+1,j)
-                        gxxw = geo%Jgup_xx%data(i  ,j)
+                    ene = phi%data(i+1,j+1)
+                    enw = phi%data(i-1,j+1)
+                    ese = three*(ee-ene)+phi%data(i+1,j+2) !two*ee-ene
+                    esw = three*(ew-enw)+phi%data(i-1,j+2) !two*ew-enw
 
-                        gxye = geo%Jgup_xy%data(i+1,j)
-                        gxyw = geo%Jgup_xy%data(i  ,j)
+                    xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+                    xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+                    yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+                    yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
-                        gyyn = geo%Jgup_yy%data(i,j+1)
-                        gyys = geo%Jgup_yy%data(i,j  )
+                    if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
+                        if (homog) then
+                            yfs = zero
+                        else if (bc%mode_ylo .eq. BCMODE_UNIFORM) then
+                            yfs = bc%data_ylo(1)
+                        else
+                            yfs = bc%data_ylo(i)
+                        endif
+                    endif
 
-                        gyxn = geo%Jgup_yx%data(i,j+1)
-                        gyxs = geo%Jgup_yx%data(i,j  )
+                    lphi = (xfe-xfw)*idx + (yfn-yfs)*idy
 
-                        lxx = gxxe*pe + gxxw*pw
-                        lyy = gyyn*pn + gyys*ps
-                        lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-                        lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-                        lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+                    newphi = phi%data(i,j) + (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+                    phi%data(i,j) = omega*newphi + (one-omega)*phi%data(i,j)
+                enddo !i
 
-                        newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-                        phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-                    enddo !i
-
-                    ! Upper x boundary (avoid east), interior to y
+                ! Upper x boundary (avoid east), lower y boundary (avoid south)
+                if (bc%type_xhi .ne. BCTYPE_PERIODIC) then
                     i = ihi
 
                     p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
                     pw = phi%data(i-1,j  )
-                    pe = two*p-pw !phi%data(i+1,j  )
-                    ps = phi%data(i  ,j-1)
                     pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
 
-                    pnw = phi%data(i-1,j+1)
-                    pne = two*pn-pnw !phi%data(i+1,j+1)
-                    psw = phi%data(i-1,j-1)
-                    pse = two*ps-psw !phi%data(i+1,j-1)
+                    ew = phi%data(i-1,j  )
+                    en = phi%data(i  ,j+1)
+                    ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
+                    es = three*(p-en)+phi%data(i,j+2) !two*p-en
 
-                    gxxe = geo%Jgup_xx%data(i+1,j)
-                    gxxw = geo%Jgup_xx%data(i  ,j)
+                    enw = phi%data(i-1,j+1)
+                    ene = three*(pn-enw)+phi%data(i-2,j+1) !two*pn-enw
+                    esw = three*(pw-enw)+phi%data(i-1,j+2) !two*pw-enw
+                    ese = half*((three*(es-esw)+phi%data(i-2,j-1))+(three*(ee-ene)+phi%data(i+1,j+2))) !half*((two*es-esw)+(two*ee-ene))
 
-                    gxye = geo%Jgup_xy%data(i+1,j)
-                    gxyw = geo%Jgup_xy%data(i  ,j)
-
-                    gyyn = geo%Jgup_yy%data(i,j+1)
-                    gyys = geo%Jgup_yy%data(i,j  )
-
-                    gyxn = geo%Jgup_yx%data(i,j+1)
-                    gyxs = geo%Jgup_yx%data(i,j  )
+                    xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+                    xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+                    yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+                    yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
                     if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
-                        gxxe = zero
-                        gxye = zero
+                        if (homog) then
+                            xfe = zero
+                        else if (bc%mode_xhi .eq. BCMODE_UNIFORM) then
+                            xfe = bc%data_xhi(1)
+                        else
+                            xfe = bc%data_xhi(j)
+                        endif
+                    endif
+                    if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
+                        if (homog) then
+                            yfs = zero
+                        else if (bc%mode_ylo .eq. BCMODE_UNIFORM) then
+                            yfs = bc%data_ylo(1)
+                        else
+                            yfs = bc%data_ylo(i)
+                        endif
                     endif
 
-                    lxx = gxxe*pe + gxxw*pw
-                    lyy = gyyn*pn + gyys*ps
-                    lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-                    lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-                    lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+                    lphi = (xfe-xfw)*idx + (yfn-yfs)*idy
 
-                    newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-                    phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-                enddo !j
+                    newphi = phi%data(i,j) + (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+                    phi%data(i,j) = omega*newphi + (one-omega)*phi%data(i,j)
+                endif ! not periodic in x
+            endif ! not periodic in y
+
+            ! Interior to y...
+            do j = inner_jlo, inner_jhi
+                ! Lower x boundary (avoid west), interior to y
+                if (bc%type_xlo .ne. BCTYPE_PERIODIC) then
+                    i = ilo
+
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ee = phi%data(i+1,j  )
+                    en = phi%data(i  ,j+1)
+                    es = phi%data(i  ,j-1)
+                    ew = three*(p-ee)+phi%data(i+2,j) !two*p-ee
+
+                    ene = phi%data(i+1,j+1)
+                    ese = phi%data(i+1,j-1)
+                    enw = three*(en-ene)+phi%data(i+2,j+1) !two*en-ene
+                    esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
+
+                    xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+                    xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+                    yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+                    yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
+
+                    if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
+                        if (homog) then
+                            xfw = zero
+                        else if (bc%mode_xlo .eq. BCMODE_UNIFORM) then
+                            xfw = bc%data_xlo(1)
+                        else
+                            xfw = bc%data_xlo(j)
+                        endif
+                    endif
+
+                    lphi = (xfe-xfw)*idx + (yfn-yfs)*idy
+
+                    newphi = phi%data(i,j) + (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+                    phi%data(i,j) = omega*newphi + (one-omega)*phi%data(i,j)
+                endif ! not periodic in x
+
+                ! Interior to x and y
+                do i = inner_ilo, inner_ihi
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ee = phi%data(i+1,j  )
+                    ew = phi%data(i-1,j  )
+                    en = phi%data(i  ,j+1)
+                    es = phi%data(i  ,j-1)
+
+                    ene = phi%data(i+1,j+1)
+                    enw = phi%data(i-1,j+1)
+                    ese = phi%data(i+1,j-1)
+                    esw = phi%data(i-1,j-1)
+
+                    xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+                    xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+                    yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+                    yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
+
+                    lphi = (xfe-xfw)*idx + (yfn-yfs)*idy
+
+                    newphi = phi%data(i,j) + (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+                    phi%data(i,j) = omega*newphi + (one-omega)*phi%data(i,j)
+                enddo !i
+
+                ! Upper x boundary (avoid east), interior to y
+                if (bc%type_xhi .ne. BCTYPE_PERIODIC) then
+                    i = ihi
+
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ew = phi%data(i-1,j  )
+                    en = phi%data(i  ,j+1)
+                    es = phi%data(i  ,j-1)
+                    ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
+
+                    enw = phi%data(i-1,j+1)
+                    esw = phi%data(i-1,j-1)
+                    ene = three*(en-enw)+phi%data(i-2,j+1) !two*en-enw
+                    ese = three*(es-esw)+phi%data(i-2,j-1) !two*es-esw
+
+                    xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+                    xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+                    yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+                    yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
+
+                    if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
+                        if (homog) then
+                            xfe = zero
+                        else if (bc%mode_xhi .eq. BCMODE_UNIFORM) then
+                            xfe = bc%data_xhi(1)
+                        else
+                            xfe = bc%data_xhi(j)
+                        endif
+                    endif
+
+                    lphi = (xfe-xfw)*idx + (yfn-yfs)*idy
+
+                    newphi = phi%data(i,j) + (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+                    phi%data(i,j) = omega*newphi + (one-omega)*phi%data(i,j)
+                endif ! not periodic in x
+            enddo !j
 
 
-                ! Upper y boundary...
+            ! Upper y boundary...
+            if (bc%type_yhi .ne. BCTYPE_PERIODIC) then
                 j = jhi
 
                 ! Lower x boundary (avoid west), upper y boundary (avoid north)
-                i = ilo
+                if (bc%type_xlo .ne. BCTYPE_PERIODIC) then
+                    i = ilo
 
-                p  = phi%data(i  ,j  )
-                pe = phi%data(i+1,j  )
-                pw = two*p-pe !phi%data(i-1,j  )
-                ps = phi%data(i  ,j-1)
-                pn = two*p-ps !phi%data(i  ,j+1)
-
-                pse = phi%data(i+1,j-1)
-                pne = two*pe-pse !phi%data(i+1,j+1)
-                psw = two*ps-pse !phi%data(i-1,j-1)
-                pnw = half*((two*pw-psw)+(two*pn-pne)) !phi%data(i-1,j+1)
-
-                gxxe = geo%Jgup_xx%data(i+1,j)
-                gxxw = geo%Jgup_xx%data(i  ,j)
-
-                gxye = geo%Jgup_xy%data(i+1,j)
-                gxyw = geo%Jgup_xy%data(i  ,j)
-
-                gyyn = geo%Jgup_yy%data(i,j+1)
-                gyys = geo%Jgup_yy%data(i,j  )
-
-                gyxn = geo%Jgup_yx%data(i,j+1)
-                gyxs = geo%Jgup_yx%data(i,j  )
-
-                if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-                    gxxw = zero
-                    gxyw = zero
-                endif
-                if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-                    gyyn = zero
-                    gyxn = zero
-                endif
-
-                lxx = gxxe*pe + gxxw*pw
-                lyy = gyyn*pn + gyys*ps
-                lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-                lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-                lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-                newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-                phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-
-                ! Interior to x, upper y boundary (avoid north)
-                do i = ilo, ihi
+                    p  = phi%data(i  ,j  )
                     pe = phi%data(i+1,j  )
                     pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
                     ps = phi%data(i  ,j-1)
-                    pn = two*p-ps !phi%data(i  ,j+1)
 
-                    pse = phi%data(i+1,j-1)
-                    psw = phi%data(i-1,j-1)
-                    pne = two*pe-pse !phi%data(i+1,j+1)
-                    pnw = two*pw-psw !phi%data(i-1,j+1)
+                    ee = phi%data(i+1,j  )
+                    es = phi%data(i  ,j-1)
+                    ew = three*(p-ee)+phi%data(i+2,j) !two*p-ee
+                    en = three*(p-es)+phi%data(i,j-2) !two*p-es
 
-                    gxxe = geo%Jgup_xx%data(i+1,j)
-                    gxxw = geo%Jgup_xx%data(i  ,j)
+                    ese = phi%data(i+1,j-1)
+                    ene = three*(ee-ese)+phi%data(i+1,j-2) !two*ee-ese
+                    esw = three*(es-ese)+phi%data(i+2,j-1) !two*es-ese
+                    enw = half*((three*(ew-esw)+phi%data(i-1,j-2))+(three*(en-ene)+phi%data(i+2,j+1))) !half*((two*ew-esw)+(two*en-ene))
 
-                    gxye = geo%Jgup_xy%data(i+1,j)
-                    gxyw = geo%Jgup_xy%data(i  ,j)
+                    xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+                    xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+                    yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+                    yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
-                    gyyn = geo%Jgup_yy%data(i,j+1)
-                    gyys = geo%Jgup_yy%data(i,j  )
-
-                    gyxn = geo%Jgup_yx%data(i,j+1)
-                    gyxs = geo%Jgup_yx%data(i,j  )
-
+                    if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
+                        if (homog) then
+                            xfw = zero
+                        else if (bc%mode_xlo .eq. BCMODE_UNIFORM) then
+                            xfw = bc%data_xlo(1)
+                        else
+                            xfw = bc%data_xlo(j)
+                        endif
+                    endif
                     if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-                        gyyn = zero
-                        gyxn = zero
+                        if (homog) then
+                            yfn = zero
+                        else if (bc%mode_yhi .eq. BCMODE_UNIFORM) then
+                            yfn = bc%data_yhi(1)
+                        else
+                            yfn = bc%data_yhi(j)
+                        endif
                     endif
 
-                    lxx = gxxe*pe + gxxw*pw
-                    lyy = gyyn*pn + gyys*ps
-                    lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-                    lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
+                    lphi = (xfe-xfw)*idx + (yfn-yfs)*idy
 
-                    lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
+                    newphi = phi%data(i,j) + (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+                    phi%data(i,j) = omega*newphi + (one-omega)*phi%data(i,j)
+                endif ! not periodic in x
 
-                    newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-                    phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
+                ! Interior to x, upper y boundary (avoid north)
+                do i = inner_ilo, inner_ihi
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
+
+                    ee = phi%data(i+1,j  )
+                    ew = phi%data(i-1,j  )
+                    es = phi%data(i  ,j-1)
+                    en = three*(p-es)+phi%data(i,j-2) !two*p-es
+
+                    ese = phi%data(i+1,j-1)
+                    esw = phi%data(i-1,j-1)
+                    ene = three*(ee-ese)+phi%data(i+1,j-2) !two*ee-ese
+                    enw = three*(ew-esw)+phi%data(i-1,j-2) !two*ew-esw
+
+                    xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+                    xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+                    yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+                    yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
+
+                    if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
+                        if (homog) then
+                            yfn = zero
+                        else if (bc%mode_yhi .eq. BCMODE_UNIFORM) then
+                            yfn = bc%data_yhi(1)
+                        else
+                            yfn = bc%data_yhi(j)
+                        endif
+                    endif
+
+                    lphi = (xfe-xfw)*idx + (yfn-yfs)*idy
+
+                    newphi = phi%data(i,j) + (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+                    phi%data(i,j) = omega*newphi + (one-omega)*phi%data(i,j)
                 enddo !i
 
                 ! Upper x boundary (avoid east), upper y boundary (avoid north)
-                i = ihi
+                if (bc%type_xhi .ne. BCTYPE_PERIODIC) then
+                    i = ihi
 
-                p  = phi%data(i  ,j  )
-                pw = phi%data(i-1,j  )
-                pe = two*p-pw !phi%data(i+1,j  )
-                ps = phi%data(i  ,j-1)
-                pn = two*p-ps !phi%data(i  ,j+1)
+                    p  = phi%data(i  ,j  )
+                    pe = phi%data(i+1,j  )
+                    pw = phi%data(i-1,j  )
+                    pn = phi%data(i  ,j+1)
+                    ps = phi%data(i  ,j-1)
 
-                psw = two*pw-pnw !phi%data(i-1,j-1)
-                pnw = phi%data(i-1,j+1)
-                pse = two*ps-psw !phi%data(i+1,j-1)
-                pne = half*((two*pn-pnw)+(two*pe-pse)) !phi%data(i+1,j+1)
+                    ew = phi%data(i-1,j  )
+                    es = phi%data(i  ,j-1)
+                    ee = three*(p-ew)+phi%data(i-2,j) !two*p-ew
+                    en = three*(p-es)+phi%data(i,j-2) !two*p-es
 
-                gxxe = geo%Jgup_xx%data(i+1,j)
-                gxxw = geo%Jgup_xx%data(i  ,j)
+                    esw = phi%data(i-1,j-1)
+                    enw = three*(ew-esw)+phi%data(i-1,j-2) !two*ew-esw
+                    ese = three*(es-esw)+phi%data(i-2,j-1) !two*es-esw
+                    ene = half*((three*(en-enw)+phi%data(i-2,j+1))+(three*(ee-ese)+phi%data(i+1,j-2))) !half*((two*en-enw)+(two*ee-ese))
 
-                gxye = geo%Jgup_xy%data(i+1,j)
-                gxyw = geo%Jgup_xy%data(i  ,j)
+                    xfe = geo%Jgup_xx%data(i+1,j)*(pe-p)*idx + geo%Jgup_xy%data(i+1,j)*fourth*(ene-ese+en-es)*idy
+                    xfw = geo%Jgup_xx%data(i  ,j)*(p-pw)*idx + geo%Jgup_xy%data(i  ,j)*fourth*(en-es+enw-esw)*idy
+                    yfn = geo%Jgup_yy%data(i,j+1)*(pn-p)*idy + geo%Jgup_yx%data(i,j+1)*fourth*(ene-enw+ee-ew)*idx
+                    yfs = geo%Jgup_yy%data(i,j  )*(p-ps)*idy + geo%Jgup_yx%data(i,j  )*fourth*(ee-ew+ese-esw)*idx
 
-                gyyn = geo%Jgup_yy%data(i,j+1)
-                gyys = geo%Jgup_yy%data(i,j  )
+                    if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
+                        if (homog) then
+                            xfe = zero
+                        else if (bc%mode_xhi .eq. BCMODE_UNIFORM) then
+                            xfe = bc%data_xhi(1)
+                        else
+                            xfe = bc%data_xhi(j)
+                        endif
+                    endif
+                    if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
+                        if (homog) then
+                            yfn = zero
+                        else if (bc%mode_yhi .eq. BCMODE_UNIFORM) then
+                            yfn = bc%data_yhi(1)
+                        else
+                            yfn = bc%data_yhi(j)
+                        endif
+                    endif
 
-                gyxn = geo%Jgup_yx%data(i,j+1)
-                gyxs = geo%Jgup_yx%data(i,j  )
+                    lphi = (xfe-xfw)*idx + (yfn-yfs)*idy
 
-                if (bc%type_xhi .eq. BCTYPE_NEUM) then ! west terms are zero
-                    gxxw = zero
-                    gxyw = zero
-                endif
-                if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-                    gyyn = zero
-                    gyxn = zero
-                endif
+                    newphi = phi%data(i,j) + (rhs%data(i,j) - lphi) * invdiags%data(i,j)
+                    phi%data(i,j) = omega*newphi + (one-omega)*phi%data(i,j)
+                endif ! not periodic in x
+            endif ! not periodic in y
 
-                lxx = gxxe*pe + gxxw*pw
-                lyy = gyyn*pn + gyys*ps
-                lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-                lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-                lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-                newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-                phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-            endif
-
-            ! Compute new residual
-            ! TODO: Once this function has been corrected,
-            ! this can move inside the i(tol>0) block.
-            call compute_residual (r, rhs, phi, geo, bc, .true.)
-
+            ! Diagnostics
             if (tol .gt. zero) then
+                ! Compute new residual
+                ! TODO: Once this function has been corrected,
+                ! this can move inside the i(tol>0) block.
+                call compute_residual (r, rhs, phi, geo, bc, homog)
+
                 relres(iter) = pnorm (r, r%valid, 2) / rscale
                 if (verbosity .ge. 3) then
                     print*, 'iter ', iter, ': rel |res| = ', relres(iter)
@@ -3874,9 +4021,12 @@ contains
         enddo
 
         ! Free memory
-        call undefine_box_data (r)
+        if (tol .gt. zero) then
+            call undefine_box_data (r)
+        endif
 
     end subroutine relax_gs
+
 
 
     ! ------------------------------------------------------------------------------
@@ -4702,8 +4852,8 @@ contains
 
         ! Relaxation params
         real(dp), parameter                                  :: relax_tol = -one
-        real(dp), parameter                                  :: relax_omega = one ! Was 1.33
-        logical, parameter                                   :: relax_redblack = .true.
+        real(dp), parameter                                  :: relax_omega = one+third ! Was 1.33
+        ! logical, parameter                                   :: relax_redblack = .true.
         integer, parameter                                   :: relax_verbosity = 0
 
         ! Bottom solver params
@@ -4744,7 +4894,7 @@ contains
             endif
             call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
                            invdiags(depth), relax_omega, relax_tol, &
-                           smooth_bottom, relax_redblack, &
+                           smooth_bottom, &
                            .false., & ! zero phi?
                            relax_verbosity)
 
@@ -4783,7 +4933,7 @@ contains
             endif
             call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
                            invdiags(depth), relax_omega, relax_tol, &
-                           smooth_down, relax_redblack, &
+                           smooth_down, &
                            .false., & ! zero phi?
                            relax_verbosity)
 
@@ -4832,7 +4982,7 @@ contains
             endif
             call relax_gs (e(depth), r(depth), geo(depth), bc(depth), homog, &
                            invdiags(depth), relax_omega, relax_tol, &
-                           smooth_up, relax_redblack, &
+                           smooth_up, &
                            .false., & ! zero phi?
                            relax_verbosity)
 
