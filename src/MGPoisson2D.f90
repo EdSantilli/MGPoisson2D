@@ -4029,6 +4029,229 @@ contains
 
 
 
+    ! ! ------------------------------------------------------------------------------
+    ! ! ------------------------------------------------------------------------------
+    ! subroutine solve_bicgstab (phi, rhs, geo, bc, homog, &
+    !                            tol, max_iters, max_restarts, zerophi, verbosity)
+    !     type(box_data), intent(inout)                 :: phi
+    !     type(box_data), intent(in)                    :: rhs
+    !     type(geo_data), intent(in)                    :: geo
+    !     type(bdry_data), intent(in)                   :: bc
+    !     logical, intent(in)                           :: homog
+    !     real(dp), intent(in)                          :: tol
+    !     integer, intent(in)                           :: max_iters, max_restarts
+    !     logical, intent(in)                           :: zerophi
+    !     integer, intent(in)                           :: verbosity
+
+    !     integer                                       :: ilo, ihi
+    !     integer                                       :: jlo, jhi
+    !     type(box_data)                                :: r, r0, nu, p, t
+    !     real(dp)                                      :: rscale, sum
+    !     real(dp), dimension(0:max_iters+max_restarts) :: rho, omega, relres
+    !     real(dp)                                      :: alpha, beta, lastres
+    !     integer                                       :: iter, i, num_restarts
+    !     logical                                       :: is_restart
+
+    !     real(dp), parameter                           :: hang = 1.0E-7_dp
+
+    !     ! Do we even need to be here?
+    !     if (max_iters .eq. 0) then
+    !         return
+    !     endif
+
+    !     ilo = rhs%valid%ilo
+    !     ihi = rhs%valid%ihi
+    !     jlo = rhs%valid%jlo
+    !     jhi = rhs%valid%jhi
+
+    !     ! Allocate workspace
+    !     call define_box_data (r, phi)
+    !     call define_box_data (r0, phi)
+    !     call define_box_data (nu, phi)
+    !     call define_box_data (p, phi)
+    !     call define_box_data (t, phi)
+
+    !     ! Initialize phi to zero
+    !     if (zerophi) then
+    !         phi%data = zero
+    !     endif
+
+    !     is_restart = .false.
+    !     i = 0
+    !     relres = zero
+
+    !     ! Compute initial residual
+    !     call compute_residual (r, rhs, phi, geo, bc, homog)
+    !     r0%data = r%data
+    !     rscale = pnorm (r0, r0%valid, 2)
+    !     relres(0) = one
+    !     if (verbosity .ge. 3) then
+    !         print*, 'scale |res| = ', rscale
+    !         print*, 'iter ', 0, ': rel |res| = ', relres(0)
+    !     endif
+
+    !     ! Initialize all other workspace variables
+    !     alpha = one
+    !     rho(i) = one
+    !     omega(i) = one
+    !     nu%data = zero
+    !     p%data = zero
+    !     num_restarts = 0
+
+    !     ! Iterate...
+    !     do iter = 1, max_iters
+    !         ! Increment index for bookkeeping vars.
+    !         i = i + 1
+
+    !         if (verbosity .ge. 5) then
+    !             sum = integrate2d (r, r%valid, geo, .false.)
+    !             print*, ' sum rhs = ', sum
+    !         endif
+
+    !         rho(i) = inner_prod (r0, r)
+    !         beta = (rho(i) / rho(i-1)) * (alpha / omega(i-1))
+    !         if (beta .eq. zero) then
+    !             print*, 'solve_bicgstab: beta is zero. Probably due to a zero rhs.'
+    !             stop
+    !         endif
+    !         p%data = beta*p%data
+    !         p%data = p%data                  &
+    !                - beta*omega(i-1)*nu%data &
+    !                + r%data
+
+    !         ! A preconditioner would go here
+    !         call compute_laplacian (nu, p, geo, bc, homog)
+    !         alpha = inner_prod (r0, nu)
+    !         alpha = rho(i) / alpha
+    !         r%data = r%data - alpha*nu%data
+
+    !         ! A preconditioner would go here
+    !         call compute_laplacian (t, r, geo, bc, homog)
+    !         omega(i) = inner_prod (t, r) / inner_prod (t, t)
+
+    !         ! This would also change with a preconditioner
+    !         phi%data = phi%data         &
+    !                  + alpha * p%data   &
+    !                  + omega(i) * r%data
+
+    !         ! Compute new residual
+    !         r%data = r%data - omega(i)*t%data
+
+    !         ! If this is a restart, we expect the residual to rise.
+    !         ! Don't let this stop the solver from proceeding.
+    !         if (.not. is_restart) then
+    !             lastres = relres(i-1)
+    !         else
+    !             lastres = 1.0E200_dp
+    !         endif
+
+    !         ! Check if we are at tol
+    !         relres(i) = pnorm (r, r%valid, 2) / rscale
+    !         if (verbosity .ge. 3) then
+    !             print*, 'iter ', iter, ': rel |res| = ', relres(i)
+    !         endif
+
+    !         ! Did we converge?
+    !         if (relres(i) .le. tol) then
+    !             if (verbosity .ge. 3) then
+    !                 print*, "Converged."
+    !             endif
+    !             exit
+    !         endif
+
+    !         ! Are we hanging?
+    !         if (abs(relres(i) - lastres) .lt. tol*hang) then
+    !             if (num_restarts .lt. max_restarts) then
+    !                 ! The act of restarting will produce a new residual which we
+    !                 ! would like to include in our bookkeeping, so we increase i,
+    !                 ! recompute the residual, and reset all other bookkeeping vars.
+
+    !                 ! Increment
+    !                 num_restarts = num_restarts + 1
+    !                 i = i + 1
+
+    !                 ! Compute new residual
+    !                 call compute_residual (r, rhs, phi, geo, bc, homog)
+    !                 r0%data = r%data
+    !                 relres(i) = pnorm (r, r%valid, 2) / rscale
+    !                 if (verbosity .ge. 3) then
+    !                     print*, "Hanging, restart number ", num_restarts, ', current rel |res| = ', relres(i)
+    !                 endif
+
+    !                 ! Reset bookkeeping variables
+    !                 alpha = one
+    !                 rho(i) = one
+    !                 omega(i) = one
+    !                 nu%data = zero
+    !                 p%data = zero
+
+    !                 ! Start new iteration
+    !                 is_restart = .true.
+    !                 cycle
+    !             else
+    !                 if (verbosity .ge. 3) then
+    !                     print*, "Hanging, max restarts reached."
+    !                 endif
+    !                 exit
+    !             endif
+    !         endif
+
+    !         ! Are we diverging?
+    !         if (relres(i) .gt. lastres) then
+    !             if (num_restarts .lt. max_restarts) then
+    !                 ! The act of restarting will produce a new residual which we
+    !                 ! would like to include in our bookkeeping, so we increase i,
+    !                 ! recompute the residual, and reset all other bookkeeping vars.
+
+    !                 ! Increment
+    !                 num_restarts = num_restarts + 1
+    !                 i = i + 1
+
+    !                 ! Compute new residual
+    !                 call compute_residual (r, rhs, phi, geo, bc, homog)
+    !                 r0%data = r%data
+    !                 relres(i) = pnorm (r0, r0%valid, 2) / rscale
+    !                 if (verbosity .ge. 3) then
+    !                     print*, "Hanging, restart number ", num_restarts, ', current rel |res| = ', relres(i)
+    !                 endif
+
+    !                 ! Reset bookkeeping variables
+    !                 alpha = one
+    !                 rho(i) = one
+    !                 omega(i) = one
+    !                 nu%data = zero
+    !                 p%data = zero
+
+    !                 ! Start new iteration
+    !                 is_restart = .true.
+    !                 cycle
+    !             else
+    !                 if (verbosity .ge. 3) then
+    !                     print*, 'Diverging.'
+    !                 endif
+
+    !                 ! Undo last correction
+    !                 ! TODO: It would be better to remember the best solution
+    !                 r%data = r%data + omega(i)*t%data
+    !                 phi%data = phi%data         &
+    !                          - alpha * p%data   &
+    !                          - omega(i) * r%data
+    !                 exit
+    !             endif
+    !         endif
+
+    !         is_restart = .false.
+    !     enddo
+
+    !     ! Free memory
+    !     call undefine_box_data (r)
+    !     call undefine_box_data (r0)
+    !     call undefine_box_data (nu)
+    !     call undefine_box_data (p)
+    !     call undefine_box_data (t)
+    ! end subroutine solve_bicgstab
+
+
     ! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
     subroutine solve_bicgstab (phi, rhs, geo, bc, homog, &
@@ -4045,211 +4268,359 @@ contains
 
         integer                                       :: ilo, ihi
         integer                                       :: jlo, jhi
-        type(box_data)                                :: r, r0, nu, p, t
-        real(dp)                                      :: rscale, sum
-        real(dp), dimension(0:max_iters+max_restarts) :: rho, omega, relres
-        real(dp)                                      :: alpha, beta, lastres
-        integer                                       :: iter, i, num_restarts
-        logical                                       :: is_restart
+        ! real(dp)                                      :: rscale, sum
+        ! real(dp), dimension(0:max_iters+max_restarts) :: rho, omega, relres
+        ! real(dp)                                      :: alpha, beta, lastres
+        ! integer                                       :: iter, i, num_restarts
+        ! logical                                       :: is_restart
+        type(box_data)                                :: r, r_tilde, e, p, p_tilde, s_tilde, t, v
+        real(dp), dimension(0:3)                      :: rho
+        real(dp), dimension(0:1)                      :: norm, alpha, beta, omega
+        real(dp)                                      :: initial_norm, initial_rnorm, m
+        integer                                       :: recount, i, restarts
+        logical                                       :: init
 
+        real(dp), parameter                           :: reps = 1.0E-12_dp
         real(dp), parameter                           :: hang = 1.0E-7_dp
+        real(dp), parameter                           :: small = 1.0E-30_dp
+        integer, parameter                            :: norm_type = 2
 
         ! Do we even need to be here?
         if (max_iters .eq. 0) then
             return
         endif
 
-        ilo = rhs%valid%ilo
-        ihi = rhs%valid%ihi
-        jlo = rhs%valid%jlo
-        jhi = rhs%valid%jhi
-
-        ! Allocate workspace
-        call define_box_data (r, phi)
-        call define_box_data (r0, phi)
-        call define_box_data (nu, phi)
-        call define_box_data (p, phi)
-        call define_box_data (t, phi)
-
         ! Initialize phi to zero
         if (zerophi) then
             phi%data = zero
         endif
 
-        is_restart = .false.
-        i = 0
-        relres = zero
+        ! Allocate workspace
+        call define_box_data (r, rhs)
+        call define_box_data (r_tilde, rhs)
+        call define_box_data (e, phi)
+        call define_box_data (p, rhs)
+        call define_box_data (p_tilde, phi)
+        call define_box_data (s_tilde, phi)
+        call define_box_data (t, rhs)
+        call define_box_data (v, rhs)
 
-        ! Compute initial residual
+        ilo = rhs%valid%ilo
+        ihi = rhs%valid%ihi
+        jlo = rhs%valid%jlo
+        jhi = rhs%valid%jhi
+
+        recount = 0
+
         call compute_residual (r, rhs, phi, geo, bc, homog)
-        r0%data = r%data
-        rscale = pnorm (r0, r0%valid, 2)
-        relres(0) = one
+
+        r_tilde%data = r%data
+        e%data = zero
+        p_tilde%data = zero
+        s_tilde%data = zero
+
+        i = 0
+
+        norm(0) = pnorm(r, r%valid, norm_type)
+        initial_norm = norm(0)
+        initial_rnorm = norm(0)
+        norm(1) = norm(0)
+
+        rho = zero
+        alpha = zero
+        beta = zero
+        omega = zero
+
+        init = .true.
+        restarts = 0
+
         if (verbosity .ge. 3) then
-            print*, 'scale |res| = ', rscale
-            print*, 'iter ', 0, ': rel |res| = ', relres(0)
+            ! print*, 'scale |res| = ', rscale
+            print*, 'iter ', 0, ': rel |res| = ', initial_norm
         endif
 
-        ! Initialize all other workspace variables
-        alpha = one
-        rho(i) = one
-        omega(i) = one
-        nu%data = zero
-        p%data = zero
-        num_restarts = 0
-
-        ! Iterate...
-        do iter = 1, max_iters
-            ! Increment index for bookkeeping vars.
+        do while (((i .lt. max_iters) .and. (norm(0) .gt. tol*norm(1)))  .and. (norm(1) .gt. zero))
             i = i + 1
 
-            if (verbosity .ge. 5) then
-                sum = integrate2d (r, r%valid, geo, .false.)
-                print*, ' sum rhs = ', sum
-            endif
+            norm(1) = norm(0)
+            alpha(1) = alpha(0)
+            beta(1) = beta(0)
+            omega(1) = omega(0)
 
-            rho(i) = inner_prod (r0, r)
-            beta = (rho(i) / rho(i-1)) * (alpha / omega(i-1))
-            if (beta .eq. zero) then
-                print*, 'solve_bicgstab: beta is zero. Probably due to a zero rhs.'
-                stop
-            endif
-            p%data = beta*p%data
-            p%data = p%data                  &
-                   - beta*omega(i-1)*nu%data &
-                   + r%data
+            rho(3) = rho(2)
+            rho(2) = rho(1)
+            rho(1) = inner_prod (r_tilde, r)
 
-            ! A preconditioner would go here
-            call compute_laplacian (nu, p, geo, bc, homog)
-            alpha = inner_prod (r0, nu)
-            alpha = rho(i) / alpha
-            r%data = r%data - alpha*nu%data
+            if (rho(1) .eq. zero) then
+                phi%data = phi%data + e%data
 
-            ! A preconditioner would go here
-            call compute_laplacian (t, r, geo, bc, homog)
-            omega(i) = inner_prod (t, r) / inner_prod (t, t)
-
-            ! This would also change with a preconditioner
-            phi%data = phi%data         &
-                     + alpha * p%data   &
-                     + omega(i) * r%data
-
-            ! Compute new residual
-            r%data = r%data - omega(i)*t%data
-
-            ! If this is a restart, we expect the residual to rise.
-            ! Don't let this stop the solver from proceeding.
-            if (.not. is_restart) then
-                lastres = relres(i-1)
-            else
-                lastres = 1.0E200_dp
-            endif
-
-            ! Check if we are at tol
-            relres(i) = pnorm (r, r%valid, 2) / rscale
-            if (verbosity .ge. 3) then
-                print*, 'iter ', iter, ': rel |res| = ', relres(i)
-            endif
-
-            ! Did we converge?
-            if (relres(i) .le. tol) then
                 if (verbosity .ge. 3) then
-                    print*, "Converged."
+                    print*, 'rho = 0, returning.'
+                    print*, 'residual norm = ', norm(0)
                 endif
+
                 exit
             endif
 
-            ! Are we hanging?
-            if (abs(relres(i) - lastres) .lt. tol*hang) then
-                if (num_restarts .lt. max_restarts) then
-                    ! The act of restarting will produce a new residual which we
-                    ! would like to include in our bookkeeping, so we increase i,
-                    ! recompute the residual, and reset all other bookkeeping vars.
-
-                    ! Increment
-                    num_restarts = num_restarts + 1
-                    i = i + 1
-
-                    ! Compute new residual
-                    call compute_residual (r, rhs, phi, geo, bc, homog)
-                    r0%data = r%data
-                    relres(i) = pnorm (r, r%valid, 2) / rscale
-                    if (verbosity .ge. 3) then
-                        print*, "Hanging, restart number ", num_restarts, ', current rel |res| = ', relres(i)
-                    endif
-
-                    ! Reset bookkeeping variables
-                    alpha = one
-                    rho(i) = one
-                    omega(i) = one
-                    nu%data = zero
-                    p%data = zero
-
-                    ! Start new iteration
-                    is_restart = .true.
-                    cycle
-                else
-                    if (verbosity .ge. 3) then
-                        print*, "Hanging, max restarts reached."
-                    endif
-                    exit
-                endif
+            if (init) then
+                p%data = r%data
+                init = .false.
+            else
+                beta(1) = (rho(1)/rho(2))*(alpha(1)/omega(1))
+                p%data = beta(1)*(p%data-omega(1)*v%data) + r%data
             endif
 
-            ! Are we diverging?
-            if (relres(i) .gt. lastres) then
-                if (num_restarts .lt. max_restarts) then
-                    ! The act of restarting will produce a new residual which we
-                    ! would like to include in our bookkeeping, so we increase i,
-                    ! recompute the residual, and reset all other bookkeeping vars.
+            ! Precond (p_rilde, p)
+            p_tilde%data = p%data
 
-                    ! Increment
-                    num_restarts = num_restarts + 1
-                    i = i + 1
+            call compute_laplacian (v, p_tilde, geo, bc, .true.)
+            m = inner_prod (r_tilde, v)
+            alpha(0) = rho(1)/m
 
-                    ! Compute new residual
-                    call compute_residual (r, rhs, phi, geo, bc, homog)
-                    r0%data = r%data
-                    relres(i) = pnorm (r0, r0%valid, 2) / rscale
-                    if (verbosity .ge. 3) then
-                        print*, "Hanging, restart number ", num_restarts, ', current rel |res| = ', relres(i)
-                    endif
-
-                    ! Reset bookkeeping variables
-                    alpha = one
-                    rho(i) = one
-                    omega(i) = one
-                    nu%data = zero
-                    p%data = zero
-
-                    ! Start new iteration
-                    is_restart = .true.
-                    cycle
-                else
-                    if (verbosity .ge. 3) then
-                        print*, 'Diverging.'
-                    endif
-
-                    ! Undo last correction
-                    ! TODO: It would be better to remember the best solution
-                    r%data = r%data + omega(i)*t%data
-                    phi%data = phi%data         &
-                             - alpha * p%data   &
-                             - omega(i) * r%data
-                    exit
-                endif
+            if (abs(m) .gt. small*abs(rho(1))) then
+                r%data = r%data - alpha(0)*v%data
+                norm(0) = pnorm (r, r%valid, norm_type)
+                e%data = e%data + alpha(0)*p_tilde%data
+            else
+                r%data = zero
+                norm(0) = zero
             endif
 
-            is_restart = .false.
+            if ((norm(0) .gt. tol*initial_norm) .and. (norm(0) .gt. reps*initial_rnorm)) then
+                ! Precond (s_tilde, r)
+                s_tilde%data = r%data
+
+                call compute_laplacian (t, s_tilde, geo, bc, .true.)
+                omega(0) = inner_prod (t, r) / inner_prod (t, t)
+                e%data = e%data + omega(0)*s_tilde%data
+                r%data = r%data - omega(0)*t%data
+                norm(0) = pnorm(r, r%valid, norm_type)
+            endif
+
+            if (verbosity .ge. 3) then
+                print*, 'iter ', i, ': rel |res| = ', norm(0)
+            endif
+
+            if ((norm(0) .le. tol*initial_norm) .or. (norm(0) .le. reps*initial_rnorm)) then
+                print*, "Converged."
+                exit
+            endif
+
+            if ((omega(0) .eq. zero) .or. (norm(0) .gt. (one-hang)*norm(1))) then
+                if (recount .eq. 0) then
+                    recount = 1
+                else
+                    recount = 0
+                    phi%data = phi%data + e%data
+
+                    if (restarts .eq. max_restarts) then
+                        if (verbosity .ge. 3) then
+                            print*, 'Max restarts reached.'
+                        endif
+                        exit
+                    endif
+
+                    call compute_residual (r, rhs, phi, geo, bc, homog)
+                    norm(0) = pnorm(r, r%valid, norm_type)
+                    ! rho(0) = zero
+                    rho(1) = zero
+                    rho(2) = zero
+                    rho(3) = zero
+                    alpha(0) = zero
+                    beta(0) = zero
+                    omega(0) = zero
+
+                    r_tilde%data = r%data
+                    e%data = zero
+
+                    if (verbosity .ge. 3) then
+                        print*, 'Restart number ', restarts
+                    endif
+
+                    init = .true.
+                endif
+            endif
         enddo
+
+        if (verbosity .ge. 3) then
+            print*, i, ' iterations. final rel |res| = ', norm(0)
+        endif
+
+        phi%data = phi%data + e%data
+
+
+        ! ! Compute initial residual
+        ! call compute_residual (r, rhs, phi, geo, bc, homog)
+        ! r0%data = r%data
+        ! rscale = pnorm (r0, r0%valid, 2)
+        ! relres(0) = one
+        ! if (verbosity .ge. 3) then
+        !     print*, 'scale |res| = ', rscale
+        !     print*, 'iter ', 0, ': rel |res| = ', relres(0)
+        ! endif
+
+        ! ! Initialize all other workspace variables
+        ! alpha = one
+        ! rho(i) = one
+        ! omega(i) = one
+        ! nu%data = zero
+        ! p%data = zero
+        ! num_restarts = 0
+
+        ! ! Iterate...
+        ! do iter = 1, max_iters
+        !     ! Increment index for bookkeeping vars.
+        !     i = i + 1
+
+        !     if (verbosity .ge. 5) then
+        !         sum = integrate2d (r, r%valid, geo, .false.)
+        !         print*, ' sum rhs = ', sum
+        !     endif
+
+        !     rho(i) = inner_prod (r0, r)
+        !     beta = (rho(i) / rho(i-1)) * (alpha / omega(i-1))
+        !     if (beta .eq. zero) then
+        !         print*, 'solve_bicgstab: beta is zero. Probably due to a zero rhs.'
+        !         stop
+        !     endif
+        !     p%data = beta*p%data
+        !     p%data = p%data                  &
+        !            - beta*omega(i-1)*nu%data &
+        !            + r%data
+
+        !     ! A preconditioner would go here
+        !     call compute_laplacian (nu, p, geo, bc, homog)
+        !     alpha = inner_prod (r0, nu)
+        !     alpha = rho(i) / alpha
+        !     r%data = r%data - alpha*nu%data
+
+        !     ! A preconditioner would go here
+        !     call compute_laplacian (t, r, geo, bc, homog)
+        !     omega(i) = inner_prod (t, r) / inner_prod (t, t)
+
+        !     ! This would also change with a preconditioner
+        !     phi%data = phi%data         &
+        !              + alpha * p%data   &
+        !              + omega(i) * r%data
+
+        !     ! Compute new residual
+        !     r%data = r%data - omega(i)*t%data
+
+        !     ! If this is a restart, we expect the residual to rise.
+        !     ! Don't let this stop the solver from proceeding.
+        !     if (.not. is_restart) then
+        !         lastres = relres(i-1)
+        !     else
+        !         lastres = 1.0E200_dp
+        !     endif
+
+        !     ! Check if we are at tol
+        !     relres(i) = pnorm (r, r%valid, 2) / rscale
+        !     if (verbosity .ge. 3) then
+        !         print*, 'iter ', iter, ': rel |res| = ', relres(i)
+        !     endif
+
+        !     ! Did we converge?
+        !     if (relres(i) .le. tol) then
+        !         if (verbosity .ge. 3) then
+        !             print*, "Converged."
+        !         endif
+        !         exit
+        !     endif
+
+        !     ! Are we hanging?
+        !     if (abs(relres(i) - lastres) .lt. tol*hang) then
+        !         if (num_restarts .lt. max_restarts) then
+        !             ! The act of restarting will produce a new residual which we
+        !             ! would like to include in our bookkeeping, so we increase i,
+        !             ! recompute the residual, and reset all other bookkeeping vars.
+
+        !             ! Increment
+        !             num_restarts = num_restarts + 1
+        !             i = i + 1
+
+        !             ! Compute new residual
+        !             call compute_residual (r, rhs, phi, geo, bc, homog)
+        !             r0%data = r%data
+        !             relres(i) = pnorm (r, r%valid, 2) / rscale
+        !             if (verbosity .ge. 3) then
+        !                 print*, "Hanging, restart number ", num_restarts, ', current rel |res| = ', relres(i)
+        !             endif
+
+        !             ! Reset bookkeeping variables
+        !             alpha = one
+        !             rho(i) = one
+        !             omega(i) = one
+        !             nu%data = zero
+        !             p%data = zero
+
+        !             ! Start new iteration
+        !             is_restart = .true.
+        !             cycle
+        !         else
+        !             if (verbosity .ge. 3) then
+        !                 print*, "Hanging, max restarts reached."
+        !             endif
+        !             exit
+        !         endif
+        !     endif
+
+        !     ! Are we diverging?
+        !     if (relres(i) .gt. lastres) then
+        !         if (num_restarts .lt. max_restarts) then
+        !             ! The act of restarting will produce a new residual which we
+        !             ! would like to include in our bookkeeping, so we increase i,
+        !             ! recompute the residual, and reset all other bookkeeping vars.
+
+        !             ! Increment
+        !             num_restarts = num_restarts + 1
+        !             i = i + 1
+
+        !             ! Compute new residual
+        !             call compute_residual (r, rhs, phi, geo, bc, homog)
+        !             r0%data = r%data
+        !             relres(i) = pnorm (r0, r0%valid, 2) / rscale
+        !             if (verbosity .ge. 3) then
+        !                 print*, "Hanging, restart number ", num_restarts, ', current rel |res| = ', relres(i)
+        !             endif
+
+        !             ! Reset bookkeeping variables
+        !             alpha = one
+        !             rho(i) = one
+        !             omega(i) = one
+        !             nu%data = zero
+        !             p%data = zero
+
+        !             ! Start new iteration
+        !             is_restart = .true.
+        !             cycle
+        !         else
+        !             if (verbosity .ge. 3) then
+        !                 print*, 'Diverging.'
+        !             endif
+
+        !             ! Undo last correction
+        !             ! TODO: It would be better to remember the best solution
+        !             r%data = r%data + omega(i)*t%data
+        !             phi%data = phi%data         &
+        !                      - alpha * p%data   &
+        !                      - omega(i) * r%data
+        !             exit
+        !         endif
+        !     endif
+
+        !     is_restart = .false.
+        ! enddo
 
         ! Free memory
         call undefine_box_data (r)
-        call undefine_box_data (r0)
-        call undefine_box_data (nu)
+        call undefine_box_data (r_tilde)
+        call undefine_box_data (e)
         call undefine_box_data (p)
+        call undefine_box_data (p_tilde)
+        call undefine_box_data (s_tilde)
         call undefine_box_data (t)
-
+        call undefine_box_data (v)
     end subroutine solve_bicgstab
 
 end module Poisson2D
