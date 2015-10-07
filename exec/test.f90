@@ -504,9 +504,9 @@ contains
         do i = ilo, ihi
             xx = x(i)
 
-            ! el(i) = zero ! Temporary, flat bottom.
+            el(i) = zero ! Temporary, flat bottom.
             ! el(i) = Hz*half*(one-xx/Lx) ! Sloped bottom (Use this one)
-            el(i) = fourth * sin(pi*xx/Lx)   ! Temporary, sinusoidal bottom.
+            ! el(i) = fourth * sin(pi*xx/Lx)**2   ! Temporary, sinusoidal bottom.
 
             ! if (xx .le. C1) then
             !     ! Left flat region
@@ -1509,50 +1509,50 @@ contains
         call fill_dxdxi (ywk, 1, 1)
         ysoln%data =  ywk%data * (-ky * cos(kx*bdx_y%data) * sin(ky*bdy_y%data)) + ysoln%data
 
-        ! Set BCs
-        call define_bdry_data (bc, valid, &
-                               BCTYPE_DIRI, &   ! xlo
-                               BCTYPE_DIRI, &   ! xhi
-                               BCTYPE_DIRI, &   ! ylo
-                               BCTYPE_DIRI, &   ! yhi
-                               BCMODE_NONUNIFORM, &    ! xlo
-                               BCMODE_NONUNIFORM, &    ! xhi
-                               BCMODE_NONUNIFORM, &    ! ylo
-                               BCMODE_NONUNIFORM)      ! yhi
-
-        xp => bdx_x%data(ilo,:)
-        yp => bdy_x%data(ilo,:)
-        bc%data_xlo = cos(kx*xp) * cos(ky*yp)
-
-        xp => bdx_x%data(ihi+1,:)
-        yp => bdy_x%data(ihi+1,:)
-        bc%data_xhi = cos(kx*xp) * cos(ky*yp)
-
-        xp => bdx_y%data(:,jlo)
-        yp => bdy_y%data(:,jlo)
-        bc%data_ylo = cos(kx*xp) * cos(ky*yp)
-
-        xp => bdx_y%data(:,jhi+1)
-        yp => bdy_y%data(:,jhi+1)
-        bc%data_yhi = cos(kx*xp) * cos(ky*yp)
-
-        nullify(xp)
-        nullify(yp)
-
-        ! ! Set BCs                                                             TODO: Test Neum BCs
+        ! ! Set BCs
         ! call define_bdry_data (bc, valid, &
-        !                        BCTYPE_NEUM, &   ! xlo
-        !                        BCTYPE_NEUM, &   ! xhi
-        !                        BCTYPE_NEUM, &   ! ylo
-        !                        BCTYPE_NEUM, &   ! yhi
+        !                        BCTYPE_DIRI, &   ! xlo
+        !                        BCTYPE_DIRI, &   ! xhi
+        !                        BCTYPE_DIRI, &   ! ylo
+        !                        BCTYPE_DIRI, &   ! yhi
         !                        BCMODE_NONUNIFORM, &    ! xlo
         !                        BCMODE_NONUNIFORM, &    ! xhi
         !                        BCMODE_NONUNIFORM, &    ! ylo
         !                        BCMODE_NONUNIFORM)      ! yhi
-        ! bc%data_xlo = xsoln%data(ilo,:)
-        ! bc%data_xhi = xsoln%data(ihi+1,:)
-        ! bc%data_ylo = ysoln%data(:,jlo)
-        ! bc%data_yhi = ysoln%data(:,jhi+1)
+
+        ! xp => bdx_x%data(ilo,:)
+        ! yp => bdy_x%data(ilo,:)
+        ! bc%data_xlo = cos(kx*xp) * cos(ky*yp)
+
+        ! xp => bdx_x%data(ihi+1,:)
+        ! yp => bdy_x%data(ihi+1,:)
+        ! bc%data_xhi = cos(kx*xp) * cos(ky*yp)
+
+        ! xp => bdx_y%data(:,jlo)
+        ! yp => bdy_y%data(:,jlo)
+        ! bc%data_ylo = cos(kx*xp) * cos(ky*yp)
+
+        ! xp => bdx_y%data(:,jhi+1)
+        ! yp => bdy_y%data(:,jhi+1)
+        ! bc%data_yhi = cos(kx*xp) * cos(ky*yp)
+
+        ! nullify(xp)
+        ! nullify(yp)
+
+        ! Set BCs                                                             TODO: Test Neum BCs
+        call define_bdry_data (bc, valid, &
+                               BCTYPE_NEUM, &   ! xlo
+                               BCTYPE_NEUM, &   ! xhi
+                               BCTYPE_NEUM, &   ! ylo
+                               BCTYPE_NEUM, &   ! yhi
+                               BCMODE_NONUNIFORM, &    ! xlo
+                               BCMODE_NONUNIFORM, &    ! xhi
+                               BCMODE_NONUNIFORM, &    ! ylo
+                               BCMODE_NONUNIFORM)      ! yhi
+        bc%data_xlo = xsoln%data(ilo,:)
+        bc%data_xhi = xsoln%data(ihi+1,:)
+        bc%data_ylo = ysoln%data(:,jlo)
+        bc%data_yhi = ysoln%data(:,jhi+1)
 
         ! Compute gradient
         call compute_grad (xflux, yflux, phi, geo, bc, homog, xwk, ywk)
@@ -1757,6 +1757,17 @@ contains
         call define_box_data (soln, valid, 0, 0, BD_CELL, BD_CELL)
         soln%data(ilo:ihi,jlo:jhi) = -(kx**2+ky**2) * phi%data(ilo:ihi,jlo:jhi) * geo%J%data(ilo:ihi,jlo:jhi)
 
+        ! ! Set BCs (periodic)
+        ! call define_bdry_data (bc, valid, &
+        !                        BCTYPE_PERIODIC, &   ! xlo
+        !                        BCTYPE_PERIODIC, &   ! xhi
+        !                        BCTYPE_PERIODIC, &   ! ylo
+        !                        BCTYPE_PERIODIC, &   ! yhi
+        !                        BCMODE_UNIFORM, &    ! xlo
+        !                        BCMODE_UNIFORM, &    ! xhi
+        !                        BCMODE_UNIFORM, &    ! ylo
+        !                        BCMODE_UNIFORM)      ! yhi
+
         ! ! Set BCs (Dirichlet)
         ! call define_bdry_data (bc, valid, &
         !                        BCTYPE_DIRI, &   ! xlo
@@ -1793,15 +1804,15 @@ contains
         bc%data_xlo = xflux%data(ilo,:)
         bc%data_xhi = xflux%data(ihi+1,:)
 
-        ! Compute yflux = Grad^y[cos(kx)*cos(my)]
-        call define_box_data (yflux, valid, 0, 0, BD_CELL, BD_NODE)
-        call define_box_data (ywk  , yflux)
-        call fill_dxdxi (ywk, 2, 1)
-        yflux%data = -ywk%data * (-kx * sin(kx*bdx_y%data) * cos(ky*bdy_y%data))
-        call fill_dxdxi (ywk, 1, 1)
-        yflux%data =  ywk%data * (-ky * cos(kx*bdx_y%data) * sin(ky*bdy_y%data)) + yflux%data
-        bc%data_ylo = yflux%data(:,jlo)
-        bc%data_yhi = yflux%data(:,jhi+1)
+        ! ! Compute yflux = Grad^y[cos(kx)*cos(my)]
+        ! call define_box_data (yflux, valid, 0, 0, BD_CELL, BD_NODE)
+        ! call define_box_data (ywk  , yflux)
+        ! call fill_dxdxi (ywk, 2, 1)
+        ! yflux%data = -ywk%data * (-kx * sin(kx*bdx_y%data) * cos(ky*bdy_y%data))
+        ! call fill_dxdxi (ywk, 1, 1)
+        ! yflux%data =  ywk%data * (-ky * cos(kx*bdx_y%data) * sin(ky*bdy_y%data)) + yflux%data
+        ! bc%data_ylo = yflux%data(:,jlo)
+        ! bc%data_yhi = yflux%data(:,jhi+1)
 
         ! ! Set BCs (Neumann)
         ! call define_bdry_data (bc, valid, &
@@ -2195,7 +2206,7 @@ contains
             soln%data = soln%data + cos(i*pi*bdx%data/L) * cos(i*pi*bdy%data/H) / dble(i)
         enddo
 
-        ! Set periodic BCs
+        ! Set BCs (periodic)
         call define_bdry_data (bc, valid, &
                                BCTYPE_PERIODIC, &   ! xlo
                                BCTYPE_PERIODIC, &   ! xhi
@@ -2206,32 +2217,32 @@ contains
                                BCMODE_NONUNIFORM, &    ! ylo
                                BCMODE_NONUNIFORM)      ! yhi
 
-        ! Set BCs (Dirichlet)
-        call define_bdry_data (bc, valid, &
-                               BCTYPE_DIRI, &   ! xlo
-                               BCTYPE_DIRI, &   ! xhi
-                               BCTYPE_DIRI, &   ! ylo
-                               BCTYPE_DIRI, &   ! yhi
-                               BCMODE_NONUNIFORM, &    ! xlo
-                               BCMODE_NONUNIFORM, &    ! xhi
-                               BCMODE_NONUNIFORM, &    ! ylo
-                               BCMODE_NONUNIFORM)      ! yhi
-        bc%data_xlo = zero
-        do i = 8, 240, 2
-            bc%data_xlo = bc%data_xlo + cos(i*pi*bdx_x%data(ilo,:)/L) * cos(i*pi*bdy_x%data(ilo,:)/H) / dble(i)
-        enddo
-        bc%data_xhi = zero
-        do i = 8, 240, 2
-            bc%data_xhi = bc%data_xhi + cos(i*pi*bdx_x%data(ihi+1,:)/L) * cos(i*pi*bdy_x%data(ihi+1,:)/H) / dble(i)
-        enddo
-        bc%data_ylo = zero
-        do i = 8, 240, 2
-            bc%data_ylo = bc%data_ylo + cos(i*pi*bdx_y%data(:,jlo)/L) * cos(i*pi*bdy_y%data(:,jlo)/H) / dble(i)
-        enddo
-        bc%data_yhi = zero
-        do i = 8, 240, 2
-            bc%data_yhi = bc%data_yhi + cos(i*pi*bdx_y%data(:,jhi+1)/L) * cos(i*pi*bdy_y%data(:,jhi+1)/H) / dble(i)
-        enddo
+        ! ! Set BCs (Dirichlet)
+        ! call define_bdry_data (bc, valid, &
+        !                        BCTYPE_DIRI, &   ! xlo
+        !                        BCTYPE_DIRI, &   ! xhi
+        !                        BCTYPE_DIRI, &   ! ylo
+        !                        BCTYPE_DIRI, &   ! yhi
+        !                        BCMODE_NONUNIFORM, &    ! xlo
+        !                        BCMODE_NONUNIFORM, &    ! xhi
+        !                        BCMODE_NONUNIFORM, &    ! ylo
+        !                        BCMODE_NONUNIFORM)      ! yhi
+        ! bc%data_xlo = zero
+        ! do i = 8, 240, 2
+        !     bc%data_xlo = bc%data_xlo + cos(i*pi*bdx_x%data(ilo,:)/L) * cos(i*pi*bdy_x%data(ilo,:)/H) / dble(i)
+        ! enddo
+        ! bc%data_xhi = zero
+        ! do i = 8, 240, 2
+        !     bc%data_xhi = bc%data_xhi + cos(i*pi*bdx_x%data(ihi+1,:)/L) * cos(i*pi*bdy_x%data(ihi+1,:)/H) / dble(i)
+        ! enddo
+        ! bc%data_ylo = zero
+        ! do i = 8, 240, 2
+        !     bc%data_ylo = bc%data_ylo + cos(i*pi*bdx_y%data(:,jlo)/L) * cos(i*pi*bdy_y%data(:,jlo)/H) / dble(i)
+        ! enddo
+        ! bc%data_yhi = zero
+        ! do i = 8, 240, 2
+        !     bc%data_yhi = bc%data_yhi + cos(i*pi*bdx_y%data(:,jhi+1)/L) * cos(i*pi*bdy_y%data(:,jhi+1)/H) / dble(i)
+        ! enddo
 
         ! ! Set BCs (Neumann)
         ! call define_box_data (xflux, valid, 0, 0, BD_NODE, BD_CELL)
@@ -2300,22 +2311,22 @@ contains
 
         call cpu_time (t1)
 
-        ! Jacobi iteration
-        call relax_jacobi (phi, lphi, geo, bc, homog, invdiags, &
-                           one,     & ! omega
-                           1.0d-6,  & ! tol
-                           20,      & ! maxiters
-                           .false.,  & ! zerophi
-                           verbosity)
+        ! ! Jacobi iteration
+        ! call relax_jacobi (phi, lphi, geo, bc, homog, invdiags, &
+        !                    one-third,     & ! omega
+        !                    1.0d-6,  & ! tol
+        !                    20,      & ! maxiters
+        !                    .false.,  & ! zerophi
+        !                    verbosity)
 
-        ! ! Gauss-Seidel iteration
-        ! call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
-        !                one,     & ! omega
-        !                1.0d-6,  & ! tol
-        !                10,      & ! maxiters
-        !                .false.,  & ! redblack
-        !                .false.,  & ! zerophi
-        !                verbosity)
+        ! Gauss-Seidel iteration
+        call relax_gs (phi, lphi, geo, bc, homog, invdiags, &
+                       one,     & ! omega
+                       1.0d-6,  & ! tol
+                       10,      & ! maxiters
+                       .false.,  & ! redblack
+                       .false.,  & ! zerophi
+                       verbosity)
 
         ! ! BiCGStab solver
         ! call solve_bicgstab (phi, lphi, geo, bc, homog, &
@@ -2503,7 +2514,7 @@ contains
         bc%data_yhi = yflux%data(:,jhi+1)
 
         ! Solve L[phi] = Div[flux].
-        call compute_inverse_diags (invdiags, geo)
+        call compute_invdiags (invdiags, geo, bc)
         div%data = div%data / geo%J%data(ilo:ihi,jlo:jhi)
         ! sum = integrate2d (div, valid, geo, .true.)
         ! print*, '*sum rhs = ', sum
