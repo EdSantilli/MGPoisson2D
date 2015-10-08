@@ -1852,7 +1852,7 @@ contains
         ! call compute_div (lphi, xflux, yflux)
 
         ! Compute norm
-        lphi%data = soln%data - lphi%data
+        lphi%data(ilo:ihi,jlo:jhi) = soln%data(ilo:ihi,jlo:jhi) - lphi%data(ilo:ihi,jlo:jhi)
         res = pnorm (lphi, valid, norm_type)
 
         ! Free memory
@@ -2128,7 +2128,7 @@ contains
 
         ! Remove prolongation
         crse%data = -crse%data
-        call prolong (fine, crse, crse_geo, bc, 1)
+        call prolong (fine, crse, geo, crse_geo, bc, 1)
 
         ! Compute norm
         res = pnorm (fine, fine%valid, norm_type)
@@ -2160,7 +2160,7 @@ contains
         real(dp)                   :: dx, dy
         real(dp)                   :: kx, ky
         logical, parameter         :: homog = .false.
-        integer, parameter         :: verbosity = 10
+        integer, parameter         :: verbosity = 3
         logical, parameter         :: use_computed_soln = .true.
 
         real(dp), dimension(:), pointer :: xp, yp
@@ -2328,7 +2328,7 @@ contains
         !                verbosity)
 
         ! ! BiCGStab solver
-        ! call solve_bicgstab (phi, lphi, geo, bc, homog, invdiags, &
+        ! call solve_bicgstab2 (phi, lphi, geo, bc, homog, invdiags, &
         !                      1.0d-6,  & ! tol
         !                      80,      & ! max iters
         !                      5,       & ! max restarts
