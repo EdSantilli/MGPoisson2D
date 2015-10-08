@@ -1570,12 +1570,11 @@ contains
     ! invdiags must be prepared (allocated and box set) prior to call.
     ! NOTE: This assumes the Laplacian is not scaling by 1/J.
     ! --------------------------------------------------------------------------
-    pure subroutine compute_invdiags (invdiags, geo, bc, opt_homog)
+    pure subroutine compute_invdiags (invdiags, geo, bc, homog)
         type(box_data), intent(inout) :: invdiags
         type(geo_data), intent(in)    :: geo
         type(bdry_data), intent(in)   :: bc
-        logical, intent(in), optional :: opt_homog
-        logical                       :: homog
+        logical, intent(in)           :: homog
 
         integer                       :: ilo, ihi, inner_ilo, inner_ihi, i
         integer                       :: jlo, jhi, inner_jlo, inner_jhi, j
@@ -1589,13 +1588,6 @@ contains
         real(dp), parameter           :: pn = zero
         real(dp), parameter           :: pw = zero
         real(dp), parameter           :: ps = zero
-
-        if (present(opt_homog)) then
-            homog = opt_homog
-        else
-            homog = .true.
-        endif
-
 
         ilo = invdiags%valid%ilo
         ihi = invdiags%valid%ihi
@@ -4254,10 +4246,11 @@ contains
 
     ! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
-    subroutine solve_bicgstab (phi, rhs, geo, bc, homog, &
+    subroutine solve_bicgstab (phi, rhs, geo, bc, homog, invdiags, &
                                tol, max_iters, max_restarts, zerophi, verbosity)
         type(box_data), intent(inout)                 :: phi
         type(box_data), intent(in)                    :: rhs
+        type(box_data), intent(in)                    :: invdiags
         type(geo_data), intent(in)                    :: geo
         type(bdry_data), intent(in)                   :: bc
         logical, intent(in)                           :: homog
@@ -4268,11 +4261,6 @@ contains
 
         integer                                       :: ilo, ihi
         integer                                       :: jlo, jhi
-        ! real(dp)                                      :: rscale, sum
-        ! real(dp), dimension(0:max_iters+max_restarts) :: rho, omega, relres
-        ! real(dp)                                      :: alpha, beta, lastres
-        ! integer                                       :: iter, i, num_restarts
-        ! logical                                       :: is_restart
         type(box_data)                                :: r, r_tilde, e, p, p_tilde, s_tilde, t, v
         real(dp), dimension(0:3)                      :: rho
         real(dp), dimension(0:1)                      :: norm, alpha, beta, omega
@@ -4296,12 +4284,12 @@ contains
         endif
 
         ! Allocate workspace
-        call define_box_data (r, rhs)
-        call define_box_data (r_tilde, rhs)
         call define_box_data (e, phi)
-        call define_box_data (p, rhs)
         call define_box_data (p_tilde, phi)
         call define_box_data (s_tilde, phi)
+        call define_box_data (r, rhs)
+        call define_box_data (r_tilde, rhs)
+        call define_box_data (p, rhs)
         call define_box_data (t, rhs)
         call define_box_data (v, rhs)
 
@@ -4359,7 +4347,17 @@ contains
                     print*, 'residual norm = ', norm(0)
                 endif
 
-                exit
+                ! Free memory
+                call undefine_box_data (e)
+                call undefine_box_data (p_tilde)
+                call undefine_box_data (s_tilde)
+                call undefine_box_data (r)
+                call undefine_box_data (r_tilde)
+                call undefine_box_data (p)
+                call undefine_box_data (t)
+                call undefine_box_data (v)
+
+                return
             endif
 
             if (init) then
@@ -4371,7 +4369,13 @@ contains
             endif
 
             ! Precond (p_rilde, p)
-            p_tilde%data = p%data
+            p_tilde%data(ilo:ihi,jlo:jhi) = p%data(ilo:ihi,jlo:jhi) * invdiags%data(ilo:ihi,jlo:jhi)
+            ! call relax_gs (p_tilde, p, geo, bc, .true., invdiags, &
+            !                one,     &  ! omega
+            !                -one,    &  ! tol
+            !                2,       &  ! maxiters
+            !                .false.,  & ! zerophi
+            !                0)          ! verbosity
 
             call compute_laplacian (v, p_tilde, geo, bc, .true.)
             m = inner_prod (r_tilde, v)
@@ -4388,7 +4392,13 @@ contains
 
             if ((norm(0) .gt. tol*initial_norm) .and. (norm(0) .gt. reps*initial_rnorm)) then
                 ! Precond (s_tilde, r)
-                s_tilde%data = r%data
+                s_tilde%data(ilo:ihi,jlo:jhi) = r%data(ilo:ihi,jlo:jhi) * invdiags%data(ilo:ihi,jlo:jhi)
+                ! call relax_gs (s_tilde, r, geo, bc, .true., invdiags, &
+                !                one,     &  ! omega
+                !                -one,    &  ! tol
+                !                2,       &  ! maxiters
+                !                .false.,  & ! zerophi
+                !                0)          ! verbosity
 
                 call compute_laplacian (t, s_tilde, geo, bc, .true.)
                 omega(0) = inner_prod (t, r) / inner_prod (t, t)
@@ -4402,7 +4412,9 @@ contains
             endif
 
             if ((norm(0) .le. tol*initial_norm) .or. (norm(0) .le. reps*initial_rnorm)) then
-                print*, "Converged."
+                if (verbosity .ge. 3) then
+                    print*, "Converged."
+                endif
                 exit
             endif
 
@@ -4432,6 +4444,7 @@ contains
 
                     r_tilde%data = r%data
                     e%data = zero
+                    restarts = restarts + 1
 
                     if (verbosity .ge. 3) then
                         print*, 'Restart number ', restarts
@@ -4448,177 +4461,13 @@ contains
 
         phi%data = phi%data + e%data
 
-
-        ! ! Compute initial residual
-        ! call compute_residual (r, rhs, phi, geo, bc, homog)
-        ! r0%data = r%data
-        ! rscale = pnorm (r0, r0%valid, 2)
-        ! relres(0) = one
-        ! if (verbosity .ge. 3) then
-        !     print*, 'scale |res| = ', rscale
-        !     print*, 'iter ', 0, ': rel |res| = ', relres(0)
-        ! endif
-
-        ! ! Initialize all other workspace variables
-        ! alpha = one
-        ! rho(i) = one
-        ! omega(i) = one
-        ! nu%data = zero
-        ! p%data = zero
-        ! num_restarts = 0
-
-        ! ! Iterate...
-        ! do iter = 1, max_iters
-        !     ! Increment index for bookkeeping vars.
-        !     i = i + 1
-
-        !     if (verbosity .ge. 5) then
-        !         sum = integrate2d (r, r%valid, geo, .false.)
-        !         print*, ' sum rhs = ', sum
-        !     endif
-
-        !     rho(i) = inner_prod (r0, r)
-        !     beta = (rho(i) / rho(i-1)) * (alpha / omega(i-1))
-        !     if (beta .eq. zero) then
-        !         print*, 'solve_bicgstab: beta is zero. Probably due to a zero rhs.'
-        !         stop
-        !     endif
-        !     p%data = beta*p%data
-        !     p%data = p%data                  &
-        !            - beta*omega(i-1)*nu%data &
-        !            + r%data
-
-        !     ! A preconditioner would go here
-        !     call compute_laplacian (nu, p, geo, bc, homog)
-        !     alpha = inner_prod (r0, nu)
-        !     alpha = rho(i) / alpha
-        !     r%data = r%data - alpha*nu%data
-
-        !     ! A preconditioner would go here
-        !     call compute_laplacian (t, r, geo, bc, homog)
-        !     omega(i) = inner_prod (t, r) / inner_prod (t, t)
-
-        !     ! This would also change with a preconditioner
-        !     phi%data = phi%data         &
-        !              + alpha * p%data   &
-        !              + omega(i) * r%data
-
-        !     ! Compute new residual
-        !     r%data = r%data - omega(i)*t%data
-
-        !     ! If this is a restart, we expect the residual to rise.
-        !     ! Don't let this stop the solver from proceeding.
-        !     if (.not. is_restart) then
-        !         lastres = relres(i-1)
-        !     else
-        !         lastres = 1.0E200_dp
-        !     endif
-
-        !     ! Check if we are at tol
-        !     relres(i) = pnorm (r, r%valid, 2) / rscale
-        !     if (verbosity .ge. 3) then
-        !         print*, 'iter ', iter, ': rel |res| = ', relres(i)
-        !     endif
-
-        !     ! Did we converge?
-        !     if (relres(i) .le. tol) then
-        !         if (verbosity .ge. 3) then
-        !             print*, "Converged."
-        !         endif
-        !         exit
-        !     endif
-
-        !     ! Are we hanging?
-        !     if (abs(relres(i) - lastres) .lt. tol*hang) then
-        !         if (num_restarts .lt. max_restarts) then
-        !             ! The act of restarting will produce a new residual which we
-        !             ! would like to include in our bookkeeping, so we increase i,
-        !             ! recompute the residual, and reset all other bookkeeping vars.
-
-        !             ! Increment
-        !             num_restarts = num_restarts + 1
-        !             i = i + 1
-
-        !             ! Compute new residual
-        !             call compute_residual (r, rhs, phi, geo, bc, homog)
-        !             r0%data = r%data
-        !             relres(i) = pnorm (r, r%valid, 2) / rscale
-        !             if (verbosity .ge. 3) then
-        !                 print*, "Hanging, restart number ", num_restarts, ', current rel |res| = ', relres(i)
-        !             endif
-
-        !             ! Reset bookkeeping variables
-        !             alpha = one
-        !             rho(i) = one
-        !             omega(i) = one
-        !             nu%data = zero
-        !             p%data = zero
-
-        !             ! Start new iteration
-        !             is_restart = .true.
-        !             cycle
-        !         else
-        !             if (verbosity .ge. 3) then
-        !                 print*, "Hanging, max restarts reached."
-        !             endif
-        !             exit
-        !         endif
-        !     endif
-
-        !     ! Are we diverging?
-        !     if (relres(i) .gt. lastres) then
-        !         if (num_restarts .lt. max_restarts) then
-        !             ! The act of restarting will produce a new residual which we
-        !             ! would like to include in our bookkeeping, so we increase i,
-        !             ! recompute the residual, and reset all other bookkeeping vars.
-
-        !             ! Increment
-        !             num_restarts = num_restarts + 1
-        !             i = i + 1
-
-        !             ! Compute new residual
-        !             call compute_residual (r, rhs, phi, geo, bc, homog)
-        !             r0%data = r%data
-        !             relres(i) = pnorm (r0, r0%valid, 2) / rscale
-        !             if (verbosity .ge. 3) then
-        !                 print*, "Hanging, restart number ", num_restarts, ', current rel |res| = ', relres(i)
-        !             endif
-
-        !             ! Reset bookkeeping variables
-        !             alpha = one
-        !             rho(i) = one
-        !             omega(i) = one
-        !             nu%data = zero
-        !             p%data = zero
-
-        !             ! Start new iteration
-        !             is_restart = .true.
-        !             cycle
-        !         else
-        !             if (verbosity .ge. 3) then
-        !                 print*, 'Diverging.'
-        !             endif
-
-        !             ! Undo last correction
-        !             ! TODO: It would be better to remember the best solution
-        !             r%data = r%data + omega(i)*t%data
-        !             phi%data = phi%data         &
-        !                      - alpha * p%data   &
-        !                      - omega(i) * r%data
-        !             exit
-        !         endif
-        !     endif
-
-        !     is_restart = .false.
-        ! enddo
-
         ! Free memory
-        call undefine_box_data (r)
-        call undefine_box_data (r_tilde)
         call undefine_box_data (e)
-        call undefine_box_data (p)
         call undefine_box_data (p_tilde)
         call undefine_box_data (s_tilde)
+        call undefine_box_data (r)
+        call undefine_box_data (r_tilde)
+        call undefine_box_data (p)
         call undefine_box_data (t)
         call undefine_box_data (v)
     end subroutine solve_bicgstab
@@ -5074,7 +4923,7 @@ contains
                 mggeo(d)%Jgup_xy%data = geo%Jgup_xy%data
                 mggeo(d)%Jgup_yx%data = geo%Jgup_yx%data
                 mggeo(d)%Jgup_yy%data = geo%Jgup_yy%data
-                call compute_invdiags (invdiags(d), mggeo(d), mgbc(d))
+                call compute_invdiags (invdiags(d), mggeo(d), mgbc(d), .true.)
             else
                 ! Coarsen the data from MG level d-1
                 mggeo(d)%dx = valid%dx
@@ -5084,7 +4933,7 @@ contains
                 call restrict (mggeo(d-1)%Jgup_xy, mggeo(d)%Jgup_xy)
                 call restrict (mggeo(d-1)%Jgup_yx, mggeo(d)%Jgup_yx)
                 call restrict (mggeo(d-1)%Jgup_yy, mggeo(d)%Jgup_yy)
-                call compute_invdiags (invdiags(d), mggeo(d), mgbc(d))
+                call compute_invdiags (invdiags(d), mggeo(d), mgbc(d), .true.)
             endif
 
             ! Move on to next depth
@@ -5109,9 +4958,15 @@ contains
 
         ! Set up residual equation
         call compute_residual (r(0), rhs, phi, geo, bc, homog)
-        relres = zero
-        relres(0) = one
         rscale = pnorm (r(0), r(0)%valid, 2)
+
+        relres = zero
+        if (rscale .eq. zero) then
+            relres(0) = rscale
+            rscale = one
+        else
+            relres(0) = one
+        endif
 
         if (verbosity .ge. 1) then
             sum = integrate2d (r(0), r(0)%valid, mggeo(0), .false.)
@@ -5214,7 +5069,7 @@ contains
 
         character*2                                          :: indent = '  '
         logical, parameter                                   :: homog = .true.
-        ! integer                                              :: ilo, ihi, jlo, jhi
+        integer                                              :: ilo, ihi, jlo, jhi
         integer                                              :: curcycle
         real(dp)                                             :: norm, sum
         type(box_data)                                       :: tmp
@@ -5223,7 +5078,7 @@ contains
 
         ! Relaxation params
         real(dp), parameter                                  :: relax_tol = -one
-        real(dp), parameter                                  :: relax_omega = one+third ! Was 1.33
+        real(dp), parameter                                  :: relax_omega = one-third ! Was 1.33
         ! logical, parameter                                   :: relax_redblack = .true.
         integer, parameter                                   :: relax_verbosity = 0
 
@@ -5246,18 +5101,17 @@ contains
             print*, repeat(indent,depth), 'sq |rhs| = ', norm, ', sum rhs = ', sum
         endif
 
-        ! ! Set the initial guess
-        ! ilo = r(depth)%valid%ilo
-        ! ihi = r(depth)%valid%ihi
-        ! jlo = r(depth)%valid%jlo
-        ! jhi = r(depth)%valid%jhi
-        ! e(depth)%data(ilo:ihi,jlo:jhi) = r(depth)%data(ilo:ihi,jlo:jhi) * invdiags(depth)%data(ilo:ihi,jlo:jhi)
+        ilo = r(depth)%valid%ilo
+        ihi = r(depth)%valid%ihi
+        jlo = r(depth)%valid%jlo
+        jhi = r(depth)%valid%jhi
 
         if (depth .eq. maxdepth) then
             ! Use bottom solver...
 
             ! Set the initial guess
-            e(depth)%data = zero
+            ! e(depth)%data = zero
+            e(depth)%data(ilo:ihi,jlo:jhi) = r(depth)%data(ilo:ihi,jlo:jhi) * invdiags(depth)%data(ilo:ihi,jlo:jhi)
 
             ! --- Bottom relaxation ---
             if (verbosity .ge. 7) then
@@ -5280,7 +5134,7 @@ contains
             if (verbosity .ge. 7) then
                 print*, repeat(indent,depth), 'Bottom solver'
             endif
-            call solve_bicgstab (e(depth), r(depth), geo(depth), bc(depth), homog, &
+            call solve_bicgstab (e(depth), r(depth), geo(depth), bc(depth), homog, invdiags(depth), &
                                  bottom_tol, bottom_maxiters, bottom_maxrestarts, &
                                  .false., & ! zero phi?
                                  bottom_verbosity)
@@ -5296,7 +5150,8 @@ contains
             ! V-Cycle...
 
             ! Set the initial guess
-            e(depth)%data = zero
+            ! e(depth)%data = zero
+            e(depth)%data(ilo:ihi,jlo:jhi) = r(depth)%data(ilo:ihi,jlo:jhi) * invdiags(depth)%data(ilo:ihi,jlo:jhi)
 
             ! --- Downward relaxation ---
             if (verbosity .ge. 7) then
