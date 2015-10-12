@@ -204,13 +204,13 @@ program test
     print*, 'Error norm = ', errnorm(maxr)
     print*
 
-    ! Test 11: Projection
+    ! ! Test 10: Solver test
     ! errnorm = bogus_val
     ! do r = 1, maxr
-    !     errnorm(r) = test_divergence (geo(r))
+    !     errnorm(r) = test_solver (geo(r))
     ! enddo
     ! call compute_conv_rate (rate, errnorm)
-    ! print*, 'Test 11: Projection'
+    ! print*, 'Test 11: Deferred correction solver test'
     ! print*, 'Error norm                rate'
     ! print*, errnorm(1)
     ! do r = 2, maxr
@@ -218,7 +218,26 @@ program test
     ! enddo
     ! print*
 
-    ! print*, 'Test 11: Projection test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    print*, 'Test 11: Deferred correction solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    errnorm(maxr) = test_dcsolver (geo(maxr))
+    print*, 'Error norm = ', errnorm(maxr)
+    print*
+
+    ! Test 12: Projection
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_divergence (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 12: Projection'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
+    ! print*
+
+    ! print*, 'Test 12: Projection test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
     ! errnorm(maxr) = test_projection (geo(maxr))
     ! ! print*, 'Error norm = ', errnorm(maxr)
     ! print*
@@ -504,9 +523,9 @@ contains
         do i = ilo, ihi
             xx = x(i)
 
-            el(i) = zero ! Temporary, flat bottom.
+            ! el(i) = zero ! Temporary, flat bottom.
             ! el(i) = Hz*half*(one-xx/Lx) ! Sloped bottom (Use this one)
-            ! el(i) = fourth * sin(pi*xx/Lx)**2   ! Temporary, sinusoidal bottom.
+            el(i) = fourth * sin(pi*xx/Lx)**2   ! Temporary, sinusoidal bottom.
 
             ! if (xx .le. C1) then
             !     ! Left flat region
@@ -2380,6 +2399,219 @@ contains
         call undefine_bdry_data (bc)
 
     end function test_solver
+
+
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    function test_dcsolver (geo) result (res)
+        use Poisson2D
+        use DeferredMGPoisson2D, only: vcycle
+        implicit none
+
+        real(dp)                   :: res
+        type(geo_data), intent(in) :: geo
+
+        type(box)                  :: valid
+        integer                    :: ilo, ihi, jlo, jhi, i, j
+        real(dp)                   :: dx, dy
+        real(dp)                   :: kx, ky
+        logical, parameter         :: homog = .false.
+        integer, parameter         :: verbosity = 3
+        logical, parameter         :: use_computed_soln = .true.
+
+        real(dp), dimension(:), pointer :: xp, yp
+        type(box_data),target      :: bdx, bdx_x, bdx_y
+        type(box_data),target      :: bdy, bdy_x, bdy_y
+        type(box_data)             :: soln, r
+        type(box_data)             :: xflux, yflux, xwk, ywk
+        type(bdry_data)            :: bc
+        type(box_data)             :: lphi
+        type(box_data)             :: invdiags
+        type(box_data)             :: phi
+        real(dp)                   :: t1, t2
+
+        valid = geo%J%valid
+
+        ilo = valid%ilo
+        ihi = valid%ihi
+        jlo = valid%jlo
+        jhi = valid%jhi
+
+        dx = valid%dx
+        dy = valid%dy
+
+        ! Compute Cartesian locations
+        call define_box_data (bdx  , valid, 1, 1, BD_CELL, BD_CELL)
+        call define_box_data (bdx_x, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (bdx_y, valid, 0, 0, BD_CELL, BD_NODE)
+        call fill_x (bdx)
+        call fill_x (bdx_x)
+        call fill_x (bdx_y)
+
+        call define_box_data (bdy  , valid, 1, 1, BD_CELL, BD_CELL)
+        call define_box_data (bdy_x, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (bdy_y, valid, 0, 0, BD_CELL, BD_NODE)
+        call fill_y (bdy)
+        call fill_y (bdy_x)
+        call fill_y (bdy_y)
+
+        ! Set up solution
+        call define_box_data (soln, valid, 1, 1, BD_CELL, BD_CELL)
+        soln%data = zero
+        do i = 8, 240, 2
+            soln%data = soln%data + cos(i*pi*bdx%data/L) * cos(i*pi*bdy%data/H) / dble(i)
+        enddo
+
+        ! ! Set BCs (periodic)
+        ! call define_bdry_data (bc, valid, &
+        !                        BCTYPE_PERIODIC, &   ! xlo
+        !                        BCTYPE_PERIODIC, &   ! xhi
+        !                        BCTYPE_PERIODIC, &   ! ylo
+        !                        BCTYPE_PERIODIC, &   ! yhi
+        !                        BCMODE_NONUNIFORM, &    ! xlo
+        !                        BCMODE_NONUNIFORM, &    ! xhi
+        !                        BCMODE_NONUNIFORM, &    ! ylo
+        !                        BCMODE_NONUNIFORM)      ! yhi
+
+        ! ! Set BCs (Dirichlet)
+        ! call define_bdry_data (bc, valid, &
+        !                        BCTYPE_DIRI, &   ! xlo
+        !                        BCTYPE_DIRI, &   ! xhi
+        !                        BCTYPE_DIRI, &   ! ylo
+        !                        BCTYPE_DIRI, &   ! yhi
+        !                        BCMODE_NONUNIFORM, &    ! xlo
+        !                        BCMODE_NONUNIFORM, &    ! xhi
+        !                        BCMODE_NONUNIFORM, &    ! ylo
+        !                        BCMODE_NONUNIFORM)      ! yhi
+        ! bc%data_xlo = zero
+        ! do i = 8, 240, 2
+        !     bc%data_xlo = bc%data_xlo + cos(i*pi*bdx_x%data(ilo,:)/L) * cos(i*pi*bdy_x%data(ilo,:)/H) / dble(i)
+        ! enddo
+        ! bc%data_xhi = zero
+        ! do i = 8, 240, 2
+        !     bc%data_xhi = bc%data_xhi + cos(i*pi*bdx_x%data(ihi+1,:)/L) * cos(i*pi*bdy_x%data(ihi+1,:)/H) / dble(i)
+        ! enddo
+        ! bc%data_ylo = zero
+        ! do i = 8, 240, 2
+        !     bc%data_ylo = bc%data_ylo + cos(i*pi*bdx_y%data(:,jlo)/L) * cos(i*pi*bdy_y%data(:,jlo)/H) / dble(i)
+        ! enddo
+        ! bc%data_yhi = zero
+        ! do i = 8, 240, 2
+        !     bc%data_yhi = bc%data_yhi + cos(i*pi*bdx_y%data(:,jhi+1)/L) * cos(i*pi*bdy_y%data(:,jhi+1)/H) / dble(i)
+        ! enddo
+
+        ! Set BCs (Neumann)
+        call define_box_data (xflux, valid, 0, 0, BD_NODE, BD_CELL)
+        call define_box_data (yflux, valid, 0, 0, BD_CELL, BD_NODE)
+        call define_box_data (xwk, xflux)
+        call define_box_data (ywk, yflux)
+
+        call define_bdry_data (bc, valid, &
+                               BCTYPE_NONE, &   ! xlo
+                               BCTYPE_NONE, &   ! xhi
+                               BCTYPE_NONE, &   ! ylo
+                               BCTYPE_NONE, &   ! yhi
+                               BCMODE_UNIFORM, &    ! xlo
+                               BCMODE_UNIFORM, &    ! xhi
+                               BCMODE_UNIFORM, &    ! ylo
+                               BCMODE_UNIFORM)      ! yhi
+        call compute_grad (xflux, yflux, soln, geo, bc, homog, xwk, ywk)
+        call undefine_bdry_data (bc)
+
+        call define_bdry_data (bc, valid, &
+                               BCTYPE_NEUM, &   ! xlo
+                               BCTYPE_NEUM, &   ! xhi
+                               BCTYPE_NEUM, &   ! ylo
+                               BCTYPE_NEUM, &   ! yhi
+                               BCMODE_NONUNIFORM, &    ! xlo
+                               BCMODE_NONUNIFORM, &    ! xhi
+                               BCMODE_NONUNIFORM, &    ! ylo
+                               BCMODE_NONUNIFORM)      ! yhi
+        bc%data_xlo(jlo:jhi) = xflux%data(ilo  ,jlo:jhi)
+        bc%data_xhi(jlo:jhi) = xflux%data(ihi+1,jlo:jhi)
+        bc%data_ylo(ilo:ihi) = yflux%data(ilo:ihi,jlo  )
+        bc%data_yhi(ilo:ihi) = yflux%data(ilo:ihi,jhi+1)
+
+        ! Set up RHS = J*L[phi]
+        call define_box_data (lphi, valid, 0, 0, BD_CELL, BD_CELL)
+        if (use_computed_soln) then
+            call compute_laplacian (lphi, soln, geo, bc, homog, .false.)
+        else
+            ! lphi%data = zero
+            ! do i = 8, 240, 2
+            !     lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) &
+            !                                - ((pi/L)**2 + (pi/H)**2)*cos(i*pi*bdx%data(ilo:ihi,jlo:jhi)/L) &
+            !                                                         *cos(i*pi*bdy%data(ilo:ihi,jlo:jhi)/H) &
+            !                                                         *dble(i)
+            ! enddo
+            ! lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
+        endif
+
+        ! Set up invdiags
+        call define_box_data (invdiags, lphi)
+        call compute_invdiags (invdiags, geo, bc, homog)
+
+        ! Set initial guess
+        call define_box_data (phi, soln)
+        phi%data = zero
+
+        ! Use this block for fixed-point iteration test
+        call define_box_data (r, lphi)
+        if (.false.) then
+            phi%data = soln%data
+            call compute_residual (r, lphi, phi, geo, bc, homog)
+            res = pnorm (r, r%valid, norm_type)
+            print* , ' pre res norm = ', res
+            phi%data = soln%data
+        endif
+
+        call cpu_time (t1)
+
+        ! V-Cycle iteration
+        lphi%data = lphi%data / geo%J%data(ilo:ihi,jlo:jhi)
+        call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
+                     1.0d-30, & ! tol
+                     10,       & ! max iters
+                     -1,       & ! max depth
+                     1,       & ! num cycles
+                     2,       & ! smooth down
+                     2,       & ! smooth up
+                     2,       & ! smooth bottom
+                     .false., & ! zerophi
+                     3) !verbosity)
+        lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
+
+        call cpu_time (t2)
+        print*, 'Solve time (s) = ', t2-t1
+
+        ! Compute post residual norm
+        call compute_residual (r, lphi, phi, geo, bc, homog)
+        res = pnorm (r, r%valid, norm_type)
+        print* , 'post res norm = ', res
+
+        ! Compute error norm
+        phi%data = phi%data - soln%data
+        res = pnorm (phi, phi%valid, norm_type)
+
+
+        ! Free memory
+        call undefine_box_data (ywk)
+        call undefine_box_data (xwk)
+        call undefine_box_data (yflux)
+        call undefine_box_data (xflux)
+        call undefine_box_data (phi)
+        call undefine_box_data (invdiags)
+        call undefine_box_data (lphi)
+        call undefine_box_data (soln)
+        call undefine_box_data (bdx)
+        call undefine_box_data (bdx_x)
+        call undefine_box_data (bdx_y)
+        call undefine_box_data (bdy)
+        call undefine_box_data (bdy_x)
+        call undefine_box_data (bdy_y)
+        call undefine_bdry_data (bc)
+
+    end function test_dcsolver
 
 
     ! --------------------------------------------------------------------------

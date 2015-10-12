@@ -113,9 +113,12 @@ module arrayutils
     ! a homogeneous BC would use a uniform value of 0.
     ! BCMODE_NONUNIFORM = the BC values vary over the bounding face. For
     ! example, a value of sin(k*y) along an x boundary face is nonuniform.
+    ! BCMODE_LAH = Low-accuracy, homogenous BCs. These are used in deferred-
+    ! correction schemes.
     ! --------------------------------------------------------------------------
     integer, parameter :: BCMODE_UNIFORM = 0
     integer, parameter :: BCMODE_NONUNIFORM = 1
+    integer, parameter :: BCMODE_LAH = 2
 
 
     ! --------------------------------------------------------------------------
@@ -340,6 +343,12 @@ contains
                     print*, 'define_bdry_data: Out of memory'
                     stop
                 endif
+            case (BCMODE_LAH)
+                allocate (bcd%data_xlo (1:1), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
             case default
                 print*, 'define_bdry_data: Bad BCMODE'
                 stop
@@ -355,6 +364,12 @@ contains
                 endif
             case (BCMODE_NONUNIFORM)
                 allocate (bcd%data_xhi (bcd%valid%jlo : bcd%valid%jhi), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
+            case (BCMODE_LAH)
+                allocate (bcd%data_xhi (1:1), stat=ierr)
                 if (ierr .ne. 0) then
                     print*, 'define_bdry_data: Out of memory'
                     stop
@@ -378,6 +393,12 @@ contains
                     print*, 'define_bdry_data: Out of memory'
                     stop
                 endif
+            case (BCMODE_LAH)
+                allocate (bcd%data_ylo (1:1), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
             case default
                 print*, 'define_bdry_data: Bad BCMODE'
                 stop
@@ -393,6 +414,12 @@ contains
                 endif
             case (BCMODE_NONUNIFORM)
                 allocate (bcd%data_yhi (bcd%valid%ilo : bcd%valid%ihi), stat=ierr)
+                if (ierr .ne. 0) then
+                    print*, 'define_bdry_data: Out of memory'
+                    stop
+                endif
+            case (BCMODE_LAH)
+                allocate (bcd%data_yhi (1:1), stat=ierr)
                 if (ierr .ne. 0) then
                     print*, 'define_bdry_data: Out of memory'
                     stop
@@ -924,6 +951,7 @@ contains
                 bcmode = bc%mode_xlo
                 e = -1
                 i = ilo
+                dx = -dx
             else
                 bcd => bc%data_xhi
                 bcmode = bc%mode_xhi
@@ -936,6 +964,7 @@ contains
                 bcmode = bc%mode_ylo
                 e = -1
                 j = jlo
+                dy = -dy
             else
                 bcd => bc%data_yhi
                 bcmode = bc%mode_yhi
@@ -945,7 +974,10 @@ contains
         endif
 
         if (dir .eq. 1) then
-            if (homog) then
+            if (bcmode .eq. BCMODE_LAH) then
+                phi%data(i+e,jlo:jhi) = phi%data(i,jlo:jhi)
+
+            else if (homog) then
                 j = jlo
                 dpn = -(three*phi%data(i  ,j) - four*phi%data(i  ,j+1) + phi%data(i  ,j+2)) * half/dy
                 dpf = -(three*phi%data(i-e,j) - four*phi%data(i-e,j+1) + phi%data(i-e,j+2)) * half/dy
@@ -1007,7 +1039,10 @@ contains
 
             endif
         else
-            if (homog) then
+            if (bcmode .eq. BCMODE_LAH) then
+                phi%data(ilo:ihi,j+e) = phi%data(ilo:ihi,j)
+
+            else if (homog) then
                 i = ilo
                 dpn = -(three*phi%data(i,j  ) - four*phi%data(i+1,j  ) + phi%data(i+2,j  )) * half/dx
                 dpf = -(three*phi%data(i,j-e) - four*phi%data(i+1,j-e) + phi%data(i+2,j-e)) * half/dx
@@ -1131,87 +1166,95 @@ contains
         endif
 
         if (dir .eq. 1) then
-            select case (order)
-                case (1)
-                    if (homog) then
-                        phi%data(i+e, jlo:jhi) = -phi%data(i, jlo:jhi)
-                    else if (bcmode .eq. BCMODE_UNIFORM) then
-                        phi%data(i+e, jlo:jhi) = two*bcd(1) - phi%data(i, jlo:jhi)
-                    else
-                        phi%data(i+e,jlo:jhi) = two*bcd(jlo:jhi) - phi%data(i,jlo:jhi)
-                    endif
-                case (2)
-                    if (homog) then
-                        phi%data(i+e, jlo:jhi) = third*(-six*phi%data(i, jlo:jhi) + phi%data(i-e, jlo:jhi))
-                    else if (bcmode .eq. BCMODE_UNIFORM) then
-                        phi%data(i+e, jlo:jhi) = third*(  eight*bcd(1) &
-                                                        - six*phi%data(i, jlo:jhi) &
-                                                        + phi%data(i-e, jlo:jhi))
-                    else
-                        phi%data(i+e, jlo:jhi) = third*(  eight*bcd(jlo:jhi) &
-                                                        - six*phi%data(i, jlo:jhi) &
-                                                        + phi%data(i-e, jlo:jhi))
-                    endif
-                case (3)
-                    if (homog) then
-                        phi%data(i+e, jlo:jhi) = fifth*(- fifteen*phi%data(i    , jlo:jhi) &
-                                                        -         phi%data(i-2*e, jlo:jhi)) &
-                                               + phi%data(i-e, jlo:jhi)
-                    else if (bcmode .eq. BCMODE_UNIFORM) then
-                        phi%data(i+e, jlo:jhi) = fifth*(  sixteen*bcd(1) &
-                                                        - fifteen*phi%data(i    , jlo:jhi) &
-                                                        -         phi%data(i-2*e, jlo:jhi)) &
-                                               + phi%data(i-e, jlo:jhi)
-                    else
-                        phi%data(i+e, jlo:jhi) = fifth*(  sixteen*bcd(jlo:jhi) &
-                                                        - fifteen*phi%data(i    , jlo:jhi) &
-                                                        -         phi%data(i-2*e, jlo:jhi)) &
-                                               + phi%data(i-e, jlo:jhi)
-                    endif
-                case default
-                    print*, 'fill_ghosts: Bad order'
-            end select
+            if (bcmode .eq. BCMODE_LAH) then
+                phi%data(i+e, jlo:jhi) = -phi%data(i, jlo:jhi)
+            else
+                select case (order)
+                    case (1)
+                        if (homog) then
+                            phi%data(i+e, jlo:jhi) = -phi%data(i, jlo:jhi)
+                        else if (bcmode .eq. BCMODE_UNIFORM) then
+                            phi%data(i+e, jlo:jhi) = two*bcd(1) - phi%data(i, jlo:jhi)
+                        else
+                            phi%data(i+e,jlo:jhi) = two*bcd(jlo:jhi) - phi%data(i,jlo:jhi)
+                        endif
+                    case (2)
+                        if (homog) then
+                            phi%data(i+e, jlo:jhi) = third*(-six*phi%data(i, jlo:jhi) + phi%data(i-e, jlo:jhi))
+                        else if (bcmode .eq. BCMODE_UNIFORM) then
+                            phi%data(i+e, jlo:jhi) = third*(  eight*bcd(1) &
+                                                            - six*phi%data(i, jlo:jhi) &
+                                                            + phi%data(i-e, jlo:jhi))
+                        else
+                            phi%data(i+e, jlo:jhi) = third*(  eight*bcd(jlo:jhi) &
+                                                            - six*phi%data(i, jlo:jhi) &
+                                                            + phi%data(i-e, jlo:jhi))
+                        endif
+                    case (3)
+                        if (homog) then
+                            phi%data(i+e, jlo:jhi) = fifth*(- fifteen*phi%data(i    , jlo:jhi) &
+                                                            -         phi%data(i-2*e, jlo:jhi)) &
+                                                   + phi%data(i-e, jlo:jhi)
+                        else if (bcmode .eq. BCMODE_UNIFORM) then
+                            phi%data(i+e, jlo:jhi) = fifth*(  sixteen*bcd(1) &
+                                                            - fifteen*phi%data(i    , jlo:jhi) &
+                                                            -         phi%data(i-2*e, jlo:jhi)) &
+                                                   + phi%data(i-e, jlo:jhi)
+                        else
+                            phi%data(i+e, jlo:jhi) = fifth*(  sixteen*bcd(jlo:jhi) &
+                                                            - fifteen*phi%data(i    , jlo:jhi) &
+                                                            -         phi%data(i-2*e, jlo:jhi)) &
+                                                   + phi%data(i-e, jlo:jhi)
+                        endif
+                    case default
+                        print*, 'fill_ghosts: Bad order'
+                end select
+            endif
         else
-            select case (order)
-                case (1)
-                    if (homog) then
-                        phi%data(ilo:ihi, j+e) = -phi%data(ilo:ihi, j)
-                    else if (bcmode .eq. BCMODE_UNIFORM) then
-                        phi%data(ilo:ihi, j+e) = two*bcd(1) - phi%data(ilo:ihi, j)
-                    else
-                        phi%data(ilo:ihi, j+e) = two*bcd(ilo:ihi) - phi%data(ilo:ihi, j)
-                    endif
-                case (2)
-                    if (homog) then
-                        phi%data(ilo:ihi, j+e) = third*(-six*phi%data(ilo:ihi, j) + phi%data(ilo:ihi, j-e))
-                    else if (bcmode .eq. BCMODE_UNIFORM) then
-                        phi%data(ilo:ihi, j+e) = third*(  eight*bcd(1) &
-                                                        - six*phi%data(ilo:ihi, j) &
-                                                        + phi%data(ilo:ihi, j-e))
-                    else
-                        phi%data(ilo:ihi, j+e) = third*(  eight*bcd(jlo:jhi) &
-                                                        - six*phi%data(ilo:ihi, j) &
-                                                        + phi%data(ilo:ihi, j-e))
-                    endif
-                case (3)
-                    if (homog) then
-                        phi%data(ilo:ihi, j+e) = fifth*(- fifteen*phi%data(ilo:ihi, j) &
-                                                        -         phi%data(ilo:ihi, j-2*e)) &
-                                               + phi%data(ilo:ihi, j-e)
-                    else if (bcmode .eq. BCMODE_UNIFORM) then
-                        phi%data(ilo:ihi, j+e) = fifth*(  sixteen*bcd(1) &
-                                                        - fifteen*phi%data(ilo:ihi, j) &
-                                                        -         phi%data(ilo:ihi, j-2*e)) &
-                                               + phi%data(ilo:ihi, j-e)
-                    else
-                        phi%data(ilo:ihi, j+e) = fifth*(  sixteen*bcd(jlo:jhi) &
-                                                        - fifteen*phi%data(ilo:ihi, j) &
-                                                        -         phi%data(ilo:ihi, j-2*e)) &
-                                               + phi%data(ilo:ihi, j-e)
-                    endif
-                case default
-                    print*, 'fill_ghosts: Bad order'
-            end select
+            if (bcmode .eq. BCMODE_LAH) then
+                phi%data(ilo:ihi, j+e) = -phi%data(ilo:ihi, j)
+            else
+                select case (order)
+                    case (1)
+                        if (homog) then
+                            phi%data(ilo:ihi, j+e) = -phi%data(ilo:ihi, j)
+                        else if (bcmode .eq. BCMODE_UNIFORM) then
+                            phi%data(ilo:ihi, j+e) = two*bcd(1) - phi%data(ilo:ihi, j)
+                        else
+                            phi%data(ilo:ihi, j+e) = two*bcd(ilo:ihi) - phi%data(ilo:ihi, j)
+                        endif
+                    case (2)
+                        if (homog) then
+                            phi%data(ilo:ihi, j+e) = third*(-six*phi%data(ilo:ihi, j) + phi%data(ilo:ihi, j-e))
+                        else if (bcmode .eq. BCMODE_UNIFORM) then
+                            phi%data(ilo:ihi, j+e) = third*(  eight*bcd(1) &
+                                                            - six*phi%data(ilo:ihi, j) &
+                                                            + phi%data(ilo:ihi, j-e))
+                        else
+                            phi%data(ilo:ihi, j+e) = third*(  eight*bcd(jlo:jhi) &
+                                                            - six*phi%data(ilo:ihi, j) &
+                                                            + phi%data(ilo:ihi, j-e))
+                        endif
+                    case (3)
+                        if (homog) then
+                            phi%data(ilo:ihi, j+e) = fifth*(- fifteen*phi%data(ilo:ihi, j) &
+                                                            -         phi%data(ilo:ihi, j-2*e)) &
+                                                   + phi%data(ilo:ihi, j-e)
+                        else if (bcmode .eq. BCMODE_UNIFORM) then
+                            phi%data(ilo:ihi, j+e) = fifth*(  sixteen*bcd(1) &
+                                                            - fifteen*phi%data(ilo:ihi, j) &
+                                                            -         phi%data(ilo:ihi, j-2*e)) &
+                                                   + phi%data(ilo:ihi, j-e)
+                        else
+                            phi%data(ilo:ihi, j+e) = fifth*(  sixteen*bcd(jlo:jhi) &
+                                                            - fifteen*phi%data(ilo:ihi, j) &
+                                                            -         phi%data(ilo:ihi, j-2*e)) &
+                                                   + phi%data(ilo:ihi, j-e)
+                        endif
+                    case default
+                        print*, 'fill_ghosts: Bad order'
+                end select
+            endif
         endif
 
         nullify(bcd)
@@ -1519,36 +1562,43 @@ contains
             if (bc%type_xlo .eq. BCTYPE_NEUM) then
                 if (bc%mode_xlo .eq. BCMODE_UNIFORM) then
                     xflux%data(xflux%valid%ilo,:) = bc%data_xlo(1)
-                else
+                else if (bc%mode_xlo .eq. BCMODE_NONUNIFORM) then
                     xflux%data(xflux%valid%ilo,:) = bc%data_xlo
+                else
+                    xflux%data(xflux%valid%ilo,:) = zero
                 endif
             endif
 
             if (bc%type_xhi .eq. BCTYPE_NEUM) then
                 if (bc%mode_xhi .eq. BCMODE_UNIFORM) then
                     xflux%data(xflux%valid%ihi,:) = bc%data_xhi(1)
-                else
+                else if (bc%mode_xhi .eq. BCMODE_NONUNIFORM) then
                     xflux%data(xflux%valid%ihi,:) = bc%data_xhi
+                else
+                    xflux%data(xflux%valid%ihi,:) = zero
                 endif
             endif
 
             if (bc%type_ylo .eq. BCTYPE_NEUM) then
                 if (bc%mode_ylo .eq. BCMODE_UNIFORM) then
                     yflux%data(:,yflux%valid%jlo) = bc%data_ylo(1)
-                else
+                else if (bc%mode_ylo .eq. BCMODE_NONUNIFORM) then
                     yflux%data(:,yflux%valid%jlo) = bc%data_ylo
+                else
+                    yflux%data(:,yflux%valid%jlo) = zero
                 endif
             endif
 
             if (bc%type_yhi .eq. BCTYPE_NEUM) then
                 if (bc%mode_yhi .eq. BCMODE_UNIFORM) then
                     yflux%data(:,yflux%valid%jhi) = bc%data_yhi(1)
-                else
+                else if (bc%mode_yhi .eq. BCMODE_NONUNIFORM) then
                     yflux%data(:,yflux%valid%jhi) = bc%data_yhi
+                else
+                    yflux%data(:,yflux%valid%jhi) = zero
                 endif
             endif
         endif
-
     end subroutine fill_boundary_fluxes
 
 end module ArrayUtils
@@ -1570,7 +1620,7 @@ contains
     ! invdiags must be prepared (allocated and box set) prior to call.
     ! NOTE: This assumes the Laplacian is not scaling by 1/J.
     ! --------------------------------------------------------------------------
-    pure subroutine compute_invdiags (invdiags, geo, bc, homog)
+    subroutine compute_invdiags (invdiags, geo, bc, homog)
         type(box_data), intent(inout) :: invdiags
         type(geo_data), intent(in)    :: geo
         type(bdry_data), intent(in)   :: bc
@@ -1588,6 +1638,12 @@ contains
         real(dp), parameter           :: pn = zero
         real(dp), parameter           :: pw = zero
         real(dp), parameter           :: ps = zero
+
+        if ((bc%mode_xlo .eq. BCMODE_LAH) .or. (bc%mode_xhi .eq. BCMODE_LAH) .or. &
+            (bc%mode_ylo .eq. BCMODE_LAH) .or. (bc%mode_yhi .eq. BCMODE_LAH)) then
+            print*, 'Poisson2d::compute_invdiags received BCMODE_LAH.'
+            stop
+        endif
 
         ilo = invdiags%valid%ilo
         ihi = invdiags%valid%ihi
@@ -2444,6 +2500,12 @@ contains
         real(dp)                      :: xfe,xfw,yfn,yfs
         real(dp)                      :: idx, idy
 
+        if ((bc%mode_xlo .eq. BCMODE_LAH) .or. (bc%mode_xhi .eq. BCMODE_LAH) .or. &
+            (bc%mode_ylo .eq. BCMODE_LAH) .or. (bc%mode_yhi .eq. BCMODE_LAH)) then
+            print*, 'Poisson2d::compute_invdiags received BCMODE_LAH.'
+            stop
+        endif
+
         ilo = lap%valid%ilo
         ihi = lap%valid%ihi
         jlo = lap%valid%jlo
@@ -2988,512 +3050,11 @@ contains
     end subroutine relax_jacobi
 
 
-    ! ! ------------------------------------------------------------------------------
-    ! ! ------------------------------------------------------------------------------
-    ! subroutine relax_gs (phi, rhs, geo, bc, homog, invdiags, &
-    !                      omega, tol, maxiters, redblack, zerophi, verbosity)
-    !     type(box_data), intent(inout)   :: phi
-    !     type(box_data), intent(in)      :: rhs
-    !     type(geo_data), intent(in)      :: geo
-    !     type(bdry_data), intent(in)     :: bc
-    !     logical, intent(in)             :: homog
-    !     type(box_data), intent(in)      :: invdiags
-    !     real(dp), intent(in)            :: omega
-    !     real(dp), intent(in)            :: tol
-    !     integer, intent(in)             :: maxiters
-    !     logical, intent(in)             :: redblack
-    !     logical, intent(in)             :: zerophi
-    !     integer, intent(in)             :: verbosity
-
-    !     type(box_data)                  :: r
-    !     real(dp)                        :: rscale
-    !     real(dp), dimension(0:maxiters) :: relres
-    !     integer                         :: iter, color
-    !     real(dp)                        :: newphi, sum
-    !     integer                         :: ilo, ihi, i, imin
-    !     integer                         :: jlo, jhi, j
-
-    !     real(dp)                        :: lxx, lyy, lxy, lyx, lphi
-    !     ! real(dp)                        :: fxe, fxw, fyn, fys
-    !     real(dp)                        :: p, pe, pn, pw, ps
-    !     real(dp)                        :: pne, pnw, psw, pse
-    !     real(dp)                        :: gxxe, gxxw, gxye, gxyw
-    !     real(dp)                        :: gyyn, gyys, gyxn, gyxs
-    !     real(dp)                        :: xxscale, yyscale, xyscale
-
-
-    !     ilo = rhs%valid%ilo
-    !     ihi = rhs%valid%ihi
-    !     jlo = rhs%valid%jlo
-    !     jhi = rhs%valid%jhi
-
-    !     ! Do we even need to be here?
-    !     if (maxiters .eq. 0) then
-    !         return
-    !     endif
-
-    !     ! Allocate workspace
-    !     call define_box_data (r, rhs)
-
-    !     ! Initialize phi to zero
-    !     if (zerophi) then
-    !         phi%data = zero
-    !     endif
-
-    !     ! Compute initial residual
-    !     call compute_residual (r, rhs, phi, geo, bc, homog)
-    !     if (tol .gt. zero) then
-    !         rscale = pnorm (r, r%valid, 2)
-    !         relres(0) = one
-    !         if (verbosity .ge. 3) then
-    !             print*, 'scale |res| = ', rscale
-    !             print*, 'iter ', 0, ': rel |res| = ', relres(0)
-    !         endif
-    !     endif
-
-    !     ! Iterate
-    !     do iter = 1, maxiters
-    !         if (verbosity .ge. 5) then
-    !             sum = integrate2d (r, r%valid, geo, .false.)
-    !             print*, ' sum rhs = ', sum
-    !         endif
-
-    !         if (redblack) then
-    !             ! Update phi via Red-Black Gauss-Seidel
+    ! ------------------------------------------------------------------------------
     !             color = 0
     !             do j = jlo, jhi
     !                 imin = ilo + mod(color+j, 2) ! Removed +1
     !                 do i = imin, ihi, 2
-    !                     newphi = phi%data(i,j) + r%data(i,j) * invdiags%data(i,j)
-    !                     phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-    !                 enddo
-    !             enddo
-
-    !             color = 1
-    !             call compute_residual (r, rhs, phi, geo, bc, homog)
-    !             do j = jlo, jhi
-    !                 imin = ilo + mod(color+j, 2) ! Removed +1
-    !                 do i = imin, ihi, 2
-    !                     newphi = phi%data(i,j) + r%data(i,j) * invdiags%data(i,j)
-    !                     phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-    !                 enddo
-    !             enddo
-    !         else
-    !             ! Update phi via standard Gauss-Seidel
-    !             call fill_ghosts (phi, bc, geo, .true., .false.)
-
-    !             xxscale = one / (geo%dx**2)
-    !             yyscale = one / (geo%dy**2)
-    !             xyscale = fourth / (geo%dx*geo%dy)
-
-    !             ! Lower x boundary (avoid west), lower y boundary (avoid south)
-    !             j = jlo
-    !             i = ilo
-
-    !             p  = phi%data(i  ,j  )
-    !             pe = phi%data(i+1,j  )
-    !             pw = two*p-pe !phi%data(i-1,j  )
-    !             pn = phi%data(i  ,j+1)
-    !             ps = two*p-pn !phi%data(i  ,j-1)
-
-    !             pne = phi%data(i+1,j+1)
-    !             pnw = two*pn-pne !phi%data(i-1,j+1)
-    !             pse = two*pe-pne !phi%data(i+1,j-1)
-    !             psw = half*((two*ps-pse)+(two*pw-pnw)) !phi%data(i-1,j-1)
-
-    !             gxxe = geo%Jgup_xx%data(i+1,j)
-    !             gxxw = geo%Jgup_xx%data(i  ,j)
-
-    !             gxye = geo%Jgup_xy%data(i+1,j)
-    !             gxyw = geo%Jgup_xy%data(i  ,j)
-
-    !             gyyn = geo%Jgup_yy%data(i,j+1)
-    !             gyys = geo%Jgup_yy%data(i,j  )
-
-    !             gyxn = geo%Jgup_yx%data(i,j+1)
-    !             gyxs = geo%Jgup_yx%data(i,j  )
-
-    !             if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-    !                 gxxw = zero
-    !                 gxyw = zero
-    !             endif
-    !             if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-    !                 gyys = zero
-    !                 gyxs = zero
-    !             endif
-
-    !             lxx = gxxe*pe + gxxw*pw
-    !             lyy = gyyn*pn + gyys*ps
-    !             lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-    !             lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-    !             lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-    !             newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-    !             phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-
-    !             ! Interior to x, lower y boundary (avoid south)
-    !             do i = ilo, ihi
-    !                 pe = phi%data(i+1,j  )
-    !                 pw = phi%data(i-1,j  )
-    !                 pn = phi%data(i  ,j+1)
-    !                 ps = two*p-pn !phi%data(i  ,j-1)
-
-    !                 pne = phi%data(i+1,j+1)
-    !                 pnw = phi%data(i-1,j+1)
-    !                 pse = two*pe-pne !phi%data(i+1,j-1)
-    !                 psw = two*pw-pnw !phi%data(i-1,j-1)
-
-    !                 gxxe = geo%Jgup_xx%data(i+1,j)
-    !                 gxxw = geo%Jgup_xx%data(i  ,j)
-
-    !                 gxye = geo%Jgup_xy%data(i+1,j)
-    !                 gxyw = geo%Jgup_xy%data(i  ,j)
-
-    !                 gyyn = geo%Jgup_yy%data(i,j+1)
-    !                 gyys = geo%Jgup_yy%data(i,j  )
-
-    !                 gyxn = geo%Jgup_yx%data(i,j+1)
-    !                 gyxs = geo%Jgup_yx%data(i,j  )
-
-    !                 if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-    !                     gyys = zero
-    !                     gyxs = zero
-    !                 endif
-
-    !                 lxx = gxxe*pe + gxxw*pw
-    !                 lyy = gyyn*pn + gyys*ps
-    !                 lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-    !                 lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-
-    !                 lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-    !                 newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-    !                 phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-    !             enddo !i
-
-    !             ! Upper x boundary (avoid east), lower y boundary (avoid south)
-    !             i = ihi
-
-    !             p  = phi%data(i  ,j  )
-    !             pw = phi%data(i-1,j  )
-    !             pe = two*p-pw !phi%data(i+1,j  )
-    !             pn = phi%data(i  ,j+1)
-    !             ps = two*p-pn !phi%data(i  ,j-1)
-
-    !             pnw = phi%data(i-1,j+1)
-    !             pne = two*pn-pnw !phi%data(i+1,j+1)
-    !             psw = two*pw-pnw !phi%data(i-1,j-1)
-    !             pse = half*((two*ps-psw)+(two*pe-pne)) !phi%data(i+1,j-1)
-
-    !             gxxe = geo%Jgup_xx%data(i+1,j)
-    !             gxxw = geo%Jgup_xx%data(i  ,j)
-
-    !             gxye = geo%Jgup_xy%data(i+1,j)
-    !             gxyw = geo%Jgup_xy%data(i  ,j)
-
-    !             gyyn = geo%Jgup_yy%data(i,j+1)
-    !             gyys = geo%Jgup_yy%data(i,j  )
-
-    !             gyxn = geo%Jgup_yx%data(i,j+1)
-    !             gyxs = geo%Jgup_yx%data(i,j  )
-
-    !             if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
-    !                 gxxe = zero
-    !                 gxye = zero
-    !             endif
-    !             if (bc%type_ylo .eq. BCTYPE_NEUM) then ! south terms are zero
-    !                 gyys = zero
-    !                 gyxs = zero
-    !             endif
-
-    !             lxx = gxxe*pe + gxxw*pw
-    !             lyy = gyyn*pn + gyys*ps
-    !             lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-    !             lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-    !             lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-    !             newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-    !             phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-
-
-    !             ! Interior to y...
-    !             do j = jlo+1, jhi-1
-    !                 ! Lower x boundary (avoid west), interior to y
-    !                 i = ilo
-
-    !                 p  = phi%data(i  ,j  )
-    !                 pe = phi%data(i+1,j  )
-    !                 pw = two*p-pe   !phi%data(i-1,j  )
-    !                 pn = phi%data(i  ,j+1)
-    !                 ps = phi%data(i  ,j-1)
-
-    !                 pne = phi%data(i+1,j+1)
-    !                 pnw = two*pn-pne !phi%data(i-1,j+1)
-    !                 pse = phi%data(i+1,j-1)
-    !                 psw = two*ps-pse !phi%data(i-1,j-1)
-
-    !                 gxxe = geo%Jgup_xx%data(i+1,j)
-    !                 gxxw = geo%Jgup_xx%data(i  ,j)
-
-    !                 gxye = geo%Jgup_xy%data(i+1,j)
-    !                 gxyw = geo%Jgup_xy%data(i  ,j)
-
-    !                 gyyn = geo%Jgup_yy%data(i,j+1)
-    !                 gyys = geo%Jgup_yy%data(i,j  )
-
-    !                 gyxn = geo%Jgup_yx%data(i,j+1)
-    !                 gyxs = geo%Jgup_yx%data(i,j  )
-
-    !                 if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-    !                     gxxw = zero
-    !                     gxyw = zero
-    !                 endif
-
-    !                 lxx = gxxe*pe + gxxw*pw
-    !                 lyy = gyyn*pn + gyys*ps
-    !                 lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-    !                 lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-    !                 lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-    !                 newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-    !                 phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-
-    !                 ! Interior to x and y
-    !                 do i = ilo, ihi
-    !                     pe = phi%data(i+1,j  )
-    !                     pw = phi%data(i-1,j  )
-    !                     pn = phi%data(i  ,j+1)
-    !                     ps = phi%data(i  ,j-1)
-
-    !                     pne = phi%data(i+1,j+1)
-    !                     pnw = phi%data(i-1,j+1)
-    !                     pse = phi%data(i+1,j-1)
-    !                     psw = phi%data(i-1,j-1)
-
-    !                     gxxe = geo%Jgup_xx%data(i+1,j)
-    !                     gxxw = geo%Jgup_xx%data(i  ,j)
-
-    !                     gxye = geo%Jgup_xy%data(i+1,j)
-    !                     gxyw = geo%Jgup_xy%data(i  ,j)
-
-    !                     gyyn = geo%Jgup_yy%data(i,j+1)
-    !                     gyys = geo%Jgup_yy%data(i,j  )
-
-    !                     gyxn = geo%Jgup_yx%data(i,j+1)
-    !                     gyxs = geo%Jgup_yx%data(i,j  )
-
-    !                     lxx = gxxe*pe + gxxw*pw
-    !                     lyy = gyyn*pn + gyys*ps
-    !                     lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-    !                     lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-    !                     lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-    !                     newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-    !                     phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-    !                 enddo !i
-
-    !                 ! Upper x boundary (avoid east), interior to y
-    !                 i = ihi
-
-    !                 p  = phi%data(i  ,j  )
-    !                 pw = phi%data(i-1,j  )
-    !                 pe = two*p-pw !phi%data(i+1,j  )
-    !                 ps = phi%data(i  ,j-1)
-    !                 pn = phi%data(i  ,j+1)
-
-    !                 pnw = phi%data(i-1,j+1)
-    !                 pne = two*pn-pnw !phi%data(i+1,j+1)
-    !                 psw = phi%data(i-1,j-1)
-    !                 pse = two*ps-psw !phi%data(i+1,j-1)
-
-    !                 gxxe = geo%Jgup_xx%data(i+1,j)
-    !                 gxxw = geo%Jgup_xx%data(i  ,j)
-
-    !                 gxye = geo%Jgup_xy%data(i+1,j)
-    !                 gxyw = geo%Jgup_xy%data(i  ,j)
-
-    !                 gyyn = geo%Jgup_yy%data(i,j+1)
-    !                 gyys = geo%Jgup_yy%data(i,j  )
-
-    !                 gyxn = geo%Jgup_yx%data(i,j+1)
-    !                 gyxs = geo%Jgup_yx%data(i,j  )
-
-    !                 if (bc%type_xhi .eq. BCTYPE_NEUM) then ! east terms are zero
-    !                     gxxe = zero
-    !                     gxye = zero
-    !                 endif
-
-    !                 lxx = gxxe*pe + gxxw*pw
-    !                 lyy = gyyn*pn + gyys*ps
-    !                 lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-    !                 lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-    !                 lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-    !                 newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-    !                 phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-    !             enddo !j
-
-
-    !             ! Upper y boundary...
-    !             j = jhi
-
-    !             ! Lower x boundary (avoid west), upper y boundary (avoid north)
-    !             i = ilo
-
-    !             p  = phi%data(i  ,j  )
-    !             pe = phi%data(i+1,j  )
-    !             pw = two*p-pe !phi%data(i-1,j  )
-    !             ps = phi%data(i  ,j-1)
-    !             pn = two*p-ps !phi%data(i  ,j+1)
-
-    !             pse = phi%data(i+1,j-1)
-    !             pne = two*pe-pse !phi%data(i+1,j+1)
-    !             psw = two*ps-pse !phi%data(i-1,j-1)
-    !             pnw = half*((two*pw-psw)+(two*pn-pne)) !phi%data(i-1,j+1)
-
-    !             gxxe = geo%Jgup_xx%data(i+1,j)
-    !             gxxw = geo%Jgup_xx%data(i  ,j)
-
-    !             gxye = geo%Jgup_xy%data(i+1,j)
-    !             gxyw = geo%Jgup_xy%data(i  ,j)
-
-    !             gyyn = geo%Jgup_yy%data(i,j+1)
-    !             gyys = geo%Jgup_yy%data(i,j  )
-
-    !             gyxn = geo%Jgup_yx%data(i,j+1)
-    !             gyxs = geo%Jgup_yx%data(i,j  )
-
-    !             if (bc%type_xlo .eq. BCTYPE_NEUM) then ! west terms are zero
-    !                 gxxw = zero
-    !                 gxyw = zero
-    !             endif
-    !             if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-    !                 gyyn = zero
-    !                 gyxn = zero
-    !             endif
-
-    !             lxx = gxxe*pe + gxxw*pw
-    !             lyy = gyyn*pn + gyys*ps
-    !             lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-    !             lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-    !             lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-    !             newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-    !             phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-
-    !             ! Interior to x, upper y boundary (avoid north)
-    !             do i = ilo, ihi
-    !                 pe = phi%data(i+1,j  )
-    !                 pw = phi%data(i-1,j  )
-    !                 ps = phi%data(i  ,j-1)
-    !                 pn = two*p-ps !phi%data(i  ,j+1)
-
-    !                 pse = phi%data(i+1,j-1)
-    !                 psw = phi%data(i-1,j-1)
-    !                 pne = two*pe-pse !phi%data(i+1,j+1)
-    !                 pnw = two*pw-psw !phi%data(i-1,j+1)
-
-    !                 gxxe = geo%Jgup_xx%data(i+1,j)
-    !                 gxxw = geo%Jgup_xx%data(i  ,j)
-
-    !                 gxye = geo%Jgup_xy%data(i+1,j)
-    !                 gxyw = geo%Jgup_xy%data(i  ,j)
-
-    !                 gyyn = geo%Jgup_yy%data(i,j+1)
-    !                 gyys = geo%Jgup_yy%data(i,j  )
-
-    !                 gyxn = geo%Jgup_yx%data(i,j+1)
-    !                 gyxs = geo%Jgup_yx%data(i,j  )
-
-    !                 if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-    !                     gyyn = zero
-    !                     gyxn = zero
-    !                 endif
-
-    !                 lxx = gxxe*pe + gxxw*pw
-    !                 lyy = gyyn*pn + gyys*ps
-    !                 lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-    !                 lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-
-    !                 lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-    !                 newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-    !                 phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-    !             enddo !i
-
-    !             ! Upper x boundary (avoid east), upper y boundary (avoid north)
-    !             i = ihi
-
-    !             p  = phi%data(i  ,j  )
-    !             pw = phi%data(i-1,j  )
-    !             pe = two*p-pw !phi%data(i+1,j  )
-    !             ps = phi%data(i  ,j-1)
-    !             pn = two*p-ps !phi%data(i  ,j+1)
-
-    !             psw = two*pw-pnw !phi%data(i-1,j-1)
-    !             pnw = phi%data(i-1,j+1)
-    !             pse = two*ps-psw !phi%data(i+1,j-1)
-    !             pne = half*((two*pn-pnw)+(two*pe-pse)) !phi%data(i+1,j+1)
-
-    !             gxxe = geo%Jgup_xx%data(i+1,j)
-    !             gxxw = geo%Jgup_xx%data(i  ,j)
-
-    !             gxye = geo%Jgup_xy%data(i+1,j)
-    !             gxyw = geo%Jgup_xy%data(i  ,j)
-
-    !             gyyn = geo%Jgup_yy%data(i,j+1)
-    !             gyys = geo%Jgup_yy%data(i,j  )
-
-    !             gyxn = geo%Jgup_yx%data(i,j+1)
-    !             gyxs = geo%Jgup_yx%data(i,j  )
-
-    !             if (bc%type_xhi .eq. BCTYPE_NEUM) then ! west terms are zero
-    !                 gxxw = zero
-    !                 gxyw = zero
-    !             endif
-    !             if (bc%type_yhi .eq. BCTYPE_NEUM) then ! north terms are zero
-    !                 gyyn = zero
-    !                 gyxn = zero
-    !             endif
-
-    !             lxx = gxxe*pe + gxxw*pw
-    !             lyy = gyyn*pn + gyys*ps
-    !             lxy = gxye*(pne-pse) + gxyw*(psw-pnw)
-    !             lyx = gyxn*(pne-pnw) + gyxs*(psw-pse)
-    !             lphi = lxx*xxscale + lyy*yyscale + (lxy + lyx)*xyscale
-
-    !             newphi = (rhs%data(i,j) - lphi) * invdiags%data(i,j)
-    !             phi%data(i,j) = (one-omega)*phi%data(i,j) + omega*newphi
-    !         endif
-
-    !         ! Compute new residual
-    !         ! TODO: Once this function has been corrected,
-    !         ! this can move inside the i(tol>0) block.
-    !         call compute_residual (r, rhs, phi, geo, bc, .true.)
-
-    !         if (tol .gt. zero) then
-    !             relres(iter) = pnorm (r, r%valid, 2) / rscale
-    !             if (verbosity .ge. 3) then
-    !                 print*, 'iter ', iter, ': rel |res| = ', relres(iter)
-    !             endif
-
-    !             ! Did we converge?
-    !             if (relres(iter) .le. tol) then
-    !                 if (verbosity .ge. 3) then
-    !                     print*, "Converged."
-    !                 endif
-    !                 exit
-    !             endif
-    !         endif
-    !     enddo
-
-    !     ! Free memory
-    !     call undefine_box_data (r)
-
-    ! end subroutine relax_gs
-
-
-! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
     subroutine relax_gs (phi, rhs, geo, bc, homog, invdiags, &
                          omega, tol, maxiters, zerophi, verbosity)
@@ -3526,6 +3087,12 @@ contains
         ! Do we even need to be here?
         if (maxiters .eq. 0) then
             return
+        endif
+
+        if ((bc%mode_xlo .eq. BCMODE_LAH) .or. (bc%mode_xhi .eq. BCMODE_LAH) .or. &
+            (bc%mode_ylo .eq. BCMODE_LAH) .or. (bc%mode_yhi .eq. BCMODE_LAH)) then
+            print*, 'Poisson2d::compute_invdiags received BCMODE_LAH.'
+            stop
         endif
 
         ! Define some useful quantities
@@ -4762,7 +4329,7 @@ contains
 
         integer                       :: refx, refy
         integer                       :: fi, fj, ci, cj
-        real(dp)                      :: mx, my
+        real(dp)                      :: mx, my, ml, mr, mc, eta
         logical                       :: remove_avg, rax, ray
         real(dp)                      :: dxprod, vol, dvol, sum
 
@@ -4811,8 +4378,54 @@ contains
                         do ci = crse%valid%ilo, crse%valid%ihi
                             fi = refx*ci
 
+                            ! No limiting
                             mx = half * (crse%data(ci+1,cj) - crse%data(ci-1,cj))
                             my = half * (crse%data(ci,cj+1) - crse%data(ci,cj-1))
+
+                            ! minmod limiting
+                            ! ml = crse%data(ci,cj) - crse%data(ci-1,cj)
+                            ! mr = crse%data(ci+1,cj) - crse%data(ci,cj)
+                            ! if (ml*mr .le. zero) then
+                            !     mx = zero
+                            ! else if (abs(ml) .lt. abs(mr)) then
+                            !     mx = ml
+                            ! else
+                            !     mx = mr
+                            ! endif
+
+                            ! ml = crse%data(ci,cj) - crse%data(ci,cj-1)
+                            ! mr = crse%data(ci,cj+1) - crse%data(ci,cj)
+                            ! if (ml*mr .le. zero) then
+                            !     my = zero
+                            ! else if (abs(ml) .lt. abs(mr)) then
+                            !     my = ml
+                            ! else
+                            !     my = mr
+                            ! endif
+
+                            ! Something else
+                            ! ml = crse%data(ci,cj) - crse%data(ci-1,cj)
+                            ! mr = crse%data(ci+1,cj) - crse%data(ci,cj)
+                            ! eta = max(zero,min(one,ml/mr))
+                            ! mc = half * (crse%data(ci+1,cj) - crse%data(ci-1,cj))
+                            ! if (ml*mr .le. zero) then
+                            !     ml = zero
+                            ! else if (abs(ml) .gt. abs(mr)) then
+                            !     ml = mr
+                            ! endif
+                            ! mx = ml + eta*(mc-ml)
+
+                            ! ml = crse%data(ci,cj) - crse%data(ci,cj-1)
+                            ! mr = crse%data(ci,cj+1) - crse%data(ci,cj)
+                            ! eta = max(zero,min(one,ml/mr))
+                            ! mc = half * (crse%data(ci,cj+1) - crse%data(ci,cj-1))
+                            ! if (ml*mr .le. zero) then
+                            !     ml = zero
+                            ! else if (abs(ml) .gt. abs(mr)) then
+                            !     ml = mr
+                            ! endif
+                            ! my = ml + eta*(mc-ml)
+
 
                             fine%data(fi  ,fj  ) = fine%data(fi  ,fj  ) + fourth*(-mx - my)
                             fine%data(fi+1,fj  ) = fine%data(fi+1,fj  ) + fourth*( mx - my)
