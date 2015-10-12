@@ -1111,17 +1111,23 @@ contains
             ! call restrict (work1(0), r(1))
 
 
-            ! Remove L_c * GS * D^{-1} r(0) from r(0)
-            e(0)%data(ilo:ihi,jlo:jhi) = r(0)%data(ilo:ihi,jlo:jhi) * invdiags(0)%data(ilo:ihi,jlo:jhi)
-            call relax_gs (e(0), r(0), geo, bc, .true., &
-                           invdiags(0), &
-                           one-third, & ! relax_omega,
-                           -one, &      ! relax_tol,
-                           smooth_down, &
-                           .false., & ! zero phi?
-                           0) !relax_verbosity
+            ! ! Remove L_c * GS * D^{-1} r(0) from r(0)
+            ! e(0)%data(ilo:ihi,jlo:jhi) = r(0)%data(ilo:ihi,jlo:jhi) * invdiags(0)%data(ilo:ihi,jlo:jhi)
+            ! call relax_gs (e(0), r(0), geo, bc, .true., &
+            !                invdiags(0), &
+            !                one-third, & ! relax_omega,
+            !                -one, &      ! relax_tol,
+            !                smooth_down, &
+            !                .false., & ! zero phi?
+            !                0) !relax_verbosity
 
-            call compute_pd (work())
+            ! call compute_pd (pdx, e(0), 1)
+            ! call compute_pd (pdy, e(0), 2)
+            ! pdx%data = geo%Jgup_yx%data * pdx%data
+            ! pdy%data = geo%Jgup_xy%data * pdy%data
+            ! r(0)%data(ilo:ihi,jlo:jhi) = r(0)%data(ilo:ihi,jlo:jhi) &
+            !                            - (pdy(ilo+1:ihi+1,jlo:jhi) - pdy(ilo:ihi,jlo:jhi)) / dx &
+
 
 
             ! Solve for phi's correction.
