@@ -35,7 +35,7 @@ program test
     real(8), parameter          :: H = one
 
     integer                     :: r             ! Current refinement level
-    integer, parameter          :: maxr = 5      ! Max refinement level
+    integer, parameter          :: maxr = 7      ! Max refinement level
     real(dp), dimension(maxr)   :: errnorm       ! Error norm at each level
     real(dp), dimension(maxr-1) :: rate          ! Convergence rates
 
@@ -199,15 +199,15 @@ program test
     ! enddo
     ! print*
 
-    print*, 'Test 10: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
-    errnorm(maxr) = test_solver (geo(maxr))
-    print*, 'Error norm = ', errnorm(maxr)
-    print*
+    ! print*, 'Test 10: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    ! errnorm(maxr) = test_solver (geo(maxr))
+    ! print*, 'Error norm = ', errnorm(maxr)
+    ! print*
 
-    ! ! Test 10: Solver test
+    ! ! Test 11: Deferred correction solver test
     ! errnorm = bogus_val
     ! do r = 1, maxr
-    !     errnorm(r) = test_solver (geo(r))
+    !     errnorm(r) = test_dcsolver (geo(r))
     ! enddo
     ! call compute_conv_rate (rate, errnorm)
     ! print*, 'Test 11: Deferred correction solver test'
@@ -218,7 +218,7 @@ program test
     ! enddo
     ! print*
 
-    print*, 'Test 11: Deferred correction solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    print*, 'Test 11: DC solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
     errnorm(maxr) = test_dcsolver (geo(maxr))
     print*, 'Error norm = ', errnorm(maxr)
     print*
@@ -422,7 +422,7 @@ contains
         call fill_x (x)
 
         ! Bottom elevation
-        call fill_elevation (y%data(:,jlo), x%data(:,x%valid%jlo), ilo, ihi, L, H)
+        call fill_elevation (y%data(ilo:ihi,jlo), x%data(ilo:ihi,x%valid%jlo), ilo, ihi, L, H)
 
         ! Map vertically. Do this in reverse order so we don't clobber
         ! the elevation data.
@@ -2180,7 +2180,7 @@ contains
         real(dp)                   :: kx, ky
         logical, parameter         :: homog = .false.
         integer, parameter         :: verbosity = 3
-        logical, parameter         :: use_computed_soln = .true.
+        logical, parameter         :: use_computed_soln = .false.
 
         real(dp), dimension(:), pointer :: xp, yp
         type(box_data),target      :: bdx, bdx_x, bdx_y
@@ -2300,14 +2300,14 @@ contains
         if (use_computed_soln) then
             call compute_laplacian (lphi, soln, geo, bc, homog, .false.)
         else
-            ! lphi%data = zero
-            ! do i = 8, 240, 2
-            !     lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) &
-            !                                - ((pi/L)**2 + (pi/H)**2)*cos(i*pi*bdx%data(ilo:ihi,jlo:jhi)/L) &
-            !                                                         *cos(i*pi*bdy%data(ilo:ihi,jlo:jhi)/H) &
-            !                                                         *dble(i)
-            ! enddo
-            ! lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
+            lphi%data = zero
+            do i = 8, 240, 2
+                lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) &
+                                           - ((pi/L)**2 + (pi/H)**2)*cos(i*pi*bdx%data(ilo:ihi,jlo:jhi)/L) &
+                                                                    *cos(i*pi*bdy%data(ilo:ihi,jlo:jhi)/H) &
+                                                                    *dble(i)
+            enddo
+            lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
         endif
 
         ! Set up invdiags
@@ -2417,7 +2417,7 @@ contains
         real(dp)                   :: kx, ky
         logical, parameter         :: homog = .false.
         integer, parameter         :: verbosity = 3
-        logical, parameter         :: use_computed_soln = .true.
+        logical, parameter         :: use_computed_soln = .false.
 
         real(dp), dimension(:), pointer :: xp, yp
         type(box_data),target      :: bdx, bdx_x, bdx_y
@@ -2537,14 +2537,18 @@ contains
         if (use_computed_soln) then
             call compute_laplacian (lphi, soln, geo, bc, homog, .false.)
         else
-            ! lphi%data = zero
-            ! do i = 8, 240, 2
-            !     lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) &
-            !                                - ((pi/L)**2 + (pi/H)**2)*cos(i*pi*bdx%data(ilo:ihi,jlo:jhi)/L) &
-            !                                                         *cos(i*pi*bdy%data(ilo:ihi,jlo:jhi)/H) &
-            !                                                         *dble(i)
-            ! enddo
-            ! lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
+            lphi%data = zero
+            do i = 8, 240, 2
+                lphi%data(ilo:ihi,jlo:jhi) = lphi%data(ilo:ihi,jlo:jhi) &
+                                           - ((pi/L)**2 + (pi/H)**2)*cos(i*pi*bdx%data(ilo:ihi,jlo:jhi)/L) &
+                                                                    *cos(i*pi*bdy%data(ilo:ihi,jlo:jhi)/H) &
+                                                                    *dble(i)
+            enddo
+            do j = jlo, jhi
+                do i = ilo, ihi
+                    lphi%data(i,j) = lphi%data(i,j) * geo%J%data(i,j)
+                enddo
+            enddo
         endif
 
         ! Set up invdiags
@@ -2568,18 +2572,26 @@ contains
         call cpu_time (t1)
 
         ! V-Cycle iteration
-        lphi%data = lphi%data / geo%J%data(ilo:ihi,jlo:jhi)
+        do j = jlo, jhi
+            do i = ilo, ihi
+                lphi%data(i,j) = lphi%data(i,j) / geo%J%data(i,j)
+            enddo
+        enddo
         call vcycle (phi, lphi, geo, bc, homog, 0, 0, &
                      1.0d-30, & ! tol
                      10,       & ! max iters
                      -1,       & ! max depth
                      1,       & ! num cycles
-                     2,       & ! smooth down
-                     2,       & ! smooth up
-                     2,       & ! smooth bottom
+                     1,       & ! smooth down
+                     1,       & ! smooth up
+                     1,       & ! smooth bottom
                      .false., & ! zerophi
                      3) !verbosity)
-        lphi%data = lphi%data * geo%J%data(ilo:ihi,jlo:jhi)
+        do j = jlo, jhi
+            do i = ilo, ihi
+                lphi%data(i,j) = lphi%data(i,j) * geo%J%data(i,j)
+            enddo
+        enddo
 
         call cpu_time (t2)
         print*, 'Solve time (s) = ', t2-t1
@@ -2590,7 +2602,11 @@ contains
         print* , 'post res norm = ', res
 
         ! Compute error norm
-        phi%data = phi%data - soln%data
+        do j = jlo, jhi
+            do i = ilo, ihi
+                phi%data(i,j) = phi%data(i,j) - soln%data(i,j)
+            enddo
+        enddo
         res = pnorm (phi, phi%valid, norm_type)
 
 

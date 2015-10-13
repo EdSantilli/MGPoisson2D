@@ -1482,68 +1482,68 @@ contains
     end subroutine fill_ghosts
 
 
-    ! ! --------------------------------------------------------------------------
-    ! ! --------------------------------------------------------------------------
-    ! subroutine extrapolate_ghosts (phi, order)
-    !     type(box_data), intent(inout) :: phi
-    !     integer, intent(in)           :: order
+    ! --------------------------------------------------------------------------
+    ! --------------------------------------------------------------------------
+    subroutine extrapolate_ghosts (phi, order)
+        type(box_data), intent(inout) :: phi
+        integer, intent(in)           :: order
 
-    !     integer  :: ilo, ihi, jlo, jhi
+        integer  :: ilo, ihi, jlo, jhi
 
-    !     ! Only works with CC data.
-    !     if ((phi%offi .ne. BD_CELL) .or. (phi%offj .ne. BD_CELL)) then
-    !         print*, 'extrapolate_ghosts: Only works with cell-centered data.'
-    !         stop
-    !     endif
+        ! Only works with CC data.
+        if ((phi%offi .ne. BD_CELL) .or. (phi%offj .ne. BD_CELL)) then
+            print*, 'extrapolate_ghosts: Only works with cell-centered data.'
+            stop
+        endif
 
-    !     ! Right now, we can only handle 1 ghost layer at most.
-    !     if ((phi%ngx .gt. 1) .or. (phi%ngy .gt. 1)) then
-    !         print*, 'fill_ghosts: Can only handle 1 ghost layer max.'
-    !         stop
-    !     endif
+        ! Right now, we can only handle 1 ghost layer at most.
+        if ((phi%ngx .gt. 1) .or. (phi%ngy .gt. 1)) then
+            print*, 'fill_ghosts: Can only handle 1 ghost layer max.'
+            stop
+        endif
 
-    !     ilo = phi%valid%ilo
-    !     ihi = phi%valid%ihi
-    !     jlo = phi%valid%jlo
-    !     jhi = phi%valid%jhi
+        ilo = phi%valid%ilo
+        ihi = phi%valid%ihi
+        jlo = phi%valid%jlo
+        jhi = phi%valid%jhi
 
-    !     select case (order)
-    !         case (0)
-    !             if (phi%ngx .gt. 0) then
-    !                 phi%data(ilo-1,:) = phi%data(ilo,:)
-    !                 phi%data(ihi+1,:) = phi%data(ihi,:)
-    !             endif
+        select case (order)
+            case (0)
+                if (phi%ngx .gt. 0) then
+                    phi%data(ilo-1,:) = phi%data(ilo,:)
+                    phi%data(ihi+1,:) = phi%data(ihi,:)
+                endif
 
-    !             if (phi%ngy .gt. 0) then
-    !                 phi%data(:,jlo-1) = phi%data(:,jlo)
-    !                 phi%data(:,jhi+1) = phi%data(:,jhi)
-    !             endif
-    !         case (1)
-    !             if (phi%ngx .gt. 0) then
-    !                 phi%data(ilo-1,:) = two*phi%data(ilo,:) - phi%data(ilo+1,:)
-    !                 phi%data(ihi+1,:) = two*phi%data(ihi,:) - phi%data(ihi-1,:)
-    !             endif
+                if (phi%ngy .gt. 0) then
+                    phi%data(:,jlo-1) = phi%data(:,jlo)
+                    phi%data(:,jhi+1) = phi%data(:,jhi)
+                endif
+            case (1)
+                if (phi%ngx .gt. 0) then
+                    phi%data(ilo-1,:) = two*phi%data(ilo,:) - phi%data(ilo+1,:)
+                    phi%data(ihi+1,:) = two*phi%data(ihi,:) - phi%data(ihi-1,:)
+                endif
 
-    !             if (phi%ngy .gt. 0) then
-    !                 phi%data(:,jlo-1) = two*phi%data(:,jlo) - phi%data(:,jlo+1)
-    !                 phi%data(:,jhi+1) = two*phi%data(:,jhi) - phi%data(:,jhi-1)
-    !             endif
-    !         case (2)
-    !             if (phi%ngx .gt. 0) then
-    !                 phi%data(ilo-1,:) = three*(phi%data(ilo,:) - phi%data(ilo+1,:)) + phi%data(ilo+2,:)
-    !                 phi%data(ihi+1,:) = three*(phi%data(ihi,:) - phi%data(ihi-1,:)) + phi%data(ihi-2,:)
-    !             endif
+                if (phi%ngy .gt. 0) then
+                    phi%data(:,jlo-1) = two*phi%data(:,jlo) - phi%data(:,jlo+1)
+                    phi%data(:,jhi+1) = two*phi%data(:,jhi) - phi%data(:,jhi-1)
+                endif
+            case (2)
+                if (phi%ngx .gt. 0) then
+                    phi%data(ilo-1,:) = three*(phi%data(ilo,:) - phi%data(ilo+1,:)) + phi%data(ilo+2,:)
+                    phi%data(ihi+1,:) = three*(phi%data(ihi,:) - phi%data(ihi-1,:)) + phi%data(ihi-2,:)
+                endif
 
-    !             if (phi%ngy .gt. 0) then
-    !                 phi%data(:,jlo-1) = three*(phi%data(:,jlo) - phi%data(:,jlo+1)) + phi%data(:,jlo+2)
-    !                 phi%data(:,jhi+1) = three*(phi%data(:,jhi) - phi%data(:,jhi-1)) + phi%data(:,jhi-2)
-    !             endif
-    !         case default
-    !             print*, 'extrapolate_ghosts: order = ', order, ' is not supported.'
-    !             stop
-    !     end select
+                if (phi%ngy .gt. 0) then
+                    phi%data(:,jlo-1) = three*(phi%data(:,jlo) - phi%data(:,jlo+1)) + phi%data(:,jlo+2)
+                    phi%data(:,jhi+1) = three*(phi%data(:,jhi) - phi%data(:,jhi-1)) + phi%data(:,jhi-2)
+                endif
+            case default
+                print*, 'extrapolate_ghosts: order = ', order, ' is not supported.'
+                stop
+        end select
 
-    ! end subroutine extrapolate_ghosts
+    end subroutine extrapolate_ghosts
 
 
     ! ------------------------------------------------------------------------------
@@ -2421,7 +2421,7 @@ contains
         logical, intent(in)           :: homog
         type(box_data), intent(inout) :: xwk, ywk
 
-        integer                       :: ilo, ihi, jlo, jhi
+        integer                       :: ilo, ihi, jlo, jhi, i, j
 
         ilo = phi%valid%ilo
         ihi = phi%valid%ihi
@@ -2434,14 +2434,22 @@ contains
         ! Compute xflux...
         call compute_pd (xflux, phi, 1)
         call compute_pd (xwk, phi, 2)
-        xflux%data(ilo:ihi+1,jlo:jhi) = geo%Jgup_xx%data(ilo:ihi+1,jlo:jhi) * xflux%data(ilo:ihi+1,jlo:jhi) &
-                                      + geo%Jgup_xy%data(ilo:ihi+1,jlo:jhi) *   xwk%data(ilo:ihi+1,jlo:jhi)
+        do j = jlo, jhi
+            do i = ilo, ihi+1
+                xflux%data(i,j) = geo%Jgup_xx%data(i,j) * xflux%data(i,j) &
+                                + geo%Jgup_xy%data(i,j) *   xwk%data(i,j)
+            enddo
+        enddo
 
         ! Compute yflux...
         call compute_pd (ywk, phi, 1)
         call compute_pd (yflux, phi, 2)
-        yflux%data(ilo:ihi,jlo:jhi+1) = geo%Jgup_yx%data(ilo:ihi,jlo:jhi+1) *   ywk%data(ilo:ihi,jlo:jhi+1) &
-                                      + geo%Jgup_yy%data(ilo:ihi,jlo:jhi+1) * yflux%data(ilo:ihi,jlo:jhi+1)
+        do j = jlo, jhi+1
+            do i = ilo, ihi
+                yflux%data(i,j) = geo%Jgup_yx%data(i,j) *   ywk%data(i,j) &
+                                + geo%Jgup_yy%data(i,j) * yflux%data(i,j)
+            enddo
+        enddo
 
         ! Set boundary fluxes
         call fill_boundary_fluxes (xflux, yflux, bc, homog)
