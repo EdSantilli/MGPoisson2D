@@ -3,14 +3,14 @@ SRCDIR = ../src
 BUILDDIR = ../build
 
 FC = ifort
-# FCFLAGSLIGHT = -g -O0 -CB -traceback
-# FCFLAGS = $(FCFLAGSLIGHT) -check all -fpe0 -debug extended #-warn
+FCFLAGSLIGHT = -g -O0 -CB -traceback -heap-arrays 1
+FCFLAGS = $(FCFLAGSLIGHT) -check all -fpe0 -debug extended #-warn
 
 # FCFLAGS = -g -O0 -CB -traceback -check all -fpe0 -debug extended -warn -diag-disable 7712 -heap-arrays 1
 # FCFLAGSLIGHT = $(FCFLAGS)
 
-FCFLAGSLIGHT = -O3 -heap-arrays 1 -ipo -vec-report4 -align array64byte
-FCFLAGS = $(FCFLAGSLIGHT)
+# FCFLAGSLIGHT = -O3 -heap-arrays 1 -ipo -align array64byte #-vec-report4
+# FCFLAGS = $(FCFLAGSLIGHT)
 
 .PHONY: all clean
 
