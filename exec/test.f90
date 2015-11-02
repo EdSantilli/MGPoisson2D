@@ -171,19 +171,19 @@ program test
     ! enddo
     ! print*
 
-    ! Test 9: Prolongation
-    errnorm = bogus_val
-    do r = 1, maxr
-        errnorm(r) = test_prolong (geo(r))
-    enddo
-    call compute_conv_rate (rate, errnorm)
-    print*, 'Test 9: Prolongation'
-    print*, 'Error norm                rate'
-    print*, errnorm(1)
-    do r = 2, maxr
-        print*, errnorm(r), rate(r-1)
-    enddo
-    print*
+    ! ! Test 9: Prolongation
+    ! errnorm = bogus_val
+    ! do r = 1, maxr
+    !     errnorm(r) = test_prolong (geo(r))
+    ! enddo
+    ! call compute_conv_rate (rate, errnorm)
+    ! print*, 'Test 9: Prolongation'
+    ! print*, 'Error norm                rate'
+    ! print*, errnorm(1)
+    ! do r = 2, maxr
+    !     print*, errnorm(r), rate(r-1)
+    ! enddo
+    ! print*
 
     ! ! Test 10: Solver test
     ! errnorm = bogus_val
@@ -199,10 +199,10 @@ program test
     ! enddo
     ! print*
 
-    print*, 'Test 10: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
-    errnorm(maxr) = test_solver (geo(maxr))
-    print*, 'Error norm = ', errnorm(maxr)
-    print*
+    ! print*, 'Test 10: Solver test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    ! errnorm(maxr) = test_solver (geo(maxr))
+    ! print*, 'Error norm = ', errnorm(maxr)
+    ! print*
 
     ! ! Test 11: Deferred correction solver test
     ! errnorm = bogus_val
@@ -237,10 +237,10 @@ program test
     ! enddo
     ! print*
 
-    ! print*, 'Test 12: Projection test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
-    ! errnorm(maxr) = test_projection (geo(maxr))
-    ! ! print*, 'Error norm = ', errnorm(maxr)
-    ! print*
+    print*, 'Test 12: Projection test on ', geo(maxr)%J%valid%nx, ' x ', geo(maxr)%J%valid%ny
+    errnorm(maxr) = test_projection (geo(maxr))
+    ! print*, 'Error norm = ', errnorm(maxr)
+    print*
 
 
     ! Prints x and y coordinates to the terminal.
@@ -2186,7 +2186,7 @@ contains
         type(box)                  :: valid
         integer, parameter         :: refx = 2
         integer, parameter         :: refy = 2
-        integer, parameter         :: prolong_order = 3
+        integer, parameter         :: prolong_order = 2
 
         integer                    :: ilo, ihi, jlo, jhi
         type(box_data)             :: bdx, bdx_x, bdx_y
@@ -2261,30 +2261,30 @@ contains
         crse_geo%dx = geo%dx * refx
         crse_geo%dy = geo%dy * refy
 
-        ! ! Set BCs
-        ! call define_bdry_data (bc, valid, &
-        !                        BCTYPE_PERIODIC, &   ! xlo
-        !                        BCTYPE_PERIODIC, &   ! xhi
-        !                        BCTYPE_PERIODIC, &   ! ylo
-        !                        BCTYPE_PERIODIC, &   ! yhi
-        !                        BCMODE_NONUNIFORM, &    ! xlo
-        !                        BCMODE_NONUNIFORM, &    ! xhi
-        !                        BCMODE_NONUNIFORM, &    ! ylo
-        !                        BCMODE_NONUNIFORM)      ! yhi
         ! Set BCs
         call define_bdry_data (bc, valid, &
-                               BCTYPE_DIRI, &   ! xlo
-                               BCTYPE_DIRI, &   ! xhi
-                               BCTYPE_DIRI, &   ! ylo
-                               BCTYPE_DIRI, &   ! yhi
+                               BCTYPE_PERIODIC, &   ! xlo
+                               BCTYPE_PERIODIC, &   ! xhi
+                               BCTYPE_PERIODIC, &   ! ylo
+                               BCTYPE_PERIODIC, &   ! yhi
                                BCMODE_NONUNIFORM, &    ! xlo
                                BCMODE_NONUNIFORM, &    ! xhi
                                BCMODE_NONUNIFORM, &    ! ylo
                                BCMODE_NONUNIFORM)      ! yhi
-        bc%data_xlo(jlo:jhi) = cos(kx*bdx_x%data(ilo  ,jlo:jhi)) * cos(ky*bdy_x%data(ilo  ,jlo:jhi))
-        bc%data_xhi(jlo:jhi) = cos(kx*bdx_x%data(ihi+1,jlo:jhi)) * cos(ky*bdy_x%data(ihi+1,jlo:jhi))
-        bc%data_ylo(ilo:ihi) = cos(kx*bdx_y%data(ilo:ihi,jlo  )) * cos(ky*bdy_y%data(ilo:ihi,jlo  ))
-        bc%data_yhi(ilo:ihi) = cos(kx*bdx_y%data(ilo:ihi,jhi+1)) * cos(ky*bdy_y%data(ilo:ihi,jhi+1))
+        ! ! Set BCs
+        ! call define_bdry_data (bc, valid, &
+        !                        BCTYPE_DIRI, &   ! xlo
+        !                        BCTYPE_DIRI, &   ! xhi
+        !                        BCTYPE_DIRI, &   ! ylo
+        !                        BCTYPE_DIRI, &   ! yhi
+        !                        BCMODE_NONUNIFORM, &    ! xlo
+        !                        BCMODE_NONUNIFORM, &    ! xhi
+        !                        BCMODE_NONUNIFORM, &    ! ylo
+        !                        BCMODE_NONUNIFORM)      ! yhi
+        ! bc%data_xlo(jlo:jhi) = cos(kx*bdx_x%data(ilo  ,jlo:jhi)) * cos(ky*bdy_x%data(ilo  ,jlo:jhi))
+        ! bc%data_xhi(jlo:jhi) = cos(kx*bdx_x%data(ihi+1,jlo:jhi)) * cos(ky*bdy_x%data(ihi+1,jlo:jhi))
+        ! bc%data_ylo(ilo:ihi) = cos(kx*bdx_y%data(ilo:ihi,jlo  )) * cos(ky*bdy_y%data(ilo:ihi,jlo  ))
+        ! bc%data_yhi(ilo:ihi) = cos(kx*bdx_y%data(ilo:ihi,jhi+1)) * cos(ky*bdy_y%data(ilo:ihi,jhi+1))
         ! ! Set BCs
         ! call define_bdry_data (bc, valid, &
         !                        BCTYPE_NEUM, &   ! xlo
@@ -2941,7 +2941,7 @@ contains
 
         ! Solve L[phi] = Div[flux].
         call compute_invdiags (invdiags, geo, bc, homog)
-        div%data = div%data / geo%J%data(ilo:ihi,jlo:jhi)
+        ! div%data = div%data / geo%J%data(ilo:ihi,jlo:jhi)
         ! sum = integrate2d (div, valid, geo, .true.)
         ! print*, '*sum rhs = ', sum
         ! call relax_jacobi (phi, div, geo, bc, homog, invdiags, &
@@ -2963,16 +2963,26 @@ contains
         !                      5,        & ! max restarts
         !                      .true.,   & ! zerophi
         !                      verbosity)
-        call vcycle (phi, div, geo, bc, homog, 0, 0, &
-                     tol,     &
-                     1,       & ! max iters
-                     1,       & ! max depth
-                     1,       & ! num cycles
-                     4,       & ! smooth down
-                     4,       & ! smooth up
-                     0,       & ! smooth bottom
-                     .true.,  & ! zerophi
-                     10)!verbosity)
+        ! call vcycle (phi, div, geo, bc, homog, 0, 0, &
+        !              tol,     &
+        !              10,      & ! max iters
+        !              -1,      & ! max depth
+        !              1,       & ! num cycles
+        !              8,       & ! smooth down
+        !              8,       & ! smooth up
+        !              8,       & ! smooth bottom
+        !              .true.,  & ! zerophi
+        !              3)!verbosity)
+        call fmg (phi, div, geo, bc, homog, 0, 0, &
+                  1.0d-30, & ! tol
+                  10,       & ! max iters
+                  -1,      & ! max depth
+                  1,       & ! num cycles
+                  8,       & ! smooth down
+                  8,       & ! smooth up
+                  8,       & ! smooth bottom
+                  .true., & ! zerophi
+                  3) !verbosity)
 
 
 

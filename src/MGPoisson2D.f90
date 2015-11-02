@@ -4994,17 +4994,17 @@ contains
         if (verbosity .ge. 1) then
             print*, 'max MG depth = ', maxdepth
         endif
-        if (verbosity .ge. 2) then
-            mgdx = valid%dx
-            mgdy = valid%dy
-            do d = 0, maxdepth-1
-                ! print*, 'ref(', d, ') = ', refx(d), ', ', refy(d)
-                print*, d, ': dx = ', mgdx, ', dy = ', mgdy
-                mgdx = mgdx * real(refx(d),8)
-                mgdy = mgdy * real(refy(d),8)
-            enddo
-            print*, d, ': dx = ', mgdx, ', dy = ', mgdy
-        endif
+        ! if (verbosity .ge. 2) then
+        !     mgdx = valid%dx
+        !     mgdy = valid%dy
+        !     do d = 0, maxdepth-1
+        !         ! print*, 'ref(', d, ') = ', refx(d), ', ', refy(d)
+        !         print*, d, ': dx = ', mgdx, ', dy = ', mgdy
+        !         mgdx = mgdx * real(refx(d),8)
+        !         mgdy = mgdy * real(refy(d),8)
+        !     enddo
+        !     print*, d, ': dx = ', mgdx, ', dy = ', mgdy
+        ! endif
 
         ! Allocate and set up workspace
         allocate (relres(0:maxiters), stat=ierr)
@@ -5222,9 +5222,11 @@ contains
         integer, intent(in)                                  :: numcycles
         integer, intent(in)                                  :: verbosity
 
+        integer                                              :: ilo, ihi, jlo, jhi
+
         character*2                                          :: indent = '  '
         integer                                              :: curcycle
-        integer, parameter                                   :: prolong_order = 3
+        integer, parameter                                   :: prolong_order = 2
 
         if (verbosity .ge. 7) then
             print*, repeat(indent,depth), 'MG depth = ', depth
@@ -5232,6 +5234,11 @@ contains
 
         ! Initialize solution
         e(depth)%data = zero
+        ! ilo = r(depth)%valid%ilo
+        ! ihi = r(depth)%valid%ihi
+        ! jlo = r(depth)%valid%jlo
+        ! jhi = r(depth)%valid%jhi
+        ! e(depth)%data(ilo:ihi,jlo:jhi) = r(depth)%data(ilo:ihi,jlo:jhi) * invdiags(depth)%data(ilo:ihi,jlo:jhi)
 
         ! Go to the coarser MG level if possible.
         if (depth .lt. maxdepth) then
