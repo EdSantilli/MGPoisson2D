@@ -51,15 +51,25 @@ module precision
     real(dp), parameter :: nineteen  = 19.0_dp
     real(dp), parameter :: twenty    = 20.0_dp
 
-    real(dp), parameter :: half      = one / two
-    real(dp), parameter :: third     = one / three
-    real(dp), parameter :: fourth    = one / four
-    real(dp), parameter :: fifth     = one / five
-    real(dp), parameter :: sixth     = one / six
-    real(dp), parameter :: seventh   = one / seven
-    real(dp), parameter :: eighth    = one / eight
-    real(dp), parameter :: ninth     = one / nine
-    real(dp), parameter :: tenth     = one / ten
+    real(dp), parameter :: half        = one / two
+    real(dp), parameter :: third       = one / three
+    real(dp), parameter :: fourth      = one / four
+    real(dp), parameter :: fifth       = one / five
+    real(dp), parameter :: sixth       = one / six
+    real(dp), parameter :: seventh     = one / seven
+    real(dp), parameter :: eighth      = one / eight
+    real(dp), parameter :: ninth       = one / nine
+    real(dp), parameter :: tenth       = one / ten
+    real(dp), parameter :: eleventh    = one / eleven
+    real(dp), parameter :: twelfth     = one / twelve
+    real(dp), parameter :: thirteenth  = one / thirteen
+    real(dp), parameter :: fourteenth  = one / fourteen
+    real(dp), parameter :: fifteenth   = one / fifteen
+    real(dp), parameter :: sixteenth   = one / sixteen
+    real(dp), parameter :: seventeenth = one / seventeen
+    real(dp), parameter :: eighteenth  = one / eighteen
+    real(dp), parameter :: nineteenth  = one / nineteen
+    real(dp), parameter :: twentieth   = one / twenty
 
     real(dp), parameter :: threehalves  = three / two
     real(dp), parameter :: threefourths = three / four
@@ -1537,6 +1547,16 @@ contains
                 if (phi%ngy .gt. 0) then
                     phi%data(:,jlo-1) = three*(phi%data(:,jlo) - phi%data(:,jlo+1)) + phi%data(:,jlo+2)
                     phi%data(:,jhi+1) = three*(phi%data(:,jhi) - phi%data(:,jhi-1)) + phi%data(:,jhi-2)
+                endif
+            case (3)
+                if (phi%ngx .gt. 0) then
+                    phi%data(ilo-1,:) = four*(phi%data(ilo,:) + phi%data(ilo+2,:)) - six*phi%data(ilo+1,:) - phi%data(ilo+3,:)
+                    phi%data(ihi+1,:) = four*(phi%data(ihi,:) + phi%data(ihi-2,:)) - six*phi%data(ihi-1,:) - phi%data(ihi-3,:)
+                endif
+
+                if (phi%ngy .gt. 0) then
+                    phi%data(:,jlo-1) = four*(phi%data(:,jlo) + phi%data(:,jlo+2)) - six*phi%data(:,jlo+1) - phi%data(:,jlo+3)
+                    phi%data(:,jhi+1) = four*(phi%data(:,jhi) + phi%data(:,jhi-2)) - six*phi%data(:,jhi-1) - phi%data(:,jhi-3)
                 endif
             case default
                 print*, 'extrapolate_ghosts: order = ', order, ' is not supported.'
@@ -3595,7 +3615,6 @@ contains
     end subroutine relax_gs
 
 
-
     ! ------------------------------------------------------------------------------
     ! ------------------------------------------------------------------------------
     subroutine solve_bicgstab (phi, rhs, geo, bc, homog, invdiags, &
@@ -4378,7 +4397,7 @@ contains
                     enddo
                 enddo
 
-                if (order .gt. 0) then
+                if (order .ge. 1) then
                     ! Upgrade to linear interp
                     call fill_ghosts (crse, crse_bc, crse_geo, homog, do_neum)
                     do cj = crse%valid%jlo, crse%valid%jhi
@@ -4386,59 +4405,46 @@ contains
                         do ci = crse%valid%ilo, crse%valid%ihi
                             fi = refx*ci
 
-                            ! No limiting
                             mx = half * (crse%data(ci+1,cj) - crse%data(ci-1,cj))
                             my = half * (crse%data(ci,cj+1) - crse%data(ci,cj-1))
-
-                            ! minmod limiting
-                            ! ml = crse%data(ci,cj) - crse%data(ci-1,cj)
-                            ! mr = crse%data(ci+1,cj) - crse%data(ci,cj)
-                            ! if (ml*mr .le. zero) then
-                            !     mx = zero
-                            ! else if (abs(ml) .lt. abs(mr)) then
-                            !     mx = ml
-                            ! else
-                            !     mx = mr
-                            ! endif
-
-                            ! ml = crse%data(ci,cj) - crse%data(ci,cj-1)
-                            ! mr = crse%data(ci,cj+1) - crse%data(ci,cj)
-                            ! if (ml*mr .le. zero) then
-                            !     my = zero
-                            ! else if (abs(ml) .lt. abs(mr)) then
-                            !     my = ml
-                            ! else
-                            !     my = mr
-                            ! endif
-
-                            ! Something else
-                            ! ml = crse%data(ci,cj) - crse%data(ci-1,cj)
-                            ! mr = crse%data(ci+1,cj) - crse%data(ci,cj)
-                            ! eta = max(zero,min(one,ml/mr))
-                            ! mc = half * (crse%data(ci+1,cj) - crse%data(ci-1,cj))
-                            ! if (ml*mr .le. zero) then
-                            !     ml = zero
-                            ! else if (abs(ml) .gt. abs(mr)) then
-                            !     ml = mr
-                            ! endif
-                            ! mx = ml + eta*(mc-ml)
-
-                            ! ml = crse%data(ci,cj) - crse%data(ci,cj-1)
-                            ! mr = crse%data(ci,cj+1) - crse%data(ci,cj)
-                            ! eta = max(zero,min(one,ml/mr))
-                            ! mc = half * (crse%data(ci,cj+1) - crse%data(ci,cj-1))
-                            ! if (ml*mr .le. zero) then
-                            !     ml = zero
-                            ! else if (abs(ml) .gt. abs(mr)) then
-                            !     ml = mr
-                            ! endif
-                            ! my = ml + eta*(mc-ml)
-
 
                             fine%data(fi  ,fj  ) = fine%data(fi  ,fj  ) + fourth*(-mx - my)
                             fine%data(fi+1,fj  ) = fine%data(fi+1,fj  ) + fourth*( mx - my)
                             fine%data(fi  ,fj+1) = fine%data(fi  ,fj+1) + fourth*(-mx + my)
                             fine%data(fi+1,fj+1) = fine%data(fi+1,fj+1) + fourth*( mx + my)
+                        enddo
+                    enddo
+                endif
+
+                if (order .ge. 2) then
+                    ! Upgrade to quadratic interp
+                    do cj = crse%valid%jlo, crse%valid%jhi
+                        fj = refy*cj
+                        do ci = crse%valid%ilo, crse%valid%ihi
+                            fi = refx*ci
+
+                            mx = fourth * (crse%data(ci+1,cj) - two*crse%data(ci,cj) + crse%data(ci-1,cj))
+                            my = fourth * (crse%data(ci,cj+1) - two*crse%data(ci,cj) + crse%data(ci,cj-1))
+
+                            fine%data(fi  ,fj  ) = fine%data(fi  ,fj  ) + eighth*(mx + my)
+                            fine%data(fi+1,fj  ) = fine%data(fi+1,fj  ) + eighth*(mx + my)
+                            fine%data(fi  ,fj+1) = fine%data(fi  ,fj+1) + eighth*(mx + my)
+                            fine%data(fi+1,fj+1) = fine%data(fi+1,fj+1) + eighth*(mx + my)
+                        enddo
+                    enddo
+
+                    call extrapolate_ghosts (crse, 3)
+                    do cj = crse%valid%jlo, crse%valid%jhi
+                        fj = refy*cj
+                        do ci = crse%valid%ilo, crse%valid%ihi
+                            fi = refx*ci
+
+                            mc = sixteenth * (crse%data(ci+1,cj+1) - crse%data(ci+1,cj-1) - crse%data(ci-1,cj+1) + crse%data(ci-1,cj-1))
+
+                            fine%data(fi  ,fj  ) = fine%data(fi  ,fj  ) + fourth*mc
+                            fine%data(fi+1,fj  ) = fine%data(fi+1,fj  ) - fourth*mc
+                            fine%data(fi  ,fj+1) = fine%data(fi  ,fj+1) - fourth*mc
+                            fine%data(fi+1,fj+1) = fine%data(fi+1,fj+1) + fourth*mc
                         enddo
                     enddo
                 endif
@@ -4646,8 +4652,8 @@ contains
         ihi = rhs%valid%ihi
         jlo = rhs%valid%jlo
         jhi = rhs%valid%jhi
-        rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
-                                  * geo%J%data(ilo:ihi,jlo:jhi)
+        ! rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
+        !                           * geo%J%data(ilo:ihi,jlo:jhi)
 
 
         ! Set up residual equation
@@ -4670,6 +4676,10 @@ contains
 
         ! The main iteration loop.
         do iter = 1, maxiters
+            ! Set the initial guess
+            ! e(0)%data = zero
+            e(0)%data(ilo:ihi,jlo:jhi) = r(0)%data(ilo:ihi,jlo:jhi) * invdiags(0)%data(ilo:ihi,jlo:jhi)
+
             ! Solve for phi's correction.
             call vcycle_noinit (e, r, invdiags, work1, mggeo, mgbc, &
                                 refx, refy, &
@@ -4710,9 +4720,9 @@ contains
             endif
         enddo
 
-        ! Restore rhs scaling.
-        rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
-                                  / geo%J%data(ilo:ihi,jlo:jhi)
+        ! ! Restore rhs scaling.
+        ! rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
+        !                           / geo%J%data(ilo:ihi,jlo:jhi)
 
         ! Free memory
         do d = 0, maxDepth
@@ -4764,6 +4774,7 @@ contains
         character*2                                          :: indent = '  '
         logical, parameter                                   :: homog = .true.
         integer                                              :: ilo, ihi, jlo, jhi
+        integer                                              :: cilo, cihi, cjlo, cjhi
         integer                                              :: curcycle
         real(dp)                                             :: norm, sum
         type(box_data)                                       :: tmp
@@ -4772,7 +4783,7 @@ contains
 
         ! Relaxation params
         real(dp), parameter                                  :: relax_tol = -one
-        real(dp), parameter                                  :: relax_omega = one-third ! Was 1.33
+        real(dp), parameter                                  :: relax_omega = one !-third ! Was 1.33
         ! logical, parameter                                   :: relax_redblack = .true.
         integer, parameter                                   :: relax_verbosity = 0
 
@@ -4802,10 +4813,6 @@ contains
 
         if (depth .eq. maxdepth) then
             ! Use bottom solver...
-
-            ! Set the initial guess
-            ! e(depth)%data = zero
-            e(depth)%data(ilo:ihi,jlo:jhi) = r(depth)%data(ilo:ihi,jlo:jhi) * invdiags(depth)%data(ilo:ihi,jlo:jhi)
 
             ! --- Bottom relaxation ---
             if (verbosity .ge. 7) then
@@ -4843,10 +4850,6 @@ contains
         else
             ! V-Cycle...
 
-            ! Set the initial guess
-            ! e(depth)%data = zero
-            e(depth)%data(ilo:ihi,jlo:jhi) = r(depth)%data(ilo:ihi,jlo:jhi) * invdiags(depth)%data(ilo:ihi,jlo:jhi)
-
             ! --- Downward relaxation ---
             if (verbosity .ge. 7) then
                 print*, repeat(indent,depth), 'Smooth down'
@@ -4874,6 +4877,15 @@ contains
 
 
             ! --- Coarse level solve ---
+            ! Set the initial guess
+            cilo = r(depth+1)%valid%ilo
+            cihi = r(depth+1)%valid%ihi
+            cjlo = r(depth+1)%valid%jlo
+            cjhi = r(depth+1)%valid%jhi
+            ! e(depth)%data = zero
+            e(depth+1)%data(cilo:cihi,cjlo:cjhi) = r(depth+1)%data(cilo:cihi,cjlo:cjhi) * invdiags(depth+1)%data(cilo:cihi,cjlo:cjhi)
+
+            ! Solve
             do curcycle = 1, numcycles
                 call vcycle_noinit (e, r, invdiags, work1, geo, bc, &
                                     refx, refy, &
@@ -4920,6 +4932,334 @@ contains
         endif
 
     end subroutine vcycle_noinit
+
+
+    ! ------------------------------------------------------------------------------
+    ! rhs will be scaled with J, but restored before the function exits.
+    ! ------------------------------------------------------------------------------
+    subroutine fmg (phi, rhs, geo, bc, homog, amrrefx, amrrefy, &
+                    tol, maxiters, maxdepth_user, numcycles, &
+                    smooth_down, smooth_up, smooth_bottom, &
+                    zerophi, verbosity)
+        type(box_data), intent(inout) :: phi
+        type(box_data), intent(inout) :: rhs
+        type(geo_data), intent(in)    :: geo
+        type(bdry_data), intent(in)   :: bc
+        logical, intent(in)           :: homog
+        integer, intent(in)           :: amrrefx, amrrefy
+        real(dp), intent(in)          :: tol
+        integer, intent(in)           :: maxiters
+        integer, intent(in)           :: maxdepth_user
+        integer, intent(in)           :: numcycles
+        integer, intent(in)           :: smooth_down, smooth_up, smooth_bottom
+        logical, intent(in)           :: zerophi
+        integer, intent(in)           :: verbosity
+
+        type(box)                                  :: valid
+        integer                                    :: maxdepth
+        integer, dimension(:), allocatable         :: refx, refy
+        integer                                    :: ierr, d, iter
+        real(dp)                                   :: mgdx, mgdy
+        real(dp), dimension(:), allocatable        :: relres
+        type(box_data), dimension(:), allocatable  :: e, r, invdiags, work1
+        type(geo_data), dimension(:), allocatable  :: mggeo
+        type(bdry_data), dimension(:), allocatable :: mgbc
+        integer                                    :: ilo, ihi, jlo, jhi
+        real(dp)                                   :: rscale, sum
+
+        ! Estimate size of scheduling vectors
+        valid = rhs%valid
+        if (maxdepth_user .lt. 0) then
+            maxdepth = 1000
+        else
+            maxdepth = maxdepth_user
+        endif
+        call estimate_maxdepth (maxdepth, valid)
+
+        ! Allocate schedule vectors
+        allocate (refx(0:maxdepth-1), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'vcycle: Out of memory'
+            stop
+        endif
+
+        allocate (refy(0:maxdepth-1), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'vcycle: Out of memory'
+            stop
+        endif
+
+        ! Create coarsening schedule
+        call create_mgschedule(refx, refy, maxdepth, valid)
+        if (verbosity .ge. 1) then
+            print*, 'max MG depth = ', maxdepth
+        endif
+        if (verbosity .ge. 2) then
+            mgdx = valid%dx
+            mgdy = valid%dy
+            do d = 0, maxdepth-1
+                ! print*, 'ref(', d, ') = ', refx(d), ', ', refy(d)
+                print*, d, ': dx = ', mgdx, ', dy = ', mgdy
+                mgdx = mgdx * real(refx(d),8)
+                mgdy = mgdy * real(refy(d),8)
+            enddo
+            print*, d, ': dx = ', mgdx, ', dy = ', mgdy
+        endif
+
+        ! Allocate and set up workspace
+        allocate (relres(0:maxiters), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        allocate (e(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        allocate (r(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        allocate (invdiags(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        allocate (mggeo(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        allocate (work1(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        allocate (mgbc(0:maxdepth), stat=ierr)
+        if (ierr .ne. 0) then
+            print*, 'Out of memory'
+            stop
+        endif
+
+        do d = 0, maxdepth
+            ! print*, '*** valid = ', valid
+
+            ! All BCs will be homogeneous after first residual calculation.
+            call define_bdry_data (mgbc(d), valid, &
+                                   bc%type_xlo, bc%type_xhi, bc%type_ylo, bc%type_yhi, &
+                                   BCMODE_UNIFORM, BCMODE_UNIFORM, BCMODE_UNIFORM, BCMODE_UNIFORM)
+            mgbc(d)%data_xlo = zero
+            mgbc(d)%data_xhi = zero
+            mgbc(d)%data_ylo = zero
+            mgbc(d)%data_yhi = zero
+
+            call define_box_data (e(d), valid, 1, 1, BD_CELL, BD_CELL)
+            call define_box_data (r(d), valid, 0, 0, BD_CELL, BD_CELL)
+            call define_box_data (work1(d), valid, 0, 0, BD_CELL, BD_CELL)
+
+            call define_box_data (mggeo(d)%J, valid, geo%J%ngx, geo%J%ngy, BD_CELL, BD_CELL)
+            call define_box_data (mggeo(d)%Jgup_xx, valid, geo%Jgup_xx%ngx, geo%Jgup_xx%ngy, BD_NODE, BD_CELL)
+            call define_box_data (mggeo(d)%Jgup_xy, valid, geo%Jgup_xy%ngx, geo%Jgup_xy%ngy, BD_NODE, BD_CELL)
+            call define_box_data (mggeo(d)%Jgup_yx, valid, geo%Jgup_yx%ngx, geo%Jgup_yx%ngy, BD_CELL, BD_NODE)
+            call define_box_data (mggeo(d)%Jgup_yy, valid, geo%Jgup_yy%ngx, geo%Jgup_yy%ngy, BD_CELL, BD_NODE)
+            call define_box_data (invdiags(d), valid, 0, 0, BD_CELL, BD_CELL)
+
+            if (d .eq. 0) then
+                ! For now, just copy the data. It would be more economical to
+                ! point to the data that already exists.
+                mggeo(d)%dx = valid%dx
+                mggeo(d)%dy = valid%dy
+                mggeo(d)%J%data = geo%J%data
+                mggeo(d)%Jgup_xx%data = geo%Jgup_xx%data
+                mggeo(d)%Jgup_xy%data = geo%Jgup_xy%data
+                mggeo(d)%Jgup_yx%data = geo%Jgup_yx%data
+                mggeo(d)%Jgup_yy%data = geo%Jgup_yy%data
+                call compute_invdiags (invdiags(d), mggeo(d), mgbc(d), .true.)
+            else
+                ! Coarsen the data from MG level d-1
+                mggeo(d)%dx = valid%dx
+                mggeo(d)%dy = valid%dy
+                call restrict (mggeo(d-1)%J, mggeo(d)%J)
+                call restrict (mggeo(d-1)%Jgup_xx, mggeo(d)%Jgup_xx)
+                call restrict (mggeo(d-1)%Jgup_xy, mggeo(d)%Jgup_xy)
+                call restrict (mggeo(d-1)%Jgup_yx, mggeo(d)%Jgup_yx)
+                call restrict (mggeo(d-1)%Jgup_yy, mggeo(d)%Jgup_yy)
+                call compute_invdiags (invdiags(d), mggeo(d), mgbc(d), .true.)
+            endif
+
+            ! Move on to next depth
+            if (d .lt. maxDepth) then
+                call coarsen_box (valid, refx(d), refy(d))
+            endif
+        enddo
+
+        ! Initialize phi to zero if necessary
+        if (zerophi) then
+            phi%data = zero
+        endif
+
+        ! Scale rhs by J
+        ilo = rhs%valid%ilo
+        ihi = rhs%valid%ihi
+        jlo = rhs%valid%jlo
+        jhi = rhs%valid%jhi
+        ! rhs%data(ilo:ihi,jlo:jhi) = rhs%data(ilo:ihi,jlo:jhi) &
+        !                           * geo%J%data(ilo:ihi,jlo:jhi)
+
+
+        ! Set up residual equation
+        call compute_residual (r(0), rhs, phi, geo, bc, homog)
+        rscale = pnorm (r(0), r(0)%valid, 2)
+
+        relres = zero
+        if (rscale .eq. zero) then
+            relres(0) = rscale
+            rscale = one
+        else
+            relres(0) = one
+        endif
+
+        if (verbosity .ge. 1) then
+            sum = integrate2d (r(0), r(0)%valid, mggeo(0), .false.)
+            print*, 'scale |res| = ', rscale, ', sum res = ', sum
+            print*, 'FMG-Cycle iter ', 0, ': rel |res| = ', relres(0)
+        endif
+
+        do iter = 1, maxiters
+            ! Solve!
+            call fmg_noinit (e, r, invdiags, work1, mggeo, mgbc, &
+                             refx, refy, &
+                             tol, maxdepth, 0, &
+                             numcycles, &
+                             smooth_down, smooth_up, smooth_bottom, &
+                             verbosity)
+
+            ! Add correction to phi
+            phi%data = phi%data + e(0)%data
+
+            ! Compute new residual
+            call compute_residual (r(0), rhs, phi, mggeo(0), bc, homog)
+            relres(iter) = pnorm (r(0), r(0)%valid, 2) / rscale
+
+            if (verbosity .ge. 1) then
+                print*, 'FMG-Cycle iter ', iter, ': rel |res| = ', relres(iter)
+            endif
+
+            ! Did we converge?
+            if (relres(iter) .le. tol) then
+                if (verbosity .ge. 1) then
+                    print*, "Converged."
+                endif
+
+                exit
+            endif
+
+            ! Are we diverging?
+            if (relres(iter) .gt. relres(iter-1)) then
+                if (verbosity .ge. 1) then
+                    print*, 'Diverging.'
+                endif
+
+                ! Undo last correction
+                phi%data = phi%data - e(0)%data
+
+                exit
+            endif
+        enddo
+
+        ! Free memory
+        do d = 0, maxDepth
+            call undefine_bdry_data (mgbc(d))
+            call undefine_box_data (invdiags(d))
+            call undefine_box_data (mggeo(d)%J)
+            call undefine_box_data (mggeo(d)%Jgup_xx)
+            call undefine_box_data (mggeo(d)%Jgup_xy)
+            call undefine_box_data (mggeo(d)%Jgup_yx)
+            call undefine_box_data (mggeo(d)%Jgup_yy)
+            call undefine_box_data (work1(d))
+            call undefine_box_data (r(d))
+            call undefine_box_data (e(d))
+        enddo
+
+        if (allocated(mgbc)) deallocate(mgbc)
+        if (allocated(invDiags)) deallocate(invDiags)
+        if (allocated(mggeo)) deallocate(mggeo)
+        if (allocated(work1)) deallocate(work1)
+        if (allocated(r)) deallocate(r)
+        if (allocated(e)) deallocate(e)
+        if (allocated(relres)) deallocate(relres)
+        if (allocated(refx)) deallocate(refx)
+        if (allocated(refy)) deallocate(refy)
+
+    end subroutine fmg
+
+
+    ! ------------------------------------------------------------------------------
+    ! ------------------------------------------------------------------------------
+    recursive subroutine fmg_noinit (e, r, invdiags, work1, geo, bc, &
+                                     refx, refy, &
+                                     tol, maxdepth, depth, &
+                                     numcycles, &
+                                     smooth_down, smooth_up, smooth_bottom, &
+                                     verbosity)
+        integer, intent(in)                                  :: maxdepth
+        type(box_data), intent(inout), dimension(0:maxdepth) :: e, r, work1
+        type(box_data), intent(in), dimension(0:maxdepth)    :: invdiags
+        type(geo_data), intent(in), dimension(0:maxdepth)    :: geo
+        type(bdry_data), intent(in), dimension(0:maxdepth)   :: bc
+        integer, intent(in), dimension(0:maxdepth-1)         :: refx, refy
+        real(dp), intent(in)                                 :: tol
+        integer, intent(in)                                  :: depth
+        integer, intent(in)                                  :: smooth_down, smooth_up, smooth_bottom
+        integer, intent(in)                                  :: numcycles
+        integer, intent(in)                                  :: verbosity
+
+        character*2                                          :: indent = '  '
+        integer                                              :: curcycle
+        integer, parameter                                   :: prolong_order = 3
+
+        if (verbosity .ge. 7) then
+            print*, repeat(indent,depth), 'MG depth = ', depth
+        endif
+
+        ! Initialize solution
+        e(depth)%data = zero
+
+        ! Go to the coarser MG level if possible.
+        if (depth .lt. maxdepth) then
+            ! Coarsen the residual
+            call restrict (r(depth), r(depth+1))
+
+            ! Solve
+            call fmg_noinit (e, r, invdiags, work1, geo, bc, &
+                             refx, refy, &
+                             tol, maxdepth, depth+1, &
+                             numcycles, &
+                             smooth_down, smooth_up, smooth_bottom, &
+                             verbosity)
+
+            ! Refine solution
+            call prolong (e(depth), e(depth+1), geo(depth), geo(depth+1), bc(depth+1), prolong_order)
+        endif
+
+        ! Solve with a V-Cycle.
+        do curcycle = 1, numcycles
+            call vcycle_noinit (e, r, invdiags, work1, geo, bc, &
+                                refx, refy, &
+                                tol, maxdepth, depth, &
+                                numcycles, &
+                                smooth_down, smooth_up, smooth_bottom, &
+                                verbosity)
+        enddo
+    end subroutine fmg_noinit
 
 
 end module MGPoisson2D
