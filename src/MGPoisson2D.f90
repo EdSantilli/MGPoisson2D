@@ -253,6 +253,7 @@ contains
 
 
     ! --------------------------------------------------------------------------
+    ! Currently not used.
     ! --------------------------------------------------------------------------
     pure subroutine grow_box (bx, growx, growy)
         type(box), intent(inout) :: bx
@@ -606,6 +607,7 @@ contains
 
 
     ! --------------------------------------------------------------------------
+    ! Currently not used.
     ! --------------------------------------------------------------------------
     subroutine define_box_data_coarsened (crse, fine, refx, refy)
         type(box_data), intent(out) :: crse
@@ -647,6 +649,7 @@ contains
 
     ! --------------------------------------------------------------------------
     ! Returns the opposite centering
+    ! Only used in fill_dxdXi.
     ! --------------------------------------------------------------------------
     pure function stagger (min) result (mout)
         integer, intent(in) :: min
@@ -657,6 +660,7 @@ contains
 
     ! --------------------------------------------------------------------------
     ! Returns true if all members of box1 and box2 are equal.
+    ! Currently not used.
     ! --------------------------------------------------------------------------
     pure function compatible_boxes (bx1, bx2) result (is_same)
         type(box), intent(in) :: bx1, bx2
@@ -676,6 +680,7 @@ contains
 
     ! --------------------------------------------------------------------------
     ! Sets all valid data to val.
+    ! Currently not used.
     ! --------------------------------------------------------------------------
     pure subroutine setval_valid (bd, val)
         type(box_data), intent(inout) :: bd
@@ -687,6 +692,7 @@ contains
 
     ! --------------------------------------------------------------------------
     ! Sets all ghosts to val.
+    ! Currently not used.
     ! --------------------------------------------------------------------------
     pure subroutine setval_ghosts (bd, val)
         type(box_data), intent(inout) :: bd
@@ -4439,7 +4445,10 @@ contains
                         do ci = crse%valid%ilo, crse%valid%ihi
                             fi = refx*ci
 
-                            mc = sixteenth * (crse%data(ci+1,cj+1) - crse%data(ci+1,cj-1) - crse%data(ci-1,cj+1) + crse%data(ci-1,cj-1))
+                            mc = sixteenth * (  crse%data(ci+1,cj+1) &
+                                              - crse%data(ci+1,cj-1) &
+                                              - crse%data(ci-1,cj+1) &
+                                              + crse%data(ci-1,cj-1)  )
 
                             fine%data(fi  ,fj  ) = fine%data(fi  ,fj  ) + fourth*mc
                             fine%data(fi+1,fj  ) = fine%data(fi+1,fj  ) - fourth*mc
@@ -4883,7 +4892,8 @@ contains
             cjlo = r(depth+1)%valid%jlo
             cjhi = r(depth+1)%valid%jhi
             ! e(depth)%data = zero
-            e(depth+1)%data(cilo:cihi,cjlo:cjhi) = r(depth+1)%data(cilo:cihi,cjlo:cjhi) * invdiags(depth+1)%data(cilo:cihi,cjlo:cjhi)
+            e(depth+1)%data(cilo:cihi,cjlo:cjhi) = r(depth+1)%data(cilo:cihi,cjlo:cjhi) &
+                                                 * invdiags(depth+1)%data(cilo:cihi,cjlo:cjhi)
 
             ! Solve
             do curcycle = 1, numcycles
