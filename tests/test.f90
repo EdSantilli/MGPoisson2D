@@ -1951,7 +1951,10 @@ contains
         call define_box_data (soln, valid, 0, 0, BD_CELL, BD_CELL)
         soln%data = zero
         do i = 8, 240, 2
-            soln%data = soln%data - dble(i)*((pi/L)**2 + (pi/H)**2) * cos(i*pi*bdx%data(ilo:ihi,jlo:jhi)/L) * cos(i*pi*bdy%data(ilo:ihi,jlo:jhi)/H)
+            soln%data = soln%data &
+                      - dble(i)*((pi/L)**2 + (pi/H)**2) &
+                      * cos(i*pi*bdx%data(ilo:ihi,jlo:jhi)/L) &
+                      * cos(i*pi*bdy%data(ilo:ihi,jlo:jhi)/H)
         enddo
         soln%data(ilo:ihi,jlo:jhi) = soln%data(ilo:ihi,jlo:jhi) * geo%J%data(ilo:ihi,jlo:jhi)
 
