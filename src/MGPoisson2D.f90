@@ -900,27 +900,51 @@ contains
         dy = bx%dy
 
         pn = zero
-        ! Lower x-boundary
-        i = bx%jlo-1
-        do j = bx%jlo, bx%jhi
-            pn = pn + dy * bd%data(i,j)**p
-        enddo
-        ! Upper x-boundary
-        i = bx%jhi+1
-        do j = bx%jlo, bx%jhi
-            pn = pn + dy * bd%data(i,j)**p
-        enddo
-        ! Lower y-boundary
-        j = bx%ilo-1
-        do i = bx%ilo, bx%ihi
-            pn = pn + dx * bd%data(i,j)**p
-        enddo
-        ! Upper y-boundary
-        j = bx%ihi+1
-        do i = bx%ilo, bx%ihi
-            pn = pn + dx * bd%data(i,j)**p
-        enddo
-        pn = pn**(one/p)
+
+        if (p .eq. 0) then
+            ! Lower x-boundary
+            i = bx%jlo-1
+            do j = bx%jlo, bx%jhi
+                pn = max(pn, abs(bd%data(i,j)))
+            enddo
+            ! Upper x-boundary
+            i = bx%jhi+1
+            do j = bx%jlo, bx%jhi
+                pn = max(pn, abs(bd%data(i,j)))
+            enddo
+            ! Lower y-boundary
+            j = bx%ilo-1
+            do i = bx%ilo, bx%ihi
+                pn = max(pn, abs(bd%data(i,j)))
+            enddo
+            ! Upper y-boundary
+            j = bx%ihi+1
+            do i = bx%ilo, bx%ihi
+                pn = max(pn, abs(bd%data(i,j)))
+            enddo
+        else
+            ! Lower x-boundary
+            i = bx%jlo-1
+            do j = bx%jlo, bx%jhi
+                pn = pn + dy * bd%data(i,j)**p
+            enddo
+            ! Upper x-boundary
+            i = bx%jhi+1
+            do j = bx%jlo, bx%jhi
+                pn = pn + dy * bd%data(i,j)**p
+            enddo
+            ! Lower y-boundary
+            j = bx%ilo-1
+            do i = bx%ilo, bx%ihi
+                pn = pn + dx * bd%data(i,j)**p
+            enddo
+            ! Upper y-boundary
+            j = bx%ihi+1
+            do i = bx%ilo, bx%ihi
+                pn = pn + dx * bd%data(i,j)**p
+            enddo
+            pn = pn**(one/p)
+        endif
     end function gpnorm
 
 
@@ -1138,6 +1162,14 @@ contains
         integer                             :: jlo, jhi, j
         integer                             :: bcmode, e
 
+        real(dp), parameter                 :: eightthird     = eight / three
+        real(dp), parameter                 :: sixteenfifth   = sixteen / five
+        real(dp), parameter                 :: thirtyfifth    = one / (twenty+fifteen)
+        real(dp), parameter                 :: onetwentyeight = 128.0E0_dp
+        real(dp), parameter                 :: oneforty       = 140.0E0_dp
+        real(dp), parameter                 :: seventy        = 70.0E0_dp
+        real(dp), parameter                 :: twentyeight    = 28.0E0_dp
+
         ! Right now, we can only handle cell-centered data
         if ((phi%offi .ne. BD_CELL) .or. (phi%offj .ne. BD_CELL)) then
             print*, 'fill_ghosts: Only works with cell-centered data for now.'
@@ -1196,31 +1228,53 @@ contains
                         endif
                     case (2)
                         if (homog) then
-                            phi%data(i+e, jlo:jhi) = third*(-six*phi%data(i, jlo:jhi) + phi%data(i-e, jlo:jhi))
+                            phi%data(i+e, jlo:jhi) =                                   &
+                                                   -        two*phi%data(i  , jlo:jhi) &
+                                                   +      third*phi%data(i-e, jlo:jhi)
                         else if (bcmode .eq. BCMODE_UNIFORM) then
-                            phi%data(i+e, jlo:jhi) = third*(  eight*bcd(1) &
-                                                            - six*phi%data(i, jlo:jhi) &
-                                                            + phi%data(i-e, jlo:jhi))
+                            phi%data(i+e, jlo:jhi) = eightthird*bcd(1)                 &
+                                                   -        two*phi%data(i  , jlo:jhi) &
+                                                   +      third*phi%data(i-e, jlo:jhi)
                         else
-                            phi%data(i+e, jlo:jhi) = third*(  eight*bcd(jlo:jhi) &
-                                                            - six*phi%data(i, jlo:jhi) &
-                                                            + phi%data(i-e, jlo:jhi))
+                            phi%data(i+e, jlo:jhi) = eightthird*bcd(jlo:jhi)           &
+                                                   -        two*phi%data(i  , jlo:jhi) &
+                                                   +      third*phi%data(i-e, jlo:jhi)
                         endif
                     case (3)
                         if (homog) then
-                            phi%data(i+e, jlo:jhi) = fifth*(- fifteen*phi%data(i    , jlo:jhi) &
-                                                            -         phi%data(i-2*e, jlo:jhi)) &
-                                                   + phi%data(i-e, jlo:jhi)
+                            phi%data(i+e, jlo:jhi) =                                       &
+                                                   -        three*phi%data(i    , jlo:jhi) &
+                                                   +              phi%data(i-  e, jlo:jhi) &
+                                                   -        fifth*phi%data(i-2*e, jlo:jhi)
                         else if (bcmode .eq. BCMODE_UNIFORM) then
-                            phi%data(i+e, jlo:jhi) = fifth*(  sixteen*bcd(1) &
-                                                            - fifteen*phi%data(i    , jlo:jhi) &
-                                                            -         phi%data(i-2*e, jlo:jhi)) &
-                                                   + phi%data(i-e, jlo:jhi)
+                            phi%data(i+e, jlo:jhi) = sixteenfifth*bcd(1)                   &
+                                                   -        three*phi%data(i    , jlo:jhi) &
+                                                   +              phi%data(i-  e, jlo:jhi) &
+                                                   -        fifth*phi%data(i-2*e, jlo:jhi)
                         else
-                            phi%data(i+e, jlo:jhi) = fifth*(  sixteen*bcd(jlo:jhi) &
-                                                            - fifteen*phi%data(i    , jlo:jhi) &
-                                                            -         phi%data(i-2*e, jlo:jhi)) &
-                                                   + phi%data(i-e, jlo:jhi)
+                            phi%data(i+e, jlo:jhi) = sixteenfifth*bcd(jlo:jhi)             &
+                                                   -        three*phi%data(i    , jlo:jhi) &
+                                                   +              phi%data(i-  e, jlo:jhi) &
+                                                   -        fifth*phi%data(i-2*e, jlo:jhi)
+                        endif
+                    case (4)
+                        if (homog) then
+                            phi%data(i+e, jlo:jhi) = thirtyfifth*(-    oneforty*phi%data(i    , jlo:jhi) &
+                                                                  +     seventy*phi%data(i-  e, jlo:jhi) &
+                                                                  - twentyeight*phi%data(i-2*e, jlo:jhi) &
+                                                                  +        five*phi%data(i-3*e, jlo:jhi))
+                        else if (bcmode .eq. BCMODE_UNIFORM) then
+                            phi%data(i+e, jlo:jhi) = thirtyfifth*(onetwentyeight*bcd(1)                   &
+                                                                  -     oneforty*phi%data(i    , jlo:jhi) &
+                                                                  +      seventy*phi%data(i-  e, jlo:jhi) &
+                                                                  -  twentyeight*phi%data(i-2*e, jlo:jhi) &
+                                                                  +         five*phi%data(i-3*e, jlo:jhi))
+                        else
+                            phi%data(i+e, jlo:jhi) = thirtyfifth*(onetwentyeight*bcd(jlo:jhi)             &
+                                                                  -     oneforty*phi%data(i    , jlo:jhi) &
+                                                                  +      seventy*phi%data(i-  e, jlo:jhi) &
+                                                                  -  twentyeight*phi%data(i-2*e, jlo:jhi) &
+                                                                  +         five*phi%data(i-3*e, jlo:jhi))
                         endif
                     case default
                         print*, 'fill_ghosts: Bad order'
@@ -1241,31 +1295,53 @@ contains
                         endif
                     case (2)
                         if (homog) then
-                            phi%data(ilo:ihi, j+e) = third*(-six*phi%data(ilo:ihi, j) + phi%data(ilo:ihi, j-e))
+                            phi%data(ilo:ihi, j+e) =                                   &
+                                                   -        two*phi%data(ilo:ihi, j  ) &
+                                                   +      third*phi%data(ilo:ihi, j-e)
                         else if (bcmode .eq. BCMODE_UNIFORM) then
-                            phi%data(ilo:ihi, j+e) = third*(  eight*bcd(1) &
-                                                            - six*phi%data(ilo:ihi, j) &
-                                                            + phi%data(ilo:ihi, j-e))
+                            phi%data(ilo:ihi, j+e) = eightthird*bcd(1)                 &
+                                                   -        two*phi%data(ilo:ihi, j  ) &
+                                                   +      third*phi%data(ilo:ihi, j-e)
                         else
-                            phi%data(ilo:ihi, j+e) = third*(  eight*bcd(jlo:jhi) &
-                                                            - six*phi%data(ilo:ihi, j) &
-                                                            + phi%data(ilo:ihi, j-e))
+                            phi%data(ilo:ihi, j+e) = eightthird*bcd(jlo:jhi)           &
+                                                   -        two*phi%data(ilo:ihi, j  ) &
+                                                   +      third*phi%data(ilo:ihi, j-e)
                         endif
                     case (3)
                         if (homog) then
-                            phi%data(ilo:ihi, j+e) = fifth*(- fifteen*phi%data(ilo:ihi, j) &
-                                                            -         phi%data(ilo:ihi, j-2*e)) &
-                                                   + phi%data(ilo:ihi, j-e)
+                            phi%data(ilo:ihi, j+e) =                                       &
+                                                   -        three*phi%data(ilo:ihi, j    ) &
+                                                   +              phi%data(ilo:ihi, j-  e) &
+                                                   -        fifth*phi%data(ilo:ihi, j-2*e)
                         else if (bcmode .eq. BCMODE_UNIFORM) then
-                            phi%data(ilo:ihi, j+e) = fifth*(  sixteen*bcd(1) &
-                                                            - fifteen*phi%data(ilo:ihi, j) &
-                                                            -         phi%data(ilo:ihi, j-2*e)) &
-                                                   + phi%data(ilo:ihi, j-e)
+                            phi%data(ilo:ihi, j+e) = sixteenfifth*bcd(1)                   &
+                                                   -        three*phi%data(ilo:ihi, j    ) &
+                                                   +              phi%data(ilo:ihi, j-  e) &
+                                                   -        fifth*phi%data(ilo:ihi, j-2*e)
                         else
-                            phi%data(ilo:ihi, j+e) = fifth*(  sixteen*bcd(jlo:jhi) &
-                                                            - fifteen*phi%data(ilo:ihi, j) &
-                                                            -         phi%data(ilo:ihi, j-2*e)) &
-                                                   + phi%data(ilo:ihi, j-e)
+                            phi%data(ilo:ihi, j+e) = sixteenfifth*bcd(jlo:jhi)             &
+                                                   -        three*phi%data(ilo:ihi, j    ) &
+                                                   +              phi%data(ilo:ihi, j-  e) &
+                                                   -        fifth*phi%data(ilo:ihi, j-2*e)
+                        endif
+                    case (4)
+                        if (homog) then
+                            phi%data(ilo:ihi, j+e) = thirtyfifth*(-    oneforty*phi%data(ilo:ihi, j    ) &
+                                                                  +     seventy*phi%data(ilo:ihi, j-  e) &
+                                                                  - twentyeight*phi%data(ilo:ihi, j-2*e) &
+                                                                  +        five*phi%data(ilo:ihi, j-3*e))
+                        else if (bcmode .eq. BCMODE_UNIFORM) then
+                            phi%data(ilo:ihi, j+e) = thirtyfifth*(onetwentyeight*bcd(1)                   &
+                                                                  -     oneforty*phi%data(ilo:ihi, j    ) &
+                                                                  +      seventy*phi%data(ilo:ihi, j-  e) &
+                                                                  -  twentyeight*phi%data(ilo:ihi, j-2*e) &
+                                                                  +         five*phi%data(ilo:ihi, j-3*e))
+                        else
+                            phi%data(ilo:ihi, j+e) = thirtyfifth*(onetwentyeight*bcd(jlo:jhi)             &
+                                                                  -     oneforty*phi%data(ilo:ihi, j    ) &
+                                                                  +      seventy*phi%data(ilo:ihi, j-  e) &
+                                                                  -  twentyeight*phi%data(ilo:ihi, j-2*e) &
+                                                                  +         five*phi%data(ilo:ihi, j-3*e))
                         endif
                     case default
                         print*, 'fill_ghosts: Bad order'
