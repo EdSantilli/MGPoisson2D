@@ -1,5 +1,5 @@
 # Define the lib and its sources.
-add_library (MGPoisson2D STATIC MGPoisson2D.f90 MGPoisson2D_DD.f90)
+add_library (MGPoisson2D STATIC poisson2d.f90 MGPoisson2D.f90 MGPoisson2D_DD.f90)
 
 # This is where we should -I during compilation.
 include_directories(${CMAKE_BINARY_DIR}/include)
